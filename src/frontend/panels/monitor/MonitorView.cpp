@@ -10,22 +10,6 @@
 #include <cmath>
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "backend/core/AppPaths.h"
-// =============================================================================
-//  MonitorView.cpp  —  v4
-//
-//  IMPORTANTE: este archivo NO contiene ningun bloque de deteccion de fin
-//  de clip ni de sincronizacion de volumen por polling.  Ambas cosas fueron
-//  eliminadas intencionalmente:
-//
-//    * La deteccion de fin vive EXCLUSIVAMENTE en RenderQueue()
-//      (MonitorQueuePanel.cpp).  Tenerla en dos sitios a la vez era la causa
-//      del doble disparo que provocaba que cada clip apareciese DOS veces en
-//      el log y que la cola se comportara de forma erratica.
-//
-//    * El polling de volumen (m_LiveSyncFrames) fue eliminado.  El volumen
-//      se aplica una sola vez dentro de PlayQueueItem() usando los atomicos
-//      de VLCBasePlayer, que tienen efecto inmediato.
-// =============================================================================
 
 namespace ProyecThor::UI {
 
