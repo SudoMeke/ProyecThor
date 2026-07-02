@@ -6,12 +6,20 @@
             "type": "shell",
             "command": "cmake",
             "args": [
-                "-S", ".",
-                "-B", "build",
-                "-G", "MinGW Makefiles"
+                "-S",
+                "${workspaceFolder}",
+                "-B",
+                "${workspaceFolder}/build",
+                "-G",
+                "MinGW Makefiles",
+                "-DCMAKE_C_COMPILER=C:/msys64/ucrt64/bin/gcc.exe",
+                "-DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe",
+                "-DCMAKE_MAKE_PROGRAM=C:/msys64/ucrt64/bin/mingw32-make.exe"
             ],
             "options": {
-                "cwd": "${workspaceFolder}"
+                "env": {
+                    "PATH": "C:\\msys64\\ucrt64\\bin;${env:PATH}"
+                }
             },
             "problemMatcher": []
         },
@@ -20,16 +28,25 @@
             "type": "shell",
             "command": "cmake",
             "args": [
-                "--build", "build"
+                "--build",
+                "${workspaceFolder}/build",
+                "--",
+                "-j",
+                "8"
             ],
             "options": {
-                "cwd": "${workspaceFolder}"
+                "env": {
+                    "PATH": "C:\\msys64\\ucrt64\\bin;${env:PATH}"
+                }
             },
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": ["$gcc"]
+            "dependsOn": "CMake: configure",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ]
 }
