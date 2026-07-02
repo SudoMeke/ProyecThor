@@ -119,7 +119,7 @@ static std::unordered_map<std::string, std::string> LoadSongAuthors()
     return authors;
 }
 
-static void SaveSongAuthor(const std::string& filename, const std::string& author)
+void SetSongAuthor(const std::string& filename, const std::string& author)
 {
     auto authors = LoadSongAuthors();
     if (author.empty()) authors.erase(filename);
@@ -162,7 +162,7 @@ void SaveSong(LibraryContext& ctx,
     if (f.is_open()) {
         f << "\xEF\xBB\xBF";
         f << content;
-        SaveSongAuthor(filename, author);
+        SetSongAuthor(filename, author);
         ctx.refreshList();
     }
 }

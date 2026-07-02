@@ -1,5 +1,8 @@
 #pragma once
 #include <string>
+#include <filesystem>
+
+struct ImGuiInputTextCallbackData;
 
 namespace ProyecThor::UI {
 
@@ -20,8 +23,17 @@ namespace ProyecThor::UI {
         std::string m_EditingFilePath;
         bool        m_SaveSuccess;
 
+        char        m_AuthorBuffer[256];
+
+        bool        m_FocusStanzaPending;
+        int         m_FocusStanzaCharStart;
+        int         m_FocusStanzaCharEnd;
+
         void RenderEditorModal();
         bool SaveBufferToFile();
+        void OpenEditorForSong(const std::string& songTitle, const std::string& stanzaText, bool focusStanza);
+
+        static int EditorFocusCallback(ImGuiInputTextCallbackData* data);
     };
 
 } // namespace ProyecThor::UI

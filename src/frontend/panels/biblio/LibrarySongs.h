@@ -15,5 +15,6 @@ void SaveSong(LibraryContext& ctx,
               const std::string& author);
 
 std::string GetSongAuthor(const std::string& filename);
+void SetSongAuthor(const std::string& filename, const std::string& author);
 
 } // namespace ProyecThor::Library

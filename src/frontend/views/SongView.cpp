@@ -1,6 +1,7 @@
 #include "SongView.h"
 #include "backend/core/PresentationCore.h"
 #include "UIStrings.h"
+#include "LibrarySongs.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -35,7 +36,6 @@ static std::filesystem::path GetSongsDirectory()
     }
     else
     {
-        // Fallback absoluto: construir a partir de APPDATA con la API de CRT
         const char* appdata = std::getenv("APPDATA");
         if (appdata)
             result = std::filesystem::path(appdata) / "ProyecThor" / "assets" / "songs";
@@ -43,12 +43,23 @@ static std::filesystem::path GetSongsDirectory()
             result = std::filesystem::current_path() / "ProyecThor" / "assets" / "songs";
     }
 
-    // Crear el directorio si no existe (no requiere admin a menos que la ruta
-    // este en una ubicacion del sistema, lo cual no es el caso aqui)
     std::error_code ec;
     std::filesystem::create_directories(result, ec);
 
     return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helper: ruta del antiguo archivo sidecar de autor (nombre + ".autor.txt").
+//  Ya no se usa para guardar, solo se conserva para migrar y borrar los
+//  sidecars viejos que quedaron creados por versiones anteriores, evitando
+//  que sigan apareciendo como canciones fantasma en el listado.
+// ─────────────────────────────────────────────────────────────────────────────
+static std::filesystem::path GetLegacyAuthorFilePath(const std::filesystem::path& songFile)
+{
+    std::filesystem::path authorFile = songFile;
+    authorFile.replace_extension(".autor.txt");
+    return authorFile;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,8 +72,12 @@ SongView::SongView()
     , m_OpenEditorPopup(false)
     , m_EditingFilePath("")
     , m_SaveSuccess(false)
+    , m_FocusStanzaPending(false)
+    , m_FocusStanzaCharStart(0)
+    , m_FocusStanzaCharEnd(0)
 {
     std::memset(m_EditBuffer, 0, sizeof(m_EditBuffer));
+    std::memset(m_AuthorBuffer, 0, sizeof(m_AuthorBuffer));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,7 +94,6 @@ bool SongView::SaveBufferToFile()
 
     std::filesystem::path filePath(m_EditingFilePath);
 
-    // Crear directorio padre si no existe
     std::error_code ec;
     std::filesystem::create_directories(filePath.parent_path(), ec);
     if (ec)
@@ -107,11 +121,131 @@ bool SongView::SaveBufferToFile()
     return ok;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  OpenEditorForSong
+//  Centraliza la carga del archivo de letra y del autor para el editor.
+//  El autor se lee desde songs_authors.ini (mismo origen que usa la
+//  biblioteca), no desde un sidecar propio. Si detecta un sidecar viejo
+//  (".autor.txt") de una version anterior, migra ese valor al .ini y borra
+//  el sidecar para que deje de aparecer como cancion fantasma en el listado.
+//  Si focusStanza es true, busca el texto de esa estrofa dentro del
+//  contenido cargado y deja marcado el rango de caracteres para que
+//  RenderEditorModal seleccione ese fragmento apenas se abra el editor.
+// ─────────────────────────────────────────────────────────────────────────────
+void SongView::OpenEditorForSong(const std::string& songTitle, const std::string& stanzaText, bool focusStanza)
+{
+    std::filesystem::path songsDir = GetSongsDirectory();
+
+    std::filesystem::path songFile = songsDir / songTitle;
+    if (songFile.extension() != ".txt")
+        songFile.replace_extension(".txt");
+
+    printf("[SongView] Intentando abrir: %s\n", songFile.string().c_str());
+
+    if (!std::filesystem::exists(songFile))
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(songFile.parent_path(), ec);
+        std::ofstream touch(songFile);
+        touch.close();
+        printf("[SongView] Archivo creado (era nuevo): %s\n", songFile.string().c_str());
+    }
+
+    std::ifstream file(songFile);
+    if (!file.is_open())
+    {
+        printf("[SongView] ERROR: no se pudo abrir el archivo: %s\n", songFile.string().c_str());
+        return;
+    }
+
+    std::string content(
+        (std::istreambuf_iterator<char>(file)),
+         std::istreambuf_iterator<char>()
+    );
+    file.close();
+
+    content.erase(std::remove(content.begin(), content.end(), '\r'), content.end());
+
+    strncpy(m_EditBuffer, content.c_str(), sizeof(m_EditBuffer) - 1);
+    m_EditBuffer[sizeof(m_EditBuffer) - 1] = '\0';
+
+    m_EditingFilePath = songFile.string();
+
+    std::string authorContent = ProyecThor::Library::GetSongAuthor(songFile.filename().string());
+
+    if (authorContent.empty())
+    {
+        std::filesystem::path legacyAuthorFile = GetLegacyAuthorFilePath(songFile);
+        std::ifstream legacyStream(legacyAuthorFile);
+        if (legacyStream.is_open())
+        {
+            std::string legacyContent(
+                (std::istreambuf_iterator<char>(legacyStream)),
+                 std::istreambuf_iterator<char>()
+            );
+            legacyStream.close();
+
+            legacyContent.erase(std::remove(legacyContent.begin(), legacyContent.end(), '\r'), legacyContent.end());
+            legacyContent.erase(std::remove(legacyContent.begin(), legacyContent.end(), '\n'), legacyContent.end());
+
+            if (!legacyContent.empty())
+            {
+                authorContent = legacyContent;
+                ProyecThor::Library::SetSongAuthor(songFile.filename().string(), authorContent);
+            }
+
+            std::error_code ec;
+            std::filesystem::remove(legacyAuthorFile, ec);
+        }
+    }
+
+    strncpy(m_AuthorBuffer, authorContent.c_str(), sizeof(m_AuthorBuffer) - 1);
+    m_AuthorBuffer[sizeof(m_AuthorBuffer) - 1] = '\0';
+
+    m_FocusStanzaPending   = false;
+    m_FocusStanzaCharStart = 0;
+    m_FocusStanzaCharEnd   = 0;
+
+    if (focusStanza && !stanzaText.empty())
+    {
+        std::string normalizedStanza = stanzaText;
+        normalizedStanza.erase(std::remove(normalizedStanza.begin(), normalizedStanza.end(), '\r'), normalizedStanza.end());
+
+        size_t pos = std::string(m_EditBuffer).find(normalizedStanza);
+        if (pos != std::string::npos)
+        {
+            m_FocusStanzaPending   = true;
+            m_FocusStanzaCharStart = (int)pos;
+            m_FocusStanzaCharEnd   = (int)(pos + normalizedStanza.length());
+        }
+    }
+
+    m_SaveSuccess = false;
+    m_ShowEditor  = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EditorFocusCallback
+//  Callback de ImGui invocado en cada frame mientras el InputTextMultiline
+//  esta activo. Si hay una estrofa pendiente de foco, fija cursor y
+//  seleccion sobre el rango calculado en OpenEditorForSong y consume el
+//  flag para no repetirlo en frames posteriores.
+// ─────────────────────────────────────────────────────────────────────────────
+int SongView::EditorFocusCallback(ImGuiInputTextCallbackData* data)
+{
+    SongView* self = static_cast<SongView*>(data->UserData);
+    if (self && self->m_FocusStanzaPending)
+    {
+        data->CursorPos      = self->m_FocusStanzaCharEnd;
+        data->SelectionStart = self->m_FocusStanzaCharStart;
+        data->SelectionEnd   = self->m_FocusStanzaCharEnd;
+        self->m_FocusStanzaPending = false;
+    }
+    return 0;
+}
+
 // =============================================================================
 //  RenderEditorModal
-//  CAMBIO: se reemplaza BeginPopupModal (que aplica dim_bg sobre la ventana
-//  principal) por una ventana flotante independiente con ImGui::Begin.
-//  Esto elimina el oscurecimiento de la pantalla de proyeccion/preview.
 // =============================================================================
 void SongView::RenderEditorModal()
 {
@@ -123,11 +257,10 @@ void SongView::RenderEditorModal()
         return;
     }
 
-    // Posicionar la ventana centrada la primera vez que aparece.
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
-    ImGui::SetNextWindowSize({ 660.f, 560.f }, ImGuiCond_Appearing);
-    ImGui::SetNextWindowSizeConstraints({ 420.f, 320.f }, { FLT_MAX, FLT_MAX });
+    ImGui::SetNextWindowSize({ 660.f, 600.f }, ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints({ 420.f, 360.f }, { FLT_MAX, FLT_MAX });
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   14.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    { 22.0f, 20.0f });
@@ -137,8 +270,6 @@ void SongView::RenderEditorModal()
     ImGui::PushStyleColor(ImGuiCol_Border,         { 1.000f, 1.000f, 1.000f, 0.080f });
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive,  { 0.028f, 0.031f, 0.047f, 1.000f });
 
-    // ImGuiWindowFlags_NoNav evita que esta ventana robe el foco de teclado
-    // del resto de la UI cuando no es necesario.
     bool windowOpen = true;
     ImGui::Begin("Editor de Cancion##songWin",
                  &windowOpen,
@@ -148,7 +279,6 @@ void SongView::RenderEditorModal()
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(3);
 
-    // Si el usuario cerro la ventana con la X del titulo.
     if (!windowOpen)
     {
         m_ShowEditor  = false;
@@ -169,13 +299,31 @@ void SongView::RenderEditorModal()
     ImGui::TextUnformatted(fileName.c_str());
 
     ImGui::Spacing();
+
+    // ── Campo de autor ────────────────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 1.0f, 1.0f, 0.40f });
+    ImGui::TextUnformatted("Autor:");
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        { 1.0f, 1.0f, 1.0f, 0.040f });
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, { 1.0f, 1.0f, 1.0f, 0.070f });
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  { 1.0f, 1.0f, 1.0f, 0.100f });
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##authorInput", "Nombre del autor / compositor", m_AuthorBuffer, sizeof(m_AuthorBuffer));
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+
+    ImGui::Spacing();
     ImGui::PushStyleColor(ImGuiCol_Separator, { 1.0f, 1.0f, 1.0f, 0.060f });
     ImGui::Separator();
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
     // ── Area de texto adaptativa ──────────────────────────────────────────────
-    constexpr float k_ButtonAreaHeight = 50.0f;
+    constexpr float k_ButtonAreaHeight = 74.0f;
     ImVec2 availSize = ImGui::GetContentRegionAvail();
     ImVec2 inputSize = { -1.0f, availSize.y - k_ButtonAreaHeight };
 
@@ -185,12 +333,17 @@ void SongView::RenderEditorModal()
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, { 1.0f, 1.0f, 1.0f, 0.070f });
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  { 1.0f, 1.0f, 1.0f, 0.100f });
 
+    if (m_FocusStanzaPending)
+        ImGui::SetKeyboardFocusHere();
+
     ImGui::InputTextMultiline(
         "##editBuffer",
         m_EditBuffer,
         sizeof(m_EditBuffer),
         inputSize,
-        ImGuiInputTextFlags_AllowTabInput
+        ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_CallbackAlways,
+        &SongView::EditorFocusCallback,
+        this
     );
 
     ImGui::PopStyleColor(3);
@@ -198,16 +351,21 @@ void SongView::RenderEditorModal()
 
     ImGui::Spacing();
 
-    // ── Fila de botones ───────────────────────────────────────────────────────
-    ImVec2 buttonSize = { 130.f, 36.f };
+    // ── Contador de caracteres ───────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 1.0f, 1.0f, 0.30f });
+    ImGui::Text("%d caracteres", (int)strlen(m_EditBuffer));
+    ImGui::PopStyleColor();
 
     if (m_SaveSuccess)
     {
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0f);
+        ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Text, { 0.20f, 0.85f, 0.40f, 1.0f });
-        ImGui::TextUnformatted("Guardado correctamente");
+        ImGui::TextUnformatted("  Guardado correctamente");
         ImGui::PopStyleColor();
     }
+
+    // ── Fila de botones ───────────────────────────────────────────────────────
+    ImVec2 buttonSize = { 130.f, 36.f };
 
     float rightAlign = ImGui::GetWindowWidth()
                      - (buttonSize.x * 2.0f)
@@ -216,10 +374,11 @@ void SongView::RenderEditorModal()
 
     if (rightAlign > ImGui::GetCursorPosX())
         ImGui::SameLine(rightAlign);
+    else
+        ImGui::NewLine();
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
 
-    // Boton Cancelar
     ImGui::PushStyleColor(ImGuiCol_Button,        { 1.0f, 1.0f, 1.0f, 0.050f });
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 1.0f, 1.0f, 1.0f, 0.090f });
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  { 1.0f, 1.0f, 1.0f, 0.130f });
@@ -232,13 +391,16 @@ void SongView::RenderEditorModal()
 
     ImGui::SameLine();
 
-    // Boton Guardar (accent azul-indigo)
     ImGui::PushStyleColor(ImGuiCol_Button,        { 0.369f, 0.420f, 1.000f, 1.0f });
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.500f, 0.550f, 1.000f, 1.0f });
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  { 0.280f, 0.330f, 0.860f, 1.0f });
     ImGui::PushStyleColor(ImGuiCol_Text,          { 1.0f,   1.0f,   1.0f,   1.0f });
     if (ImGui::Button(str.save, buttonSize))
-        m_SaveSuccess = SaveBufferToFile();
+    {
+        bool savedLyrics = SaveBufferToFile();
+        ProyecThor::Library::SetSongAuthor(fileName, std::string(m_AuthorBuffer));
+        m_SaveSuccess = savedLyrics;
+    }
     ImGui::PopStyleColor(4);
 
     ImGui::PopStyleVar();
@@ -345,65 +507,25 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
 
             bool isHovered = ImGui::IsItemHovered();
 
-            // ── Menu contextual ───────────────────────────────────────────────
+          // ── Menu contextual ───────────────────────────────────────────────
             if (ImGui::BeginPopupContextItem("StanzaContextMenu##ctx", ImGuiPopupFlags_MouseButtonRight))
             {
                 ImGui::TextDisabled("Estrofa %d", (int)i + 1);
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("Proyectar esta estrofa"))
-{
-    m_ActiveStanzaIndex = (int)i;
-    core.SetLayer2_Text(stanza);
-    if (core.IsProjecting())
-        core.SetProjecting(true);
-}
+                {
+                    m_ActiveStanzaIndex = (int)i;
+                    core.SetLayer2_Text(stanza);
+                    if (core.IsProjecting())
+                        core.SetProjecting(true);
+                }
 
                 ImGui::Separator();
 
-                if (ImGui::MenuItem(str.songEditSong))
+                if (ImGui::MenuItem("Editar esta estrofa"))
                 {
-                    // ── Construccion de ruta usando SHGetKnownFolderPath ──────
-                    std::filesystem::path songsDir = GetSongsDirectory();
-
-                    // El titulo puede venir con o sin extension .txt
-                    std::filesystem::path songFile = songsDir / selection.title;
-                    if (songFile.extension() != ".txt")
-                        songFile.replace_extension(".txt");
-
-                    printf("[SongView] Intentando abrir: %s\n", songFile.string().c_str());
-
-                    // Crear el archivo si no existe (primera vez)
-                    if (!std::filesystem::exists(songFile))
-                    {
-                        std::error_code ec;
-                        std::filesystem::create_directories(songFile.parent_path(), ec);
-                        std::ofstream touch(songFile);
-                        touch.close();
-                        printf("[SongView] Archivo creado (era nuevo): %s\n", songFile.string().c_str());
-                    }
-
-                    std::ifstream file(songFile);
-                    if (file.is_open())
-                    {
-                        std::string content(
-                            (std::istreambuf_iterator<char>(file)),
-                             std::istreambuf_iterator<char>()
-                        );
-                        file.close();
-
-                        strncpy(m_EditBuffer, content.c_str(), sizeof(m_EditBuffer) - 1);
-                        m_EditBuffer[sizeof(m_EditBuffer) - 1] = '\0';
-
-                        m_EditingFilePath = songFile.string();
-                        m_SaveSuccess     = false;
-                        m_ShowEditor      = true;
-                    }
-                    else
-                    {
-                        printf("[SongView] ERROR: no se pudo abrir el archivo: %s\n",
-                               songFile.string().c_str());
-                    }
+                    OpenEditorForSong(selection.title, stanza, true);
                 }
 
                 ImGui::EndPopup();
@@ -427,7 +549,6 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
 
             drawList->PushClipRect(p_min, p_max, true);
 
-            // Calculo de alineacion vertical
             int lineCount = 1;
             for (char ch : stanza) if (ch == '\n') lineCount++;
 
@@ -462,7 +583,6 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
                 endPos   = stanza.find('\n', startPos);
             }
 
-            // Numero de estrofa abajo a la derecha
             std::string numStr = std::to_string((int)i + 1);
             ImVec2 numSize = ImGui::CalcTextSize(numStr.c_str());
             drawList->AddText(
@@ -479,7 +599,6 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
         ImGui::EndTable();
     }
 
-    // Modal fuera de cualquier BeginChild / BeginTable
     RenderEditorModal();
 }
 
