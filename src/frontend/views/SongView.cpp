@@ -1,0 +1,486 @@
+#include "SongView.h"
+#include "backend/core/PresentationCore.h"
+#include "UIStrings.h"
+#include <imgui.h>
+#include <imgui_internal.h>
+#include <algorithm>
+#include <fstream>
+#include <cstring>
+#include <filesystem>
+#include <cstdlib>
+
+// Windows headers para SHGetKnownFolderPath
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shlobj.h>
+#include <winerror.h>
+
+namespace ProyecThor::UI {
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helper: devuelve %APPDATA%\ProyecThor\assets\songs como std::filesystem::path
+//  Usa SHGetKnownFolderPath (no requiere admin, funciona con rutas Unicode).
+// ─────────────────────────────────────────────────────────────────────────────
+static std::filesystem::path GetSongsDirectory()
+{
+    PWSTR pszPath = nullptr;
+    HRESULT hr = SHGetKnownFolderPath(FOLDERID_RoamingAppData, KF_FLAG_CREATE, nullptr, &pszPath);
+
+    std::filesystem::path result;
+
+    if (SUCCEEDED(hr) && pszPath)
+    {
+        result = std::filesystem::path(pszPath) / L"ProyecThor" / L"assets" / L"songs";
+        CoTaskMemFree(pszPath);
+    }
+    else
+    {
+        // Fallback absoluto: construir a partir de APPDATA con la API de CRT
+        const char* appdata = std::getenv("APPDATA");
+        if (appdata)
+            result = std::filesystem::path(appdata) / "ProyecThor" / "assets" / "songs";
+        else
+            result = std::filesystem::current_path() / "ProyecThor" / "assets" / "songs";
+    }
+
+    // Crear el directorio si no existe (no requiere admin a menos que la ruta
+    // este en una ubicacion del sistema, lo cual no es el caso aqui)
+    std::error_code ec;
+    std::filesystem::create_directories(result, ec);
+
+    return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Constructor
+// ─────────────────────────────────────────────────────────────────────────────
+SongView::SongView()
+    : m_CurrentSongTitle("")
+    , m_ActiveStanzaIndex(-1)
+    , m_ShowEditor(false)
+    , m_OpenEditorPopup(false)
+    , m_EditingFilePath("")
+    , m_SaveSuccess(false)
+{
+    std::memset(m_EditBuffer, 0, sizeof(m_EditBuffer));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SaveBufferToFile
+//  Garantiza que el directorio padre exista antes de escribir.
+// ─────────────────────────────────────────────────────────────────────────────
+bool SongView::SaveBufferToFile()
+{
+    if (m_EditingFilePath.empty())
+    {
+        printf("[SongView] SaveBufferToFile: ruta vacia, abortando.\n");
+        return false;
+    }
+
+    std::filesystem::path filePath(m_EditingFilePath);
+
+    // Crear directorio padre si no existe
+    std::error_code ec;
+    std::filesystem::create_directories(filePath.parent_path(), ec);
+    if (ec)
+    {
+        printf("[SongView] Error creando directorios: %s\n", ec.message().c_str());
+        return false;
+    }
+
+    std::ofstream file(filePath, std::ios::out | std::ios::trunc);
+    if (!file.is_open())
+    {
+        printf("[SongView] No se pudo abrir para escritura: %s\n", m_EditingFilePath.c_str());
+        return false;
+    }
+
+    file << m_EditBuffer;
+    bool ok = file.good();
+    file.close();
+
+    if (ok)
+        printf("[SongView] Guardado correctamente: %s\n", m_EditingFilePath.c_str());
+    else
+        printf("[SongView] Error al escribir en: %s\n", m_EditingFilePath.c_str());
+
+    return ok;
+}
+
+// =============================================================================
+//  RenderEditorModal
+//  CAMBIO: se reemplaza BeginPopupModal (que aplica dim_bg sobre la ventana
+//  principal) por una ventana flotante independiente con ImGui::Begin.
+//  Esto elimina el oscurecimiento de la pantalla de proyeccion/preview.
+// =============================================================================
+void SongView::RenderEditorModal()
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+
+    if (!m_ShowEditor)
+    {
+        m_SaveSuccess = false;
+        return;
+    }
+
+    // Posicionar la ventana centrada la primera vez que aparece.
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
+    ImGui::SetNextWindowSize({ 660.f, 560.f }, ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints({ 420.f, 320.f }, { FLT_MAX, FLT_MAX });
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   14.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    { 22.0f, 20.0f });
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,  1.0f);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,      { 0.039f, 0.043f, 0.063f, 0.980f });
+    ImGui::PushStyleColor(ImGuiCol_Border,         { 1.000f, 1.000f, 1.000f, 0.080f });
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive,  { 0.028f, 0.031f, 0.047f, 1.000f });
+
+    // ImGuiWindowFlags_NoNav evita que esta ventana robe el foco de teclado
+    // del resto de la UI cuando no es necesario.
+    bool windowOpen = true;
+    ImGui::Begin("Editor de Cancion##songWin",
+                 &windowOpen,
+                 ImGuiWindowFlags_NoSavedSettings |
+                 ImGuiWindowFlags_NoCollapse);
+
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(3);
+
+    // Si el usuario cerro la ventana con la X del titulo.
+    if (!windowOpen)
+    {
+        m_ShowEditor  = false;
+        m_SaveSuccess = false;
+        ImGui::End();
+        return;
+    }
+
+    // ── Cabecera ──────────────────────────────────────────────────────────────
+    std::filesystem::path fp(m_EditingFilePath);
+    std::string fileName = fp.filename().string();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 1.0f, 1.0f, 0.40f });
+    ImGui::TextUnformatted("Editando:");
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted(fileName.c_str());
+
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Separator, { 1.0f, 1.0f, 1.0f, 0.060f });
+    ImGui::Separator();
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+
+    // ── Area de texto adaptativa ──────────────────────────────────────────────
+    constexpr float k_ButtonAreaHeight = 50.0f;
+    ImVec2 availSize = ImGui::GetContentRegionAvail();
+    ImVec2 inputSize = { -1.0f, availSize.y - k_ButtonAreaHeight };
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  { 12.0f, 10.0f });
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        { 1.0f, 1.0f, 1.0f, 0.040f });
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, { 1.0f, 1.0f, 1.0f, 0.070f });
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  { 1.0f, 1.0f, 1.0f, 0.100f });
+
+    ImGui::InputTextMultiline(
+        "##editBuffer",
+        m_EditBuffer,
+        sizeof(m_EditBuffer),
+        inputSize,
+        ImGuiInputTextFlags_AllowTabInput
+    );
+
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
+
+    ImGui::Spacing();
+
+    // ── Fila de botones ───────────────────────────────────────────────────────
+    ImVec2 buttonSize = { 130.f, 36.f };
+
+    if (m_SaveSuccess)
+    {
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, { 0.20f, 0.85f, 0.40f, 1.0f });
+        ImGui::TextUnformatted("Guardado correctamente");
+        ImGui::PopStyleColor();
+    }
+
+    float rightAlign = ImGui::GetWindowWidth()
+                     - (buttonSize.x * 2.0f)
+                     - ImGui::GetStyle().ItemSpacing.x
+                     - 22.0f;
+
+    if (rightAlign > ImGui::GetCursorPosX())
+        ImGui::SameLine(rightAlign);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+
+    // Boton Cancelar
+    ImGui::PushStyleColor(ImGuiCol_Button,        { 1.0f, 1.0f, 1.0f, 0.050f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 1.0f, 1.0f, 1.0f, 0.090f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  { 1.0f, 1.0f, 1.0f, 0.130f });
+    if (ImGui::Button(str.cancel, buttonSize))
+    {
+        m_ShowEditor  = false;
+        m_SaveSuccess = false;
+    }
+    ImGui::PopStyleColor(3);
+
+    ImGui::SameLine();
+
+    // Boton Guardar (accent azul-indigo)
+    ImGui::PushStyleColor(ImGuiCol_Button,        { 0.369f, 0.420f, 1.000f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.500f, 0.550f, 1.000f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  { 0.280f, 0.330f, 0.860f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_Text,          { 1.0f,   1.0f,   1.0f,   1.0f });
+    if (ImGui::Button(str.save, buttonSize))
+        m_SaveSuccess = SaveBufferToFile();
+    ImGui::PopStyleColor(4);
+
+    ImGui::PopStyleVar();
+
+    ImGui::End();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+//  Render
+// ─────────────────────────────────────────────────────────────────────────────
+void SongView::Render()
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+
+    auto& core      = Core::PresentationCore::Get();
+    auto  selection = core.PeekSelection();
+
+    if (selection.title.empty() || selection.type != Core::ItemType::Song)
+        return;
+
+    if (m_CurrentSongTitle != selection.title)
+    {
+        m_CurrentSongTitle  = selection.title;
+        m_ActiveStanzaIndex = -1;
+        m_SaveSuccess       = false;
+    }
+
+    auto presentState = core.GetState();
+    int  hAlign       = presentState.songTextAlignment;
+    int  vAlign       = presentState.songVAlignment;
+
+    // ── Navegacion con teclado ────────────────────────────────────────────────
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !selection.contentData.empty())
+    {
+       if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+{
+    if (m_ActiveStanzaIndex < (int)selection.contentData.size() - 1)
+    {
+        m_ActiveStanzaIndex++;
+        core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
+        if (core.IsProjecting())
+            core.SetProjecting(true);
+    }
+}
+if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+{
+    if (m_ActiveStanzaIndex > 0)
+    {
+        m_ActiveStanzaIndex--;
+        core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
+        if (core.IsProjecting())
+            core.SetProjecting(true);
+    }
+}
+    }
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.20f, 0.85f, 0.40f, 1.0f));
+    ImGui::TextUnformatted(str.songLyricsDeck);
+    ImGui::PopStyleColor();
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x
+                    - ImGui::CalcTextSize(selection.title.c_str()).x - 5.0f);
+    ImGui::TextDisabled("%s", selection.title.c_str());
+    ImGui::Separator();
+
+    // ── Boton limpiar pantalla ────────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.65f, 0.10f, 0.10f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.80f, 0.20f, 0.20f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.50f, 0.05f, 0.05f, 1.0f));
+    if (ImGui::Button(str.songClearScreen, ImVec2(-1, 35)))
+    {
+        core.ClearLayer2();
+        m_ActiveStanzaIndex = -1;
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::Separator();
+
+    // ── Grid de estrofas ──────────────────────────────────────────────────────
+    float availWidth = ImGui::GetContentRegionAvail().x;
+    int   columns    = std::max(1, static_cast<int>(availWidth / 250.0f));
+
+    if (ImGui::BeginTable("StanzasGrid", columns, ImGuiTableFlags_SizingStretchSame))
+    {
+        for (size_t i = 0; i < selection.contentData.size(); ++i)
+        {
+            ImGui::TableNextColumn();
+
+            const std::string& stanza     = selection.contentData[i];
+            bool               isSelected = (m_ActiveStanzaIndex == static_cast<int>(i));
+
+            ImGui::PushID((int)i);
+
+            ImVec2 p_min    = ImGui::GetCursorScreenPos();
+            ImVec2 cardSize = ImVec2(ImGui::GetContentRegionAvail().x, 110.0f);
+            ImVec2 p_max    = ImVec2(p_min.x + cardSize.x, p_min.y + cardSize.y);
+
+            if (ImGui::InvisibleButton("##select_btn", cardSize))
+{
+    m_ActiveStanzaIndex = (int)i;
+    core.SetLayer2_Text(stanza);
+    if (core.IsProjecting())
+        core.SetProjecting(true);
+}
+
+            bool isHovered = ImGui::IsItemHovered();
+
+            // ── Menu contextual ───────────────────────────────────────────────
+            if (ImGui::BeginPopupContextItem("StanzaContextMenu##ctx", ImGuiPopupFlags_MouseButtonRight))
+            {
+                ImGui::TextDisabled("Estrofa %d", (int)i + 1);
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Proyectar esta estrofa"))
+{
+    m_ActiveStanzaIndex = (int)i;
+    core.SetLayer2_Text(stanza);
+    if (core.IsProjecting())
+        core.SetProjecting(true);
+}
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem(str.songEditSong))
+                {
+                    // ── Construccion de ruta usando SHGetKnownFolderPath ──────
+                    std::filesystem::path songsDir = GetSongsDirectory();
+
+                    // El titulo puede venir con o sin extension .txt
+                    std::filesystem::path songFile = songsDir / selection.title;
+                    if (songFile.extension() != ".txt")
+                        songFile.replace_extension(".txt");
+
+                    printf("[SongView] Intentando abrir: %s\n", songFile.string().c_str());
+
+                    // Crear el archivo si no existe (primera vez)
+                    if (!std::filesystem::exists(songFile))
+                    {
+                        std::error_code ec;
+                        std::filesystem::create_directories(songFile.parent_path(), ec);
+                        std::ofstream touch(songFile);
+                        touch.close();
+                        printf("[SongView] Archivo creado (era nuevo): %s\n", songFile.string().c_str());
+                    }
+
+                    std::ifstream file(songFile);
+                    if (file.is_open())
+                    {
+                        std::string content(
+                            (std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>()
+                        );
+                        file.close();
+
+                        strncpy(m_EditBuffer, content.c_str(), sizeof(m_EditBuffer) - 1);
+                        m_EditBuffer[sizeof(m_EditBuffer) - 1] = '\0';
+
+                        m_EditingFilePath = songFile.string();
+                        m_SaveSuccess     = false;
+                        m_ShowEditor      = true;
+                    }
+                    else
+                    {
+                        printf("[SongView] ERROR: no se pudo abrir el archivo: %s\n",
+                               songFile.string().c_str());
+                    }
+                }
+
+                ImGui::EndPopup();
+            }
+
+            // ── Dibujado manual de la tarjeta ─────────────────────────────────
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+            ImU32 bgColor;
+            if      (isSelected) bgColor = IM_COL32( 20,  55,  20, 255);
+            else if (isHovered)  bgColor = IM_COL32( 30,  30,  40, 255);
+            else                 bgColor = IM_COL32( 18,  18,  26, 255);
+
+            ImU32 borderColor = isSelected
+                ? IM_COL32(80, 200, 100, 200)
+                : IM_COL32(255, 255, 255, 18);
+            float borderSize  = isSelected ? 1.5f : 1.0f;
+
+            drawList->AddRectFilled(p_min, p_max, bgColor, 10.0f);
+            drawList->AddRect(p_min, p_max, borderColor, 10.0f, 0, borderSize);
+
+            drawList->PushClipRect(p_min, p_max, true);
+
+            // Calculo de alineacion vertical
+            int lineCount = 1;
+            for (char ch : stanza) if (ch == '\n') lineCount++;
+
+            float totalTextHeight = lineCount * ImGui::GetTextLineHeight();
+            float startY = 10.0f;
+            if      (vAlign == 1) startY = std::max(10.0f, (cardSize.y - totalTextHeight) * 0.5f);
+            else if (vAlign == 2) startY = std::max(10.0f,  cardSize.y - totalTextHeight - 10.0f);
+
+            float  currentY  = startY;
+            size_t startPos  = 0;
+            size_t endPos    = stanza.find('\n');
+            ImU32  textColor = ImGui::GetColorU32(ImGuiCol_Text);
+
+            while (startPos != std::string::npos)
+            {
+                std::string line = stanza.substr(startPos, endPos - startPos);
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+
+                if (!line.empty())
+                {
+                    float textWidth = ImGui::CalcTextSize(line.c_str()).x;
+                    float localX    = 10.0f;
+                    if      (hAlign == 1) localX = std::max(10.0f, (cardSize.x - textWidth) * 0.5f);
+                    else if (hAlign == 2) localX = std::max(10.0f,  cardSize.x - textWidth - 10.0f);
+
+                    drawList->AddText(ImVec2(p_min.x + localX, p_min.y + currentY), textColor, line.c_str());
+                }
+
+                currentY += ImGui::GetTextLineHeight();
+                if (endPos == std::string::npos) break;
+                startPos = endPos + 1;
+                endPos   = stanza.find('\n', startPos);
+            }
+
+            // Numero de estrofa abajo a la derecha
+            std::string numStr = std::to_string((int)i + 1);
+            ImVec2 numSize = ImGui::CalcTextSize(numStr.c_str());
+            drawList->AddText(
+                ImVec2(p_max.x - numSize.x - 8.0f, p_max.y - numSize.y - 5.0f),
+                ImGui::GetColorU32(ImGuiCol_TextDisabled),
+                numStr.c_str()
+            );
+
+            drawList->PopClipRect();
+
+            ImGui::PopID();
+        }
+
+        ImGui::EndTable();
+    }
+
+    // Modal fuera de cualquier BeginChild / BeginTable
+    RenderEditorModal();
+}
+
+} // namespace ProyecThor::UI

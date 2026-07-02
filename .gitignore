@@ -1,0 +1,14 @@
+build/
+CMakeFiles/
+_deps/
+*.exe
+*.obj
+CMakeCache.txt
+iss/installer_output/
+web/
+lite/
+
+src/backend/sdk/**/*.dll
+src/backend/sdk/**/*.lib
+src/backend/sdk/**/*.a
+src/backend/sdk/**/*.jar

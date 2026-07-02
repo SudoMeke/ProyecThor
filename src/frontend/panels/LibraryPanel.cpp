@@ -1,0 +1,573 @@
+#include "LibraryPanel.h"
+
+#include "biblio/LibraryHelpers.h"
+#include "biblio/LibrarySidebar.h"
+#include "biblio/LibrarySongs.h"
+#include "biblio/LibraryVideos.h"
+#include "biblio/LibraryDocuments.h"
+#include "biblio/LibraryModals.h"
+
+#include <windows.h>
+#include <shlobj.h>
+#include <commdlg.h>
+#include <imgui.h>
+#include <imgui_internal.h>
+
+#include "backend/core/PresentationCore.h"
+#include "UIStrings.h"
+#include "frontend/ui/UIManager.h"
+#include "ui/DesignSystem.h"
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <filesystem>
+#include <cstring>
+#include <vector>
+#include <string>
+#include <iterator>
+#include <thread>
+#include <chrono>
+#include <system_error>
+#include <algorithm>
+
+namespace fs = std::filesystem;
+
+using namespace ProyecThor::Library;
+
+static const std::string k_StreamURLsFile = "/stream_urls.txt";
+
+namespace ProyecThor::UI {
+
+namespace {
+
+bool TryRemoveWithRetry(const fs::path& target, int maxAttempts = 8, int delayMs = 200)
+{
+    std::error_code ec;
+    for (int attempt = 0; attempt < maxAttempts; ++attempt)
+    {
+        fs::remove_all(target, ec);
+        if (!ec)
+            return true;
+
+        if (attempt < maxAttempts - 1)
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+    }
+    return false;
+}
+
+} // namespace
+
+// =============================================================================
+//  BuildContext
+// =============================================================================
+Library::LibraryContext LibraryPanel::BuildContext()
+{
+    return Library::LibraryContext{
+        reinterpret_cast<int&>(m_CurrentCategory),
+        m_Items,
+        m_SelectedIndex,
+        m_SearchBuffer,
+        static_cast<int>(sizeof(m_SearchBuffer)),
+        m_StreamURLs,
+        m_SelectedURLIndex,
+        m_URLInputBuffer,
+        static_cast<int>(sizeof(m_URLInputBuffer)),
+        m_ShowSongEditor,
+        m_EditTitle,
+        m_EditContent,
+        m_EditAuthor,
+        m_ShowRenameModal,
+        m_RenameOldName,
+        m_RenameExtension,
+        m_RenameBuffer,
+        m_RenameIsURL,
+        m_RenameURLIndex,
+        m_LoadedDocPath,
+        m_MonitorRef,
+        [this]() { RefreshList(); },
+        [this]() { DeleteSelectedItem(); },
+        [this]() { ImportFile(); },
+        [this]() { CreateNewSong(); },
+        [this](const std::string& t, const std::string& c, const std::string& a) { SaveSong(t, c, a); },
+        [this]() { LoadStreamURLs(); },
+        [this]() { SaveStreamURLs(); },
+        [this](const std::string& f) { return LoadSongVerses(f); },
+        [](const std::string& styleName) {
+            Core::PresentationCore::Get().ApplyStyleByName(styleName);
+        }
+    };
+}
+
+// =============================================================================
+//  Constructor
+// =============================================================================
+LibraryPanel::LibraryPanel()
+{
+    try {
+        const std::string& base = GetAssetsPath();
+        fs::create_directories(U8Path(base + "/songs"));
+        fs::create_directories(U8Path(base + "/videos"));
+        fs::create_directories(U8Path(base + "/images"));
+        fs::create_directories(U8Path(base + "/bibles"));
+        fs::create_directories(U8Path(base + "/documents"));
+        fs::create_directories(U8Path(base + "/audio"));
+    } catch (const std::exception& e) {
+        std::cerr << "[LibraryPanel] Advertencia IO: " << e.what() << '\n';
+    }
+    RefreshList();
+    LoadStreamURLs();
+}
+
+// =============================================================================
+//  IO — URLs de streaming
+// =============================================================================
+void LibraryPanel::LoadStreamURLs()
+{
+    m_StreamURLs.clear();
+    std::ifstream f(U8Path(GetAssetsPath() + k_StreamURLsFile));
+    if (!f.is_open()) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty() && line.rfind("http", 0) == 0)
+            m_StreamURLs.push_back(line);
+    }
+}
+
+void LibraryPanel::SaveStreamURLs()
+{
+    std::ofstream f(U8Path(GetAssetsPath() + k_StreamURLsFile));
+    if (!f.is_open()) return;
+    for (const auto& u : m_StreamURLs) f << u << '\n';
+}
+
+// =============================================================================
+//  RefreshList
+// =============================================================================
+void LibraryPanel::RefreshList()
+{
+    if (m_CurrentCategory == LibraryCategory::Audio) {
+        m_Items.clear();
+        ForceListUpdate() = true;
+        return;
+    }
+
+    m_Items.clear();
+    const std::string& base = GetAssetsPath();
+    std::string path;
+    switch (m_CurrentCategory) {
+        case LibraryCategory::Songs:     path = base + "/songs";     break;
+        case LibraryCategory::Videos:    path = base + "/videos";    break;
+        case LibraryCategory::Images:    path = base + "/images";    break;
+        case LibraryCategory::Bibles:    path = base + "/bibles";    break;
+        case LibraryCategory::Documents: path = base + "/documents"; break;
+        default: break;
+    }
+
+    try {
+        fs::path fsPath = U8Path(path);
+        if (fs::exists(fsPath)) {
+            for (const auto& entry : fs::directory_iterator(fsPath)) {
+                std::string name = WideToUtf8(entry.path().filename().wstring());
+                if (m_CurrentCategory == LibraryCategory::Documents) {
+                    if (entry.is_directory()) m_Items.push_back(name);
+                } else {
+                    if (entry.is_regular_file()) m_Items.push_back(name);
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[LibraryPanel] Error IO: " << e.what() << '\n';
+    }
+
+    if (m_Items.empty() && m_CurrentCategory == LibraryCategory::Songs)
+        m_Items = { "Cuan_Grande_es_El.txt", "Gracia_Sublime.txt" };
+
+    if (m_CurrentCategory == LibraryCategory::Videos)
+        LoadStreamURLs();
+
+    ForceListUpdate() = true;
+}
+
+// =============================================================================
+//  DeleteSelectedItem
+// =============================================================================
+void LibraryPanel::DeleteSelectedItem()
+{
+    if (m_SelectedIndex < 0 || m_SelectedIndex >= (int)m_Items.size())
+        return;
+
+    const std::string& base = GetAssetsPath();
+    std::string folder;
+    switch (m_CurrentCategory) {
+        case LibraryCategory::Songs:     folder = base + "/songs/";     break;
+        case LibraryCategory::Videos:    folder = base + "/videos/";    break;
+        case LibraryCategory::Images:    folder = base + "/images/";    break;
+        case LibraryCategory::Documents: folder = base + "/documents/"; break;
+        case LibraryCategory::Audio:     folder = base + "/audio/";     break;
+        default:                         folder = base + "/bibles/";    break;
+    }
+
+    const std::string itemName = m_Items[m_SelectedIndex];
+    const std::string fullPath = folder + itemName;
+
+    auto& core = Core::PresentationCore::Get();
+    auto  currentSelection = core.PeekSelection();
+
+    const bool isDocumentInUse =
+        (m_CurrentCategory == LibraryCategory::Documents) &&
+        (!m_LoadedDocPath.empty()) &&
+        (m_LoadedDocPath.rfind(fullPath, 0) == 0);
+
+    const bool isCurrentlySelected =
+        (currentSelection.title == itemName) || isDocumentInUse;
+
+    const bool isVideoCategory = (m_CurrentCategory == LibraryCategory::Videos);
+
+    if (isVideoCategory)
+    {
+        // Bloquea la ruta ANTES de detener la reproduccion. Mientras el
+        // bloqueo esta activo, VLCBasePlayer::Play() ignora cualquier
+        // intento de volver a abrir este archivo, sin importar quien lo
+        // dispare (cola automatica, boton manual, etc.). Esto es lo que
+        // evita que el video se reabra justo despues del Stop() y deje el
+        // archivo bloqueado para el borrado.
+        core.BlockBackgroundPath(fullPath);
+        core.StopBackgroundMedia();
+    }
+
+    if (isCurrentlySelected)
+    {
+        core.SetProjecting(false);
+        core.ClearLayer2();
+    }
+
+    if (m_CurrentCategory == LibraryCategory::Documents && isDocumentInUse)
+        m_LoadedDocPath.clear();
+
+    const bool removed = TryRemoveWithRetry(U8Path(fullPath));
+
+    if (isVideoCategory)
+        core.UnblockBackgroundPath();
+
+    if (!removed)
+    {
+        std::cerr << "[LibraryPanel] No se pudo eliminar, el archivo sigue en uso: "
+                  << fullPath << '\n';
+        ShowFileInUseToast(itemName);
+        return;
+    }
+
+    m_SelectedIndex = -1;
+    if (m_CurrentCategory == LibraryCategory::Documents)
+        m_LoadedDocPath.clear();
+
+    RefreshList();
+}
+
+// =============================================================================
+//  ShowFileInUseToast — arma el aviso temporal
+// =============================================================================
+void LibraryPanel::ShowFileInUseToast(const std::string& fileName)
+{
+    m_ShowFileInUseToast  = true;
+    m_FileInUseToastName  = fileName;
+    m_FileInUseToastTimer = 3.5f;
+}
+
+// =============================================================================
+//  RenderFileInUseToast — dibuja y hace desvanecer el aviso
+// =============================================================================
+void LibraryPanel::RenderFileInUseToast()
+{
+    if (!m_ShowFileInUseToast)
+        return;
+
+    m_FileInUseToastTimer -= ImGui::GetIO().DeltaTime;
+    if (m_FileInUseToastTimer <= 0.0f)
+    {
+        m_ShowFileInUseToast = false;
+        m_FileInUseToastName.clear();
+        return;
+    }
+
+    const float k_FadeInOut = 0.4f;
+    float alpha = 1.0f;
+    if (m_FileInUseToastTimer < k_FadeInOut)
+        alpha = m_FileInUseToastTimer / k_FadeInOut;
+
+    std::string message = "No se pudo eliminar \"" + m_FileInUseToastName + "\": el archivo esta en uso.";
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImVec2   displaySize = io.DisplaySize;
+
+    ImFont* font = ImGui::GetFont();
+   // Usamos ImGui::GetFontSize() en lugar de intentar obtenerlo del objeto font
+ImVec2 textSize = font->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, 0.0f, message.c_str());
+
+    const float padX = 16.0f;
+    const float padY = 10.0f;
+    const float boxW = textSize.x + padX * 2.0f;
+    const float boxH = textSize.y + padY * 2.0f;
+    const float marginBottom = 32.0f;
+
+    ImVec2 boxMin(
+        (displaySize.x - boxW) * 0.5f,
+        displaySize.y - marginBottom - boxH
+    );
+    ImVec2 boxMax(boxMin.x + boxW, boxMin.y + boxH);
+
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+
+    ImU32 bgColor   = IM_COL32(35, 15, 15, static_cast<int>(230 * alpha));
+    ImU32 borderCol = IM_COL32(200, 70, 70, static_cast<int>(200 * alpha));
+    ImU32 textCol   = IM_COL32(255, 220, 220, static_cast<int>(255 * alpha));
+
+    dl->AddRectFilled(boxMin, boxMax, bgColor, 8.0f);
+    dl->AddRect(boxMin, boxMax, borderCol, 8.0f, 0, 1.5f);
+
+    ImVec2 textPos(boxMin.x + padX, boxMin.y + padY);
+    dl->AddText(textPos, textCol, message.c_str());
+}
+
+// =============================================================================
+//  Render — ahora envuelto en DS::BeginGlassPanel/EndGlassPanel
+// =============================================================================
+void LibraryPanel::Render()
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+
+    if (m_CurrentCategory != m_PrevCategory)
+    {
+        m_AudioSelectionSet = false;
+        m_PrevCategory      = m_CurrentCategory;
+    }
+
+    bool visible = false;
+
+    if (m_UIManagerRef)
+    {
+        visible = DS::BeginGlassPanel(str.library, m_UIManagerRef->GetGlassRenderer(),
+                                      nullptr, 0, ImVec2(0.0f, 0.0f));
+    }
+    else
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+        visible = ImGui::Begin(str.library);
+        ImGui::PopStyleVar();
+    }
+
+    if (!visible)
+    {
+        if (m_UIManagerRef) DS::EndGlassPanel();
+        else                ImGui::End();
+        RenderFileInUseToast();
+        return;
+    }
+
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && m_UIManagerRef)
+        m_UIManagerRef->SetActiveLeftPanel(ActiveLeftPanel::Library);
+
+    constexpr float k_SidebarW = 82.0f;
+    const float     totalH     = ImGui::GetContentRegionAvail().y;
+
+    // ── Sidebar izquierdo ──────────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+    ImGui::BeginChild("##sidebar", ImVec2(k_SidebarW, totalH), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    {
+        Library::LibraryContext ctx = BuildContext();
+        Library::RenderCategoryButtons(ctx);
+    }
+
+    ImGui::EndChild();
+
+    // ── Divisor vertical con gradiente ────────────────────────────────────
+    ImGui::SameLine(0.f, 0.f);
+    {
+        ImVec2      p  = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImU32 colTop   = IM_COL32(60, 80, 160,  0);
+        ImU32 colMid   = IM_COL32(60, 80, 160, 80);
+        ImU32 colBot   = IM_COL32(60, 80, 160,  0);
+        float midY     = p.y + totalH * 0.5f;
+        dl->AddRectFilledMultiColor(
+            p,              { p.x + 1.f, midY },
+            colTop, colTop, colMid, colMid);
+        dl->AddRectFilledMultiColor(
+            { p.x, midY },  { p.x + 1.f, p.y + totalH },
+            colMid, colMid, colBot, colBot);
+    }
+    ImGui::SameLine(0.f, 1.0f);
+
+    // ── Panel de contenido derecho ─────────────────────────────────────────
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.f, 8.f));
+    ImGui::BeginChild("##content", ImVec2(0.f, totalH), false);
+    ImGui::PopStyleVar();
+
+    {
+        Library::LibraryContext ctx = BuildContext();
+
+        if (m_CurrentCategory == LibraryCategory::Audio)
+        {
+            if (!m_AudioSelectionSet)
+            {
+                Core::LibrarySelection audioSel;
+                audioSel.type  = Core::ItemType::Audio;
+                audioSel.title = "Audio";
+                Core::PresentationCore::Get().SetSelection(audioSel);
+                m_AudioSelectionSet = true;
+            }
+
+            m_AudioPanel.RenderLibraryList();
+        }
+        else if (m_CurrentCategory == LibraryCategory::Videos)
+        {
+            Library::RenderVideoSection(ctx);
+        }
+        else if (m_CurrentCategory == LibraryCategory::Documents)
+        {
+            Library::RenderDocumentSection(ctx, m_DocumentView);
+        }
+        else
+        {
+            Library::RenderSideList(ctx);
+            Library::RenderSongEditor(ctx);
+        }
+
+        Library::RenderRenameModal(ctx);
+    }
+
+    ImGui::EndChild();
+
+    if (m_UIManagerRef) DS::EndGlassPanel();
+    else                ImGui::End();
+
+    RenderFileInUseToast();
+}
+
+// =============================================================================
+//  Helpers — canciones
+// =============================================================================
+void LibraryPanel::CreateNewSong()
+{
+    memset(m_EditTitle,   0, sizeof(m_EditTitle));
+    memset(m_EditContent, 0, sizeof(m_EditContent));
+    memset(m_EditAuthor,  0, sizeof(m_EditAuthor));
+    m_ShowSongEditor = true;
+}
+
+void LibraryPanel::SaveSong(const std::string& title, const std::string& content, const std::string& /*author*/)
+{
+    if (title.empty()) return;
+    std::string filename = title;
+    if (filename.find(".txt") == std::string::npos) filename += ".txt";
+
+    std::ofstream f(U8Path(GetAssetsPath() + "/songs/" + filename));
+    if (f.is_open()) {
+        f << "\xEF\xBB\xBF";
+        f << content;
+        RefreshList();
+    }
+}
+
+// =============================================================================
+//  LoadSongVerses
+// =============================================================================
+std::vector<std::string> LibraryPanel::LoadSongVerses(const std::string& filename)
+{
+    std::vector<std::string> verses;
+
+    std::ifstream file(U8Path(GetAssetsPath() + "/songs/" + filename),
+                       std::ios::binary);
+    if (!file.is_open()) {
+        verses.push_back(
+            "Error: No se pudo abrir el archivo.\nRuta: " +
+            GetAssetsPath() + "/songs/" + filename);
+        return verses;
+    }
+
+    std::string raw((std::istreambuf_iterator<char>(file)),
+                     std::istreambuf_iterator<char>());
+    file.close();
+    if (raw.empty()) return verses;
+
+    std::string content = NormalizeToUtf8(raw);
+
+    std::string line, verse;
+    std::istringstream stream(content);
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) {
+            if (!verse.empty()) { verses.push_back(verse); verse.clear(); }
+        } else {
+            verse += line + '\n';
+        }
+    }
+    if (!verse.empty()) verses.push_back(verse);
+
+    return verses;
+}
+
+// =============================================================================
+//  ImportFile
+// =============================================================================
+void LibraryPanel::ImportFile()
+{
+    wchar_t filename[MAX_PATH] = {};
+    OPENFILENAMEW ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = nullptr;
+
+    if      (m_CurrentCategory == LibraryCategory::Videos)
+        ofn.lpstrFilter = L"Videos\0*.mp4;*.mkv;*.avi;*.mov\0Todos\0*.*\0";
+    else if (m_CurrentCategory == LibraryCategory::Images)
+        ofn.lpstrFilter = L"Imagenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
+    else if (m_CurrentCategory == LibraryCategory::Songs)
+        ofn.lpstrFilter = L"Textos\0*.txt\0Todos\0*.*\0";
+    else if (m_CurrentCategory == LibraryCategory::Documents)
+        ofn.lpstrFilter = L"Documentos\0*.pdf;*.pptx;*.ppt;*.odp\0Todos\0*.*\0";
+    else
+        ofn.lpstrFilter = L"Todos los archivos\0*.*\0";
+
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile  = MAX_PATH;
+    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+
+    if (!GetOpenFileNameW(&ofn)) return;
+
+    try {
+        fs::path src(filename);
+        const std::string& base = GetAssetsPath();
+
+        if (m_CurrentCategory == LibraryCategory::Documents) {
+            std::string docName = WideToUtf8(src.stem().wstring());
+            fs::path    docDir  = U8Path(base + "/documents") / U8Path(docName);
+            fs::create_directories(docDir);
+            fs::copy(src, docDir / src.filename(),
+                     fs::copy_options::overwrite_existing);
+        } else {
+            std::string destFolder;
+            switch (m_CurrentCategory) {
+                case LibraryCategory::Songs:  destFolder = base + "/songs";  break;
+                case LibraryCategory::Videos: destFolder = base + "/videos"; break;
+                case LibraryCategory::Images: destFolder = base + "/images"; break;
+                case LibraryCategory::Bibles: destFolder = base + "/bibles"; break;
+                default:                      destFolder = base + "/audio";  break;
+            }
+            fs::copy(src, U8Path(destFolder) / src.filename(),
+                     fs::copy_options::overwrite_existing);
+        }
+        RefreshList();
+    } catch (const std::exception& e) {
+        std::cerr << "[LibraryPanel] Error al importar: " << e.what() << '\n';
+    }
+}
+
+} // namespace ProyecThor::UI

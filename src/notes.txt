@@ -1,0 +1,44 @@
+git log --graph --oneline --all --decorate
+git tree
+
+git checkout -b feature/audio-mejoras
+
+# Editás AudioMeters.cpp
+git add src/backend/monitors/AudioMeters.cpp
+git commit -m "audio: corrige calculo de picos en AudioMeters"
+
+# Editás AudioWaveform.cpp
+git add src/frontend/views/audio/AudioWaveform.cpp
+git commit -m "audio: mejora renderizado de waveform"
+
+solo primera vez va la u
+git push -u origin feature/audio-mejoras
+git push
+
+fusionar a main
+git checkout main
+git pull
+git merge feature/audio-mejoras
+
+si h ay conflictos
+git add archivo-en-conflicto.cpp
+git commit
+
+#fusion
+git push
+git branch -d feature/audio-mejoras
+git push origin --delete feature/audio-mejoras
+
+rama actual
+git status
+
+ver diferencias
+git diff
+
+descartar cambios
+git checkout -- src/backend/monitors/AudioMeters.cpp
+
+main siempre debe compilar y funcionar. Todo trabajo experimental o en progreso vive en ramas feature/*, y solo se fusiona cuando está probado. Si algo sale mal en una rama, simplemente la borrás sin tocar main:
+git checkout main
+git branch -D feature/experimento-fallido
+¿Querés que armemos un ejemplo concreto con tus archi

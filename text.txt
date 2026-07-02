@@ -1,0 +1,2 @@
+- No es el mismo ico
+- No se crea carpeta backgrounds
