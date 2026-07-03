@@ -12,7 +12,7 @@ namespace ProyecThor::Settings {
             case Language::Spanish:    return "Español";
             case Language::English:    return "English";
             case Language::Portuguese: return "Português";
-            default:                   return "Español";
+            default:                   return "English";
         }
     }
 
