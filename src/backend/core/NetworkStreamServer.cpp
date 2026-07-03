@@ -14,6 +14,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -36,7 +37,7 @@ namespace ProyecThor::Core {
 NetworkStreamServer::NetworkStreamServer()  = default;
 NetworkStreamServer::~NetworkStreamServer() { Stop(); }
 
-// ── SetSnapshotProvider / SetFrameProvider ────────────────────────────────────
+// ── SetSnapshotProvider / SetFrameProvider / SetFontPathProvider ─────────────
 void NetworkStreamServer::SetSnapshotProvider(SnapshotProvider p)
 {
     std::lock_guard<std::mutex> lk(m_ProviderMutex);
@@ -47,6 +48,12 @@ void NetworkStreamServer::SetFrameProvider(FrameProvider p)
 {
     std::lock_guard<std::mutex> lk(m_ProviderMutex);
     m_FrameProvider = std::move(p);
+}
+
+void NetworkStreamServer::SetFontPathProvider(FontPathProvider p)
+{
+    std::lock_guard<std::mutex> lk(m_ProviderMutex);
+    m_FontPathProvider = std::move(p);
 }
 
 // ── SetConfig / GetConfig ─────────────────────────────────────────────────────
@@ -119,6 +126,44 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
     svr.Get("/", [this](const httplib::Request& req, httplib::Response& res)
     {
         res.set_content(BuildHTMLPage(), "text/html; charset=utf-8");
+    });
+
+    // ── GET /font  (sirve el .ttf/.otf activo tal cual, para @font-face) ──────
+    svr.Get("/font", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        std::string path;
+        {
+            std::lock_guard<std::mutex> lk(m_ProviderMutex);
+            if (m_FontPathProvider) path = m_FontPathProvider();
+        }
+
+        if (path.empty()) {
+            res.status = 404;
+            res.set_content(R"({"error":"no_custom_font"})", "application/json");
+            return;
+        }
+
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open()) {
+            res.status = 404;
+            res.set_content(R"({"error":"font_not_found"})", "application/json");
+            return;
+        }
+
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        std::string data = ss.str();
+
+        std::string ext;
+        auto dot = path.find_last_of('.');
+        if (dot != std::string::npos) ext = path.substr(dot + 1);
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        std::string mime = (ext == "otf") ? "font/otf" : "font/ttf";
+
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "public, max-age=3600");
+        res.set_content(data, mime.c_str());
     });
 
     // ── GET /state  (long-poll JSON) ──────────────────────────────────────────
@@ -312,16 +357,23 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
 
     std::ostringstream j;
     j << "{"
-      << "\"isProjecting\":"  << B(s.isProjecting)           << ","
+      << "\"isProjecting\":"  << B(s.isProjecting)            << ","
       << "\"showText\":"      << B(s.showText && cfg.sendText)<< ","
-      << "\"version\":"       << s.version                   << ","
-      << "\"textAlignment\":" << s.textAlignment             << ","
-      << "\"vAlignment\":"    << s.vAlignment                << ","
-      << "\"textSize\":"      << static_cast<int>(s.textSize)<< ","
-      << "\"isBgVideo\":"     << B(s.isBgVideo)              << ","
+      << "\"version\":"       << s.version                    << ","
+      << "\"fontVersion\":"   << s.fontVersion                << ","
+      << "\"textAlignment\":" << s.textAlignment              << ","
+      << "\"vAlignment\":"    << s.vAlignment                 << ","
+      << "\"textSize\":"      << s.textSize                   << ","
+      << "\"autoScale\":"     << B(s.autoScale)                << ","
+      << "\"margins\":["      << s.margins[0] << "," << s.margins[1] << ","
+                               << s.margins[2] << "," << s.margins[3] << "],"
+      << "\"fontFamily\":\""  << escapeJSON(s.fontFamily)     << "\","
+      << "\"refW\":"          << s.refW                       << ","
+      << "\"refH\":"          << s.refH                       << ","
+      << "\"isBgVideo\":"     << B(s.isBgVideo)                << ","
       << "\"hasFrame\":"      << B(s.hasFrame && cfg.sendBackground) << ","
-      << "\"highQuality\":"   << B(hiQ)                      << ","
-      << "\"currentText\":\"" << escapeJSON(s.currentText)   << "\","
+      << "\"highQuality\":"   << B(hiQ)                        << ","
+      << "\"currentText\":\"" << escapeJSON(s.currentText)     << "\","
       << "\"textColor\":["
             << s.textColor[0] << "," << s.textColor[1] << ","
             << s.textColor[2] << "," << s.textColor[3]
@@ -390,9 +442,19 @@ std::string NetworkStreamServer::BuildHTMLPage()
     display: flex;
     align-items: center; justify-content: center;
     background: #000;
-    transition: background-color 0.4s ease;
     overflow: hidden;
   }
+
+  /* Contenedor con las MISMAS proporciones que el proyector real.
+     Su tamaño en px se calcula en JS replicando "lo justo y necesario"
+     (idéntico al algoritmo de ViewPanel::RenderContent en el cliente C++). */
+  #viewport {
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    transition: background-color 0.4s ease;
+  }
+
   /* Fondo — imagen/video capturado */
   #bg-frame {
     position: absolute;
@@ -405,16 +467,17 @@ std::string NetworkStreamServer::BuildHTMLPage()
   }
   #bg-frame.visible { opacity: 1; }
 
-  /* Texto overlay */
+  /* Texto overlay — posición/tamaño se fijan en px vía JS (no CSS fijo),
+     para reproducir exactamente los mismos márgenes y escala que el
+     proyector real, en vez de un padding fijo en vw. */
   #text-container {
     position: absolute;
-    inset: 0;
     display: flex;
-    padding: 6vw;
     opacity: 0;
     transition: opacity 0.35s ease;
     pointer-events: none;
     z-index: 10;
+    overflow: hidden;
   }
   #text-container.visible { opacity: 1; }
   #text-container.h-left   { justify-content: flex-start; text-align: left; }
@@ -429,6 +492,7 @@ std::string NetworkStreamServer::BuildHTMLPage()
     line-height: 1.25;
     text-shadow: 2px 3px 12px rgba(0,0,0,0.92), 0 0 30px rgba(0,0,0,0.6);
     max-width: 100%;
+    font-family: 'UserFont', 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
 
   /* Idle overlay */
@@ -474,17 +538,19 @@ std::string NetworkStreamServer::BuildHTMLPage()
 </head>
 <body>
 <div id="screen">
-  <div id="idle-overlay">
-    <div id="idle-logo">ProyecThor</div>
-    <div id="idle-dot"></div>
-  </div>
+  <div id="viewport">
+    <div id="idle-overlay">
+      <div id="idle-logo">ProyecThor</div>
+      <div id="idle-dot"></div>
+    </div>
 
-  <!-- Fondo capturado (JPEG polling o MJPEG) -->
-  <img id="bg-frame" src="" alt="" aria-hidden="true">
+    <!-- Fondo capturado (JPEG polling o MJPEG) -->
+    <img id="bg-frame" src="" alt="" aria-hidden="true">
 
-  <!-- Overlay de texto -->
-  <div id="text-container">
-    <div id="main-text"></div>
+    <!-- Overlay de texto -->
+    <div id="text-container">
+      <div id="main-text"></div>
+    </div>
   </div>
 </div>
 
@@ -496,6 +562,7 @@ std::string NetworkStreamServer::BuildHTMLPage()
 'use strict';
 
 const screenEl      = document.getElementById('screen');
+const viewportEl    = document.getElementById('viewport');
 const bgFrame       = document.getElementById('bg-frame');
 const textContainer = document.getElementById('text-container');
 const mainText      = document.getElementById('main-text');
@@ -503,10 +570,52 @@ const idleOverlay   = document.getElementById('idle-overlay');
 const statusBar     = document.getElementById('status-bar');
 const statusText    = document.getElementById('status-text');
 
-let currentVersion = 0;
-let retryDelay     = 1000;
-let highQuality    = false;
-let mjpegActive    = false;
+let currentVersion     = 0;
+let currentFontVersion = -1;
+let retryDelay         = 1000;
+let highQuality        = false;
+let mjpegActive        = false;
+let lastRefW            = 1920;
+let lastRefH             = 1080;
+
+// ── Carga dinámica de la fuente real del usuario vía FontFace API ───────────
+// Si el servidor no tiene fuente custom activa ("Predeterminada"), /font
+// devuelve 404 y simplemente seguimos con el fallback sans-serif del CSS.
+async function ensureFontLoaded(fontVersion) {
+  if (fontVersion === currentFontVersion) return;
+  currentFontVersion = fontVersion;
+  try {
+    const face = new FontFace('UserFont', `url(/font?v=${fontVersion})`);
+    const loaded = await face.load();
+    document.fonts.add(loaded);
+  } catch (e) {
+    // Sin fuente custom disponible: se mantiene el fallback del sistema.
+  }
+}
+
+// ── Layout: replica EXACTAMENTE "lo justo y necesario" de ViewPanel ─────────
+// (ver ViewPanel::RenderContent en el cliente C++: mismo cálculo de
+// relación de aspecto y mismo criterio de encaje por ancho/alto).
+function layoutViewport(refW, refH) {
+  lastRefW = refW;
+  lastRefH = refH;
+
+  const panelW = window.innerWidth;
+  const panelH = window.innerHeight;
+  const srcRatio = refW / refH;
+
+  let drawW = panelW;
+  let drawH = panelW / srcRatio;
+  if (drawH > panelH) {
+    drawH = panelH;
+    drawW = panelH * srcRatio;
+  }
+
+  viewportEl.style.width  = drawW + 'px';
+  viewportEl.style.height = drawH + 'px';
+
+  return { drawW, drawH };
+}
 
 // ── Modo HighQuality: conectar MJPEG ────────────────────────────────────────
 function startMJPEG() {
@@ -541,6 +650,11 @@ function startFramePoll() {
 
 // ── Aplicar estado ──────────────────────────────────────────────────────────
 function applyState(s) {
+  const { drawW, drawH } = layoutViewport(s.refW, s.refH);
+  const scale = drawW / s.refW; // ← idéntico a "scale" en ViewPanel::RenderContent
+
+  ensureFontLoaded(s.fontVersion);
+
   // Modo de video
   if (s.hasFrame) {
     if (s.highQuality && !highQuality) {
@@ -556,7 +670,7 @@ function applyState(s) {
       startFramePoll();
     }
     bgFrame.classList.add('visible');
-    screenEl.style.backgroundColor = 'transparent';
+    viewportEl.style.backgroundColor = 'transparent';
   } else {
     // Sin frame: fondo de color sólido
     bgFrame.classList.remove('visible');
@@ -564,7 +678,7 @@ function applyState(s) {
       const r = Math.round(s.bgColor[0]*255);
       const g = Math.round(s.bgColor[1]*255);
       const b = Math.round(s.bgColor[2]*255);
-      screenEl.style.backgroundColor = `rgb(${r},${g},${b})`;
+      viewportEl.style.backgroundColor = `rgb(${r},${g},${b})`;
     }
   }
 
@@ -576,14 +690,26 @@ function applyState(s) {
   }
   idleOverlay.classList.add('hidden');
 
-  // Color y tamaño de texto
+  // ── Márgenes reales del usuario, escalados igual que en ViewPanel ────────
+  const marginL = s.margins[0] * scale;
+  const marginT = s.margins[1] * scale;
+  const marginR = s.margins[2] * scale;
+  const marginB = s.margins[3] * scale;
+
+  textContainer.style.left   = marginL + 'px';
+  textContainer.style.top    = marginT + 'px';
+  textContainer.style.width  = Math.max(10, drawW - marginL - marginR) + 'px';
+  textContainer.style.height = Math.max(10, drawH - marginT - marginB) + 'px';
+
+  // ── Tamaño de texto real, escalado — sin clamp/vw artificial ─────────────
+  mainText.style.fontSize = (s.textSize * scale) + 'px';
+
+  // Color y opacidad
   const r = Math.round(s.textColor[0]*255);
   const g = Math.round(s.textColor[1]*255);
   const b = Math.round(s.textColor[2]*255);
   const a = s.textColor[3].toFixed(3);
   mainText.style.color = `rgba(${r},${g},${b},${a})`;
-  const vwBase = Math.max(2, Math.min(8, s.textSize/15));
-  mainText.style.fontSize = `clamp(14px, ${vwBase}vw, ${s.textSize*1.5}px)`;
 
   // Alineación horizontal
   textContainer.classList.remove('h-left','h-center','h-right');
@@ -623,6 +749,9 @@ function poll() {
       setTimeout(poll, retryDelay);
     });
 }
+
+// ── Reajustar el layout si la ventana/orientación del dispositivo cambia ────
+window.addEventListener('resize', () => layoutViewport(lastRefW, lastRefH));
 
 // ── Wake lock ────────────────────────────────────────────────────────────────
 async function requestWakeLock() {

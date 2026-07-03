@@ -10,6 +10,8 @@
 #include "panels/TransitionPanel.h"
 #include "Hub.h"
 #include "GlassRenderer.h"
+#include "panels/DatabasePanel.h"
+#include "panels/WikiPanel.h"
 
 namespace ProyecThor::UI {
 
@@ -44,7 +46,8 @@ private:
     void EndDockspace();
     void ApplyProfessionalTheme();
     void RenderMainMenuBar();
-
+ DatabasePanel m_DatabasePanel;
+    WikiPanel     m_WikiPanel;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;

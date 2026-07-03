@@ -2,6 +2,7 @@
 #include "UIManager.h"
 #include "UIStrings.h"
 #include "layers/LayersTheme.h"
+#include "ControlTheme.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <GLFW/glfw3.h>
@@ -12,6 +13,8 @@
 #include "../settings/SettingsManager.h"
 
 namespace ProyecThor::UI {
+
+namespace CT = ControlTheme;
 
 static constexpr float kPulseSpeed     = 2.0f;
 static constexpr float kPressAnimSpeed = 12.0f;
@@ -33,7 +36,7 @@ void ControlPanel::Render() {
     s_LastTime = now;
     dt = std::min(dt, 0.05f);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.07f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, CT::PanelBgTop);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
@@ -61,10 +64,10 @@ void ControlPanel::Render() {
         dl->AddRectFilledMultiColor(
             winPos,
             ImVec2(winPos.x + panelW, winPos.y + panelH),
-            LPU32(ImVec4(0.06f, 0.06f, 0.08f, 1.0f)),
-            LPU32(ImVec4(0.06f, 0.06f, 0.08f, 1.0f)),
-            LPU32(ImVec4(0.03f, 0.03f, 0.04f, 1.0f)),
-            LPU32(ImVec4(0.03f, 0.03f, 0.04f, 1.0f))
+            LPU32(CT::PanelBgTop),
+            LPU32(CT::PanelBgTop),
+            LPU32(CT::PanelBgBottom),
+            LPU32(CT::PanelBgBottom)
         );
 
         RenderMonitorInfo();
@@ -86,7 +89,7 @@ void ControlPanel::RenderDivider() {
     ImGui::GetWindowDrawList()->AddLine(
         ImVec2(p.x + 20.0f, p.y),
         ImVec2(p.x + panelW - 20.0f, p.y),
-        LPU32(ImVec4(1.0f, 1.0f, 1.0f, 0.04f)), 1.0f
+        LPU32(CT::Divider), 1.0f
     );
     ImGui::Dummy(ImVec2(panelW, 8.0f));
 }
@@ -106,38 +109,37 @@ void ControlPanel::RenderMonitorInfo() {
         ImVec2 dotBase = ImGui::GetCursorScreenPos();
         dl->AddCircleFilled(
             ImVec2(dotBase.x + 4.0f, dotBase.y + ImGui::GetTextLineHeight() * 0.5f),
-            4.0f, LPU32(ImVec4(1.0f, 0.4f, 0.4f, 1.0f))
+            4.0f, LPU32(CT::NoMonitorDot)
         );
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.5f, 0.9f));
-        
+        ImGui::PushStyleColor(ImGuiCol_Text, CT::NoMonitorText);
+
         // EMPUJAR CURSOR: 16 píxeles a la derecha para librar el punto
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 16.0f);
-        ImGui::Text("Equipo sin proyector detectado"); // Ya sin los espacios al inicio
-        
+        ImGui::Text("Equipo sin proyector detectado");
+
         ImGui::PopStyleColor();
     } else {
         int tgt = settings.projection.targetMonitor;
         int sel = std::clamp(tgt < 0 ? 1 : tgt, 0, monitorCount - 1);
 
         ImVec2 dotBase = ImGui::GetCursorScreenPos();
-        ImU32 dotColor = m_isProjecting
-            ? LPU32(ImVec4(0.95f, 0.35f, 0.45f, 1.0f))
-            : LPU32(ImVec4(0.20f, 0.80f, 0.60f, 1.0f));
-        
+        ImU32 dotColor = m_isProjecting ? LPU32(CT::LiveDot) : LPU32(CT::IdleDot);
+
         // Efecto de brillo en el punto indicador
-        dl->AddCircleFilled(ImVec2(dotBase.x + 4.0f, dotBase.y + ImGui::GetTextLineHeight() * 0.5f), 7.0f, 
-                            m_isProjecting ? LPU32(ImVec4(0.95f, 0.35f, 0.45f, 0.2f)) : LPU32(ImVec4(0.20f, 0.80f, 0.60f, 0.2f)));
+        ImVec4 haloBase = m_isProjecting ? CT::LiveDot : CT::IdleDot;
+        dl->AddCircleFilled(ImVec2(dotBase.x + 4.0f, dotBase.y + ImGui::GetTextLineHeight() * 0.5f), 7.0f,
+                            LPU32(ImVec4(haloBase.x, haloBase.y, haloBase.z, 0.2f)));
         dl->AddCircleFilled(ImVec2(dotBase.x + 4.0f, dotBase.y + ImGui::GetTextLineHeight() * 0.5f), 4.0f, dotColor);
 
         std::string monName = glfwGetMonitorName(monitors[sel]);
         if (monName.length() > 20) monName = monName.substr(0, 17) + "...";
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.85f, 0.90f, 1.0f));
-        
+        ImGui::PushStyleColor(ImGuiCol_Text, CT::TextPrimary);
+
         // EMPUJAR CURSOR: 16 píxeles a la derecha para librar el halo de 7.0f
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 16.0f);
-        ImGui::Text("%s", monName.c_str()); // Texto limpio, sin "  %s"
-        
+        ImGui::Text("%s", monName.c_str());
+
         ImGui::PopStyleColor();
 
         if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[sel])) {
@@ -147,7 +149,7 @@ void ControlPanel::RenderMonitorInfo() {
             ImVec2 winPos = ImGui::GetWindowPos();
             dl->AddText(
                 ImVec2(winPos.x + panelW - resSz.x - 20.0f, dotBase.y),
-                LPU32(ImVec4(0.5f, 0.5f, 0.6f, 1.0f)), res
+                LPU32(CT::TextDim), res
             );
         }
     }
@@ -168,9 +170,9 @@ void ControlPanel::RenderMonitorInfo() {
         }
         for (const auto& l : s_Labels) s_Ptrs.push_back(l.c_str());
 
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.09f, 0.09f, 0.12f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.12f, 0.12f, 0.16f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_PopupBg,        ImVec4(0.07f, 0.07f, 0.09f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg,        CT::ComboBg);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, CT::ComboBgHover);
+        ImGui::PushStyleColor(ImGuiCol_PopupBg,        CT::ComboPopupBg);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 6.0f));
 
@@ -193,9 +195,9 @@ void ControlPanel::RenderProjectButton(float dt) {
     bool canProject = (monitorCount >= 2);
 
     float panelW  = ImGui::GetContentRegionAvail().x;
-    
+
     // 1. Ampliamos el área total para asegurar que nada choque con la barra inferior
-    float areaH   = 160.0f; 
+    float areaH   = 160.0f;
     float cursorY = ImGui::GetCursorPosY();
     ImGui::Dummy(ImVec2(panelW, areaH));
 
@@ -218,7 +220,7 @@ void ControlPanel::RenderProjectButton(float dt) {
             float haloR = drawRadius + t * 14.0f;
             float haloAlpha = (1.0f - t) * 0.4f;
             dl->AddCircleFilled(ImVec2(cx, cy + pressOffset), haloR,
-                LPU32(ImVec4(0.85f, 0.25f, 0.35f, haloAlpha)), 64);
+                LPU32(ImVec4(CT::ProjectHalo.x, CT::ProjectHalo.y, CT::ProjectHalo.z, haloAlpha)), 64);
         }
     }
 
@@ -227,9 +229,9 @@ void ControlPanel::RenderProjectButton(float dt) {
         LPU32(ImVec4(0.0f, 0.0f, 0.0f, canProject ? 0.6f : 0.2f)), 64);
 
     // ── Cuerpo del Botón ─────────────────────────────────────────────────────
-    ImVec4 btnBg = canProject ? (m_isProjecting ? ImVec4(0.75f, 0.20f, 0.30f, 1.0f) : ImVec4(0.20f, 0.25f, 0.45f, 1.0f))
-                              : ImVec4(0.12f, 0.12f, 0.15f, 1.0f);
-    
+    ImVec4 btnBg = canProject ? (m_isProjecting ? CT::ProjectBtnLive : CT::ProjectBtnIdle)
+                              : CT::ProjectBtnOff;
+
     dl->AddCircleFilled(ImVec2(cx, cy + pressOffset), drawRadius, LPU32(btnBg), 64);
 
     // Brillo superior (efecto cristal)
@@ -237,11 +239,11 @@ void ControlPanel::RenderProjectButton(float dt) {
         LPU32(ImVec4(1.0f, 1.0f, 1.0f, 0.08f)), 64);
 
     // ── Ícono Vectorial Preciso ──────────────────────────────────────────────
-    ImU32 iconClr = LPU32(canProject ? ImVec4(0.95f, 0.95f, 0.98f, 1.0f) : ImVec4(0.4f, 0.4f, 0.45f, 1.0f));
+    ImU32 iconClr = LPU32(canProject ? CT::ProjectIconOn : CT::ProjectIconOff);
     float btnCy = cy + pressOffset;
 
     if (m_isProjecting) {
-        float bw = 4.0f, bh = 8.0f, gap = 4.0f; 
+        float bw = 4.0f, bh = 8.0f, gap = 4.0f;
         dl->AddRectFilled(ImVec2(cx - gap - bw, btnCy - bh), ImVec2(cx - gap, btnCy + bh), iconClr, 2.0f);
         dl->AddRectFilled(ImVec2(cx + gap, btnCy - bh), ImVec2(cx + gap + bw, btnCy + bh), iconClr, 2.0f);
     } else {
@@ -256,14 +258,14 @@ void ControlPanel::RenderProjectButton(float dt) {
 
     // ── Etiqueta ─────────────────────────────────────────────────────────────
     const char* lbl = m_isProjecting ? "DETENER" : (canProject ? "INICIAR PROYECCIÓN" : "SIN MONITOR");
-    ImVec4 lblCol = canProject ? (m_isProjecting ? ImVec4(0.85f, 0.40f, 0.50f, 1.0f) : ImVec4(0.50f, 0.60f, 0.85f, 1.0f))
-                               : ImVec4(0.35f, 0.35f, 0.40f, 1.0f);
+    ImVec4 lblCol = canProject ? (m_isProjecting ? CT::ProjectLabelLive : CT::ProjectLabelIdle)
+                               : CT::ProjectLabelOff;
 
     ImVec2 lblSz = ImGui::CalcTextSize(lbl);
-    
+
     // 4. Empujamos la etiqueta a una zona completamente segura (42px desde el borde del botón)
-    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.9f, 
-        ImVec2(cx - (lblSz.x * 0.9f) * 0.5f, cy + pressOffset + drawRadius + 42.0f), 
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.9f,
+        ImVec2(cx - (lblSz.x * 0.9f) * 0.5f, cy + pressOffset + drawRadius + 42.0f),
         LPU32(lblCol), lbl);
 
     // ── Lógica de Interacción ────────────────────────────────────────────────
@@ -293,7 +295,7 @@ void ControlPanel::RenderStatusBar() {
     ImVec2 p = ImGui::GetCursorScreenPos();
 
     float barH = 28.0f;
-    ImVec4 barBg = m_isProjecting ? ImVec4(0.15f, 0.05f, 0.08f, 1.0f) : ImVec4(0.07f, 0.07f, 0.09f, 1.0f);
+    ImVec4 barBg = m_isProjecting ? CT::StatusBarBgLive : CT::StatusBarBgIdle;
 
     dl->AddRectFilled(p, ImVec2(p.x + panelW, p.y + barH), LPU32(barBg));
 
@@ -302,14 +304,15 @@ void ControlPanel::RenderStatusBar() {
 
     if (m_isProjecting) {
         float pulse = std::sin(m_PulseTime * 3.0f) * 0.5f + 0.5f;
-        dl->AddCircleFilled(ImVec2(dotX, dotY), 4.5f + pulse * 2.5f, LPU32(ImVec4(0.95f, 0.35f, 0.45f, 0.3f)));
-        dl->AddCircleFilled(ImVec2(dotX, dotY), 4.0f, LPU32(ImVec4(0.95f, 0.35f, 0.45f, 1.0f)));
+        dl->AddCircleFilled(ImVec2(dotX, dotY), 4.5f + pulse * 2.5f,
+            LPU32(ImVec4(CT::LiveDot.x, CT::LiveDot.y, CT::LiveDot.z, 0.3f)));
+        dl->AddCircleFilled(ImVec2(dotX, dotY), 4.0f, LPU32(CT::LiveDot));
     } else {
-        dl->AddCircleFilled(ImVec2(dotX, dotY), 4.0f, LPU32(ImVec4(0.35f, 0.35f, 0.45f, 1.0f)));
+        dl->AddCircleFilled(ImVec2(dotX, dotY), 4.0f, LPU32(CT::StatusDotIdle));
     }
 
     const char* txt = m_isProjecting ? "EN VIVO" : "EN ESPERA";
-    ImVec4 txtCol = m_isProjecting ? ImVec4(0.95f, 0.55f, 0.60f, 1.0f) : ImVec4(0.45f, 0.45f, 0.55f, 1.0f);
+    ImVec4 txtCol = m_isProjecting ? CT::StatusTextLive : CT::StatusTextIdle;
 
     dl->AddText(ImVec2(dotX + 14.0f, p.y + (barH - ImGui::GetTextLineHeight()) * 0.5f), LPU32(txtCol), txt);
     ImGui::Dummy(ImVec2(panelW, barH));
@@ -333,20 +336,24 @@ void ControlPanel::RenderActionRow(float dt) {
         const char* id; const char* label; const char* tooltip; ImVec4 colorHov;
     };
     ActionDef actions[3] = {
-        { "##iconcleartext", "Limpiar",   "Quitar texto proyectado", ImVec4(0.20f, 0.25f, 0.45f, 1.0f) },
-        { "##iconstopvideo", "Apagar",    "Quitar fondo multimedia", ImVec4(0.35f, 0.15f, 0.18f, 1.0f) },
-        { "##iconmonitor",   "Pantalla",  "Propiedades del monitor", ImVec4(0.15f, 0.30f, 0.28f, 1.0f) },
+        { "##iconcleartext", "Limpiar",   "Quitar texto proyectado", CT::ActionBtnHoverClear },
+        { "##iconstopvideo", "Apagar",    "Quitar fondo multimedia", CT::ActionBtnHoverStop  },
+        { "##iconmonitor",   "Pantalla",  "Propiedades del monitor", CT::ActionBtnHoverMon   },
     };
 
     for (int i = 0; i < 3; i++) {
         bool clicked = RenderIconButton(
             actions[i].id, centers[i], rowCenterY - 8.0f, kIconRadius, *hovers[i],
-            ImVec4(0.10f, 0.10f, 0.13f, 1.0f), actions[i].colorHov, dt
+            CT::ActionBtnBase, actions[i].colorHov, dt
         );
 
         float hv = *hovers[i];
         float bx = centers[i], by = rowCenterY - 8.0f;
-        ImU32 iconCol = LPU32(ImVec4(0.6f + hv*0.4f, 0.6f + hv*0.4f, 0.7f + hv*0.3f, 1.0f));
+        ImU32 iconCol = LPU32(ImVec4(
+            CT::TextPrimary.x * 0.7f + hv * 0.3f,
+            CT::TextPrimary.y * 0.7f + hv * 0.3f,
+            CT::TextPrimary.z * 0.75f + hv * 0.25f,
+            1.0f));
 
         // Dibujo de Íconos Geométricos Mejorados
         if (i == 0) {
@@ -367,8 +374,8 @@ void ControlPanel::RenderActionRow(float dt) {
         }
 
         ImVec2 lblSz = ImGui::CalcTextSize(actions[i].label);
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f, 
-            ImVec2(bx - lblSz.x * 0.42f, rowCenterY + kIconRadius), LPU32(ImVec4(0.5f, 0.5f, 0.6f, 1.0f)), actions[i].label);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f,
+            ImVec2(bx - lblSz.x * 0.42f, rowCenterY + kIconRadius), LPU32(CT::ActionLabel), actions[i].label);
 
         if (clicked) {
             if (i == 0) Core::PresentationCore::Get().ClearLayer2();

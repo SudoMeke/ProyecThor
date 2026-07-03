@@ -15,18 +15,16 @@
 #include "settings/SettingsManager.h"
 #include "../external/tools/OpenURL.h"
 #include "Version.h"
+#include "DesignSystem.h"
+#include "HubTheme.h"
 
 extern GLuint LoadTextureFromFile(const char* filename);
 
-static constexpr ImU32 COL_BG_SIDEBAR   = IM_COL32(22, 22, 26, 255);
-static constexpr ImU32 COL_BG_MAIN      = IM_COL32(16, 16, 19, 255);
-static constexpr ImU32 COL_ACCENT_BLUE  = IM_COL32(35, 116, 225, 255);
-static constexpr ImU32 COL_TEXT_PRIMARY = IM_COL32(230, 230, 230, 255);
-static constexpr ImU32 COL_TEXT_MUTED   = IM_COL32(120, 120, 126, 255);
-static constexpr ImU32 COL_DIVIDER      = IM_COL32(45, 45, 52, 255);
-
 static constexpr float HUB_SIDEBAR_W  = 280.0f;
 static constexpr float HUB_APPEAR_SPD = 3.0f;
+
+namespace DS = ProyecThor::UI::DS;
+namespace HT = ProyecThor::UI::HubTheme;
 
 namespace ProyecThor::UI {
 
@@ -241,15 +239,15 @@ bool Hub::Render() {
     ImVec2      wp = ImGui::GetWindowPos();
 
     dl->AddRectFilled(wp,
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y), COL_BG_SIDEBAR);
+        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y), HT::BgSidebar);
     dl->AddRectFilled(
         ImVec2(wp.x + HUB_SIDEBAR_W, wp.y),
-        ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), COL_BG_MAIN);
+        ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), HT::BgMain);
 
     dl->AddLine(
         ImVec2(wp.x + HUB_SIDEBAR_W, wp.y),
         ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y),
-        COL_DIVIDER, 1.0f);
+        HT::Divider, 1.0f);
 
     RenderSidebar(HUB_SIDEBAR_W, vp->WorkSize.y);
     ImGui::SameLine(0.0f, 0.0f);
@@ -317,7 +315,7 @@ void Hub::RenderSidebar(float w, float h) {
     }
 
     ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
     ImGui::Text("v%s", PROYECTHOR_VERSION_STRING);
     ImGui::PopStyleColor();
 
@@ -326,14 +324,20 @@ void Hub::RenderSidebar(float w, float h) {
     dl->AddLine(
         ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
         ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
-        COL_DIVIDER, 1.0f);
+        HT::Divider, 1.0f);
 
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
     ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        COL_ACCENT_BLUE);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(55, 136, 245, 255));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(25, 96,  205, 255));
+    ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertFloat4ToU32(
+        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x + 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y + 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z + 0.08f, 1.0f)));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertFloat4ToU32(
+        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x - 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y - 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z - 0.08f, 1.0f)));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
 
     if (ImGui::Button("Empezar a proyectar", ImVec2(w - 60.0f, 45.0f)))
@@ -348,7 +352,7 @@ void Hub::RenderSidebar(float w, float h) {
     ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(38, 38, 46, 255));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(52, 52, 62, 255));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(30, 30, 38, 255));
-    ImGui::PushStyleColor(ImGuiCol_Text,          IM_COL32(180, 180, 186, 255));
+    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
 
     if (ImGui::Button("Abrir configuracion", ImVec2(w - 60.0f, 36.0f)))
@@ -362,12 +366,12 @@ void Hub::RenderSidebar(float w, float h) {
     dl->AddLine(
         ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
         ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
-        COL_DIVIDER, 1.0f);
+        HT::Divider, 1.0f);
 
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
     ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
     ImGui::TextUnformatted("Accesos rapidos");
     ImGui::PopStyleColor();
 
@@ -466,6 +470,7 @@ void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
         }
     }
 }
+
 void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
@@ -556,14 +561,14 @@ void Hub::RenderMainContent(float w, float h) {
 
         ImGui::BeginGroup();
         ImGui::Dummy(ImVec2(0.0f, 5.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
         ImGui::Text("%s", info.cardBadge);
         ImGui::PopStyleColor();
         ImGui::SetWindowFontScale(1.1f);
         ImGui::Text("Version v%s", info.version);
         ImGui::SetWindowFontScale(1.0f);
         ImGui::Dummy(ImVec2(0.0f, 8.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + leftColWidth - (cardCover.id != 0 ? 220.0f : 30.0f));
         ImGui::TextWrapped("%s", info.summary);
         ImGui::PopTextWrapPos();
@@ -741,7 +746,7 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::PopTextWrapPos(); ImGui::PopStyleColor();
                 ImGui::Dummy(ImVec2(0,4));
             };
-// ── Bloque de contenido condicional por versión ──────────────────
+            // ── Bloque de contenido condicional por versión ──────────────────
             if (selectedUpdateVer == 1) { // v0.3.1
                 Cat("Audio Rework");
                 Bul("Nueva interfaz para la seccion de audio, con animaciones renovadas y un sistema de portadas (covers) para cada pista.");

@@ -17,6 +17,8 @@
 #include "panels/CanvasStylesPanel.h"
 #include "frontend/panels/StreamingPanel.h"
 #include "qrcodegen.hpp"
+#include "UIManager.h"
+#include "SettingsManager.h"
 
 namespace ProyecThor::UI {
 
@@ -35,15 +37,15 @@ bool UIManager::Initialize(GLFWwindow* window)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    // Crear el TransitionPanel aqui para que este disponible antes de AddPanel
     m_TransitionPanelOwned = std::make_shared<TransitionPanel>();
     m_TransitionPanel      = m_TransitionPanelOwned.get();
 
-    ApplyProfessionalTheme();
-    m_SettingsPanel.InitializeTheme();
-int fbWidth, fbHeight;
-glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
-m_GlassRenderer.Initialize(fbWidth, fbHeight);
+    ProyecThor::Settings::SettingsManager::Get().LoadSettings();
+    ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
+
+    int fbWidth, fbHeight;
+    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    m_GlassRenderer.Initialize(fbWidth, fbHeight);
     return true;
 }
 
@@ -192,7 +194,7 @@ void UIManager::OpenHub()
 void UIManager::RenderAll()
 {
     // ── Hub de inicio ────────────────────────────────────────────────────────
-  if (m_HubMode)
+if (m_HubMode)
     {
         if (m_Hub.Render())
         {
@@ -212,6 +214,9 @@ void UIManager::RenderAll()
  
         if (m_ShowConfig)
             m_SettingsPanel.Render(&m_ShowConfig);
+
+        m_DatabasePanel.Render();   // <-- AGREGAR
+        m_WikiPanel.Render();       // <-- AGREGAR
  
         RenderMainMenuBar();
         return;
@@ -590,8 +595,10 @@ ImGui::Begin("ProjectorLive", nullptr, flags);
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
 
-    EndDockspace();
+   EndDockspace();
 
+    m_DatabasePanel.Render();   // <-- AGREGAR
+    m_WikiPanel.Render();       // <-- AGREGAR
 
     RenderMainMenuBar();
 }
@@ -667,6 +674,17 @@ void UIManager::RenderMainMenuBar()
         {
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
+            if (ImGui::MenuItem("Base de datos"))
+    m_DatabasePanel.Open();
+
+if (ImGui::MenuItem("Wiki"))
+    m_WikiPanel.Open();
+
+ImGui::Spacing();
+ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
+ImGui::Separator();
+ImGui::PopStyleColor();
+ImGui::Spacing();
             if (ImGui::MenuItem(str.menuExit, "Alt+F4"))
                 glfwSetWindowShouldClose(m_Window, true);
             ImGui::PopStyleColor();

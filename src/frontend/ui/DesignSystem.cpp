@@ -1,12 +1,18 @@
 #include "DesignSystem.h"
+#include "SettingsManager.h"
 #include <imgui_internal.h>
 #include <cmath>
-#include <algorithm> // Soluciona std::clamp
-#include <cfloat>    // Soluciona FLT_MAX
+#include <algorithm>
+#include <cfloat>
 
 namespace ProyecThor::UI::DS {
 
-// ── helpers internos ───────────────────────────────────────────────────────
+static ImU32 ToU32(const float* v) {
+    return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0], v[1], v[2], v[3]));
+}
+static ImU32 ToU32Alpha(const float* v, float a) {
+    return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0], v[1], v[2], a));
+}
 
 // Aplica alpha a un color IM_COL32 manteniendo RGB
 static ImU32 WithAlpha(ImU32 col, int a)
@@ -14,49 +20,42 @@ static ImU32 WithAlpha(ImU32 col, int a)
     return (col & 0x00FFFFFFu) | (static_cast<ImU32>(std::clamp(a, 0, 255)) << 24);
 }
 
-// Mezcla lineal de dos colores RGBA en espacio linear (aproximado)
-static ImU32 Lerp32(ImU32 a, ImU32 b, float t)
-{
-    int ar = (a >> IM_COL32_R_SHIFT) & 0xFF;
-    int ag = (a >> IM_COL32_G_SHIFT) & 0xFF;
-    int ab = (a >> IM_COL32_B_SHIFT) & 0xFF;
-    int aa = (a >> IM_COL32_A_SHIFT) & 0xFF;
-    int br = (b >> IM_COL32_R_SHIFT) & 0xFF;
-    int bg = (b >> IM_COL32_G_SHIFT) & 0xFF;
-    int bb = (b >> IM_COL32_B_SHIFT) & 0xFF;
-    int ba = (b >> IM_COL32_A_SHIFT) & 0xFF;
-    return IM_COL32(
-        (int)(ar + (br - ar) * t),
-        (int)(ag + (bg - ag) * t),
-        (int)(ab + (bb - ab) * t),
-        (int)(aa + (ba - aa) * t));
+void SyncFromTheme(const ProyecThor::Settings::ThemeSettings& t) {
+    // ... (sin cambios, igual que antes)
+    TextPrimary   = ToU32(t.textPrimary);
+    TextSecondary = ToU32(t.textDim);
+    TextHint      = ToU32(t.textFaint);
+
+    AccentColor    = ToU32(t.accent);
+    AccentLight    = ToU32(t.accentLight);
+    AccentPastel   = ToU32Alpha(t.accentLight, 0.9f);
+    AccentColorDim = ToU32Alpha(t.accent, 0.30f);
+    AccentColorHov = ToU32Alpha(t.accent, 0.78f);
+
+    DangerColor    = ToU32(t.danger);
+    DangerColorDim = ToU32Alpha(t.danger, 0.25f);
+    SuccessColor   = ToU32(t.success);
+
+    GlassFillTop   = ToU32Alpha(t.surface1, 0.74f);
+    GlassFillBot   = ToU32Alpha(t.base,     0.82f);
+    GlassTint      = ToU32Alpha(t.accent,   0.07f);
+    GlassBorder    = ToU32Alpha(t.accent,   0.28f);
+    GlassHighlight = ToU32Alpha(t.textPrimary, 0.37f);
+    GlassShadow    = IM_COL32(0, 0, 0, 90);
+
+    RowSelectedFill = ToU32Alpha(t.accent, 0.20f);
+    RowSelectedBar  = ToU32(t.accentLight);
+    RowHoverFill    = ToU32Alpha(t.textPrimary, 0.06f);
+
+    BtnDefaultFill  = ToU32Alpha(t.textPrimary, 0.06f);
+    BtnDefaultBord  = ToU32Alpha(t.accent, 0.22f);
+    BtnHoverFill    = ToU32Alpha(t.accent, 0.11f);
+    BtnHoverBord    = ToU32Alpha(t.accent, 0.35f);
+
+    SepColor        = ToU32Alpha(t.accent, 0.14f);
 }
 
-// Dibuja un rectángulo redondeado con degradado vertical (highlight arriba → opaco abajo)
-static void DrawGlassBody(ImDrawList* dl,
-                          ImVec2 pMin, ImVec2 pMax,
-                          float rounding,
-                          ImU32 fillTop,   // color superior (más claro)
-                          ImU32 fillBot,   // color inferior
-                          ImU32 border,
-                          ImU32 highlight, // línea de luz en el borde superior
-                          float borderW = 1.0f)
-{
-    // Fondo principal con gradiente vertical
-    dl->AddRectFilledMultiColor(pMin, pMax,
-        fillTop, fillTop,
-        fillBot, fillBot);
-
-    // Rounding encima con clip para bordes redondeados
-    dl->AddRect(pMin, pMax, border, rounding, 0, borderW);
-
-    // Línea especular superior (simulación de luz desde arriba)
-    float hlY = pMin.y + 0.5f;
-    float hlX0 = pMin.x + rounding;
-    float hlX1 = pMax.x - rounding;
-    if (hlX1 > hlX0)
-        dl->AddLine(ImVec2(hlX0, hlY), ImVec2(hlX1, hlY), highlight, 1.0f);
-}
+// ── resto del archivo (BeginGlassPanel, GlassButton, etc.) sin cambios ──
 
 // ── BeginGlassPanel ────────────────────────────────────────────────────────
 

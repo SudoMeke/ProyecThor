@@ -194,6 +194,14 @@ void ApplyStyleByName(const std::string& styleName);
         std::string GetActiveFontName() const;
         ImFont*     GetImGuiFont(const std::string& fontName, float size = 0.0f);
 
+        // Resuelve la ruta absoluta en disco (assets/fonts/<nombre>.ttf|otf|ttc)
+        // para un nombre de fuente. Devuelve "" para "Predeterminada" o si no
+        // se encuentra ningun archivo con ese nombre. Usado por el provider de
+        // fuente del streaming LAN (ver ToggleNetworkStream) para poder servir
+        // el archivo real vía HTTP y que el cliente web use la MISMA fuente
+        // que el usuario eligio, en vez de una fuente generica del sistema.
+        std::string GetActiveFontFilePath() const;
+
         void                     SaveStyle(const SavedStyle& style);
         void                     DeleteStyle(const std::string& name);
         std::vector<std::string> GetSavedStyleNames() const;
@@ -227,6 +235,10 @@ bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
                void RenderDefaultStyleCombo();
         void EnsureFBO(int w, int h);
         void DestroyFBO();
+
+        // Helper interno de disco: busca <assets>/fonts/<fontName>.{ttf,otf,ttc}
+        // y devuelve la ruta completa si existe, o "" en caso contrario.
+        std::string ResolveFontFilePath(const std::string& fontName) const;
 
         unsigned int m_FBO          = 0;
         unsigned int m_FBOTex       = 0;

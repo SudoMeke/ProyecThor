@@ -18,10 +18,16 @@ struct StreamSnapshot {
     float       textSize       = 60.0f;
     int         textAlignment  = 1;
     int         vAlignment     = 1;
+    float       margins[4]     = { 50.0f, 50.0f, 50.0f, 50.0f }; // L,T,R,B — igual que PresentationState
+    bool        autoScale      = true;
+    std::string fontFamily     = "Predeterminada";  // nombre de fuente activo
     float       bgColor[3]     = { 0.0f, 0.0f, 0.0f };
     bool        isBgVideo      = false;
     bool        hasFrame       = false;   // true cuando hay frame JPEG disponible
+    int         refW           = 1920;    // resolución real del proyector destino
+    int         refH           = 1080;
     uint64_t    version        = 0;
+    uint64_t    fontVersion    = 0;       // cambia solo cuando cambia la fuente (evita recargar /font en cada poll)
 };
 
 // ── StreamConfig ──────────────────────────────────────────────────────────────
@@ -49,6 +55,7 @@ struct StreamConfig {
 //   GET /state      → JSON StreamSnapshot (long-poll ?since=<version>)
 //   GET /frame      → JPEG único del frame actual  (LowLatency mode)
 //   GET /stream     → MJPEG multipart stream       (HighQuality mode)
+//   GET /font       → sirve el .ttf/.otf activo, para @font-face en el cliente
 class NetworkStreamServer {
 public:
     NetworkStreamServer();
@@ -65,6 +72,13 @@ public:
     // Debe devolver un vector<uint8_t> con los bytes JPEG, o vacío si no hay frame.
     using FrameProvider = std::function<std::vector<uint8_t>()>;
     void SetFrameProvider(FrameProvider provider);
+
+    // Provider de la ruta absoluta al archivo de fuente (.ttf/.otf) activo.
+    // Debe devolver "" si se está usando la fuente por defecto del sistema
+    // (en ese caso el cliente web simplemente no aplica @font-face y usa
+    // su fuente sans-serif habitual).
+    using FontPathProvider = std::function<std::string()>;
+    void SetFontPathProvider(FontPathProvider provider);
 
     // Configuración de capas y calidad
     void SetConfig(const StreamConfig& cfg);
@@ -92,6 +106,7 @@ private:
     mutable std::mutex  m_ProviderMutex;
     SnapshotProvider    m_SnapshotProvider;
     FrameProvider       m_FrameProvider;
+    FontPathProvider    m_FontPathProvider;
 
     mutable std::mutex  m_ConfigMutex;
     StreamConfig        m_Config;

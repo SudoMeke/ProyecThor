@@ -646,6 +646,37 @@ void PresentationCore::SaveCategoryStyles() const
     }
 
 // =============================================================================
+//  ResolveFontFilePath — busca <assets>/fonts/<fontName>.{ttf,otf,ttc}
+// =============================================================================
+std::string PresentationCore::ResolveFontFilePath(const std::string& fontName) const
+{
+    if (fontName.empty() || fontName == "Predeterminada") return "";
+
+    std::string fontsDir = ProyecThor::GetAssetsPath() + "/fonts";
+    for (const char* ext : { ".ttf", ".otf", ".ttc" }) {
+        std::filesystem::path candidate =
+            std::filesystem::path(fontsDir) / (fontName + ext);
+        std::error_code ec;
+        if (std::filesystem::exists(candidate, ec))
+            return candidate.string();
+    }
+    return "";
+}
+
+// =============================================================================
+//  GetActiveFontFilePath — version publica, usada por el FontPathProvider
+// =============================================================================
+std::string PresentationCore::GetActiveFontFilePath() const
+{
+    std::string fontName;
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        fontName = m_ActiveFontName;
+    }
+    return ResolveFontFilePath(fontName);
+}
+
+// =============================================================================
 //  SetSelection — aplica el estilo por defecto de la categoría leyendo disco
 // =============================================================================
 void PresentationCore::SetSelection(const LibrarySelection& selection)
@@ -750,9 +781,32 @@ void PresentationCore::ToggleNetworkStream(bool enable, int port)
             snap.textSize      = st.textSize;
             snap.textAlignment = st.textAlignment;
             snap.vAlignment    = st.vAlignment;
+            snap.autoScale     = st.autoScale;
             snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);
             snap.version       = m_StreamVersion.load();
             snap.hasFrame      = m_FrameProviderActive.load();
+
+            // ── Resolucion real del proyector destino ───────────────────────
+            // Sin esto, el cliente web asumia siempre 1920x1080 y por lo
+            // tanto deformaba (o recortaba mal) cualquier otra resolucion o
+            // relacion de aspecto configurada por el usuario.
+            snap.refW = m_ProjectorWidth;
+            snap.refH = m_ProjectorHeight;
+
+            // ── Margenes reales del usuario ──────────────────────────────────
+            // Antes el HTML usaba un padding fijo en vw, ignorando por
+            // completo los margenes configurados en UpdateTextStyle/estilos.
+            for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
+
+            // ── Fuente activa ─────────────────────────────────────────────
+            // fontVersion es un hash estable del nombre: el cliente solo
+            // vuelve a pedir /font cuando este valor cambia, evitando
+            // recargar el archivo de fuente en cada poll de /state.
+            {
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                snap.fontFamily = m_ActiveFontName;
+            }
+            snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
 
             for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
             for (int i = 0; i < 3; i++) snap.bgColor[i]   = st.bgColor[i];
@@ -764,6 +818,15 @@ void PresentationCore::ToggleNetworkStream(bool enable, int port)
         {
             std::lock_guard<std::mutex> lk(m_FrameMutex);
             return m_LatestFrame;
+        });
+
+        // ── Provider de la fuente activa para el endpoint /font ────────────
+        // Permite que el cliente web descargue el .ttf/.otf real que el
+        // usuario eligio y lo cargue via FontFace, en vez de usar siempre
+        // una fuente generica del navegador.
+        m_NetworkServer->SetFontPathProvider([this]() -> std::string
+        {
+            return GetActiveFontFilePath();
         });
 
         if (!m_NetworkServer->Start(port))
