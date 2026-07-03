@@ -224,16 +224,28 @@ target_link_options(ProyecThor PRIVATE
     "-lwinpthread"
     "-Wl,-Bdynamic"
 )
-# ── 8. COPIA DE pdfium.dll EN POST-BUILD ─────────────────────────────────────
-if(EXISTS "${PDFIUM_SDK}/bin/pdfium.dll")
+# Copiar DLLs de VLC
+if(EXISTS "${VLC_SDK}/libvlc.dll")
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PDFIUM_SDK}/bin/pdfium.dll"
+            "${VLC_SDK}/libvlc.dll"
             "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMENT "Copiando pdfium.dll al directorio de salida"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VLC_SDK}/libvlccore.dll"
+            "$<TARGET_FILE_DIR:ProyecThor>"
+        COMMENT "Copiando DLLs de VLC al directorio de salida"
     )
 endif()
 
+# Copiar carpeta plugins de VLC (necesaria en runtime)
+if(EXISTS "${VLC_SDK}/plugins")
+    add_custom_command(TARGET ProyecThor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VLC_SDK}/plugins"
+            "$<TARGET_FILE_DIR:ProyecThor>/plugins"
+        COMMENT "Copiando plugins de VLC"
+    )
+endif()
 # ── 9. COPIA AUTOMATICA DE DEPENDENCIAS (Para Distribución) ──────────────────
 # Ajusta estas rutas a donde realmente residen tus DLLs
 set(DLLS_TO_COPY 
