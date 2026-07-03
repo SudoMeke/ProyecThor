@@ -68,6 +68,25 @@ static float EaseOutCubic(float t)
 }
 // ────────────────────────────────────────────────────────────────────────
 
+// ── Conversión de colores del ThemeSettings a formatos de ImGui ──────────
+static ImU32 ThemeColorU32(const float c[4], float alphaOverride = -1.0f)
+{
+    auto toByte = [](float v) -> int {
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+        return (int)(v * 255.0f + 0.5f);
+    };
+    const float a = (alphaOverride >= 0.0f) ? alphaOverride : c[3];
+    return IM_COL32(toByte(c[0]), toByte(c[1]), toByte(c[2]), toByte(a));
+}
+
+static ImVec4 ThemeColorVec4(const float c[4], float alphaOverride = -1.0f)
+{
+    const float a = (alphaOverride >= 0.0f) ? alphaOverride : c[3];
+    return ImVec4(c[0], c[1], c[2], a);
+}
+// ────────────────────────────────────────────────────────────────────────
+
 std::string GetAppDataFilePath(const std::string& filename) {
     const char* appData = std::getenv("APPDATA");
     if (!appData) return filename; // Fallback si falla la variable de entorno
@@ -107,10 +126,11 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
                                ImFont* titleFont,
                                ImFont* regularFont,
                                ImFont* smallFont,
-                               const std::string& creditText)
+                               const std::string& creditText,
+                               const ProyecThor::Settings::ThemeSettings& theme)
 {
     glfwMakeContextCurrent(splashWindow);
-    glClearColor(0.07f, 0.07f, 0.08f, 1.0f);
+    glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -143,17 +163,17 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
         dl->AddRectFilled(
             ImVec2(0.0f, 0.0f),
             ImVec2((float)SPLASH_W, (float)SPLASH_H),
-            IM_COL32(18, 19, 26, 255));
+            ThemeColorU32(theme.surface0));
     }
 
     // Mascara de degradado: oscuro a la izquierda, transparente a la derecha
     dl->AddRectFilledMultiColor(
         ImVec2(0.0f, 0.0f),
         ImVec2((float)SPLASH_W, (float)SPLASH_H),
-        IM_COL32(12, 13, 18, 245),
-        IM_COL32(12, 13, 18, 120),
-        IM_COL32(12, 13, 18, 120),
-        IM_COL32(12, 13, 18, 245));
+        ThemeColorU32(theme.base, 245.0f / 255.0f),
+        ThemeColorU32(theme.base, 120.0f / 255.0f),
+        ThemeColorU32(theme.base, 120.0f / 255.0f),
+        ThemeColorU32(theme.base, 245.0f / 255.0f));
 
     const float padX     = 50.0f;
     const float logoSize = 88.0f;
@@ -172,18 +192,18 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     dl->AddLine(
         ImVec2(padX + logoSize + 18.0f, logoY + 6.0f),
         ImVec2(padX + logoSize + 18.0f, logoY + logoSize - 6.0f),
-        IM_COL32(0, 120, 255, 170), 1.8f);
+        ThemeColorU32(theme.accent, 170.0f / 255.0f), 1.8f);
 
     // Titulo
     ImGui::SetCursorPos(ImVec2(padX + logoSize + 32.0f, logoY + 10.0f));
     if (titleFont) ImGui::PushFont(titleFont);
-    ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "ProyecThor");
+    ImGui::TextColored(ThemeColorVec4(theme.textPrimary), "ProyecThor");
     if (titleFont) ImGui::PopFont();
 
     // Subtitulo
     ImGui::SetCursorPos(ImVec2(padX + logoSize + 34.0f, logoY + 60.0f));
     if (regularFont) ImGui::PushFont(regularFont);
-    ImGui::TextColored(ImVec4(0.25f, 0.60f, 1.0f, 1.0f), "Professional Presentation Engine");
+    ImGui::TextColored(ThemeColorVec4(theme.accentLight), "Professional Presentation Engine");
     if (regularFont) ImGui::PopFont();
 
     // Footer: fondo semi-opaco encima de la imagen de fondo
@@ -200,10 +220,10 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     dl->AddRectFilled(
         ImVec2(padX - 10.0f, badgeY),
         ImVec2(padX + creditW + 10.0f, footerY - 6.0f),
-        IM_COL32(10, 10, 15, 200), 4.0f); // 4.0f da esquinas redondeadas suaves
+        ThemeColorU32(theme.base, 200.0f / 255.0f), 4.0f); // 4.0f da esquinas redondeadas suaves
 
     ImGui::SetCursorPos(ImVec2(padX, badgeY + 5.0f));
-    ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", creditText.c_str());
+    ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", creditText.c_str());
     if (smallFont) ImGui::PopFont();
     // ────────────────────────────────────────────────────────────────────────
 
@@ -211,18 +231,18 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     dl->AddRectFilled(
         ImVec2(0.0f, footerY),
         ImVec2((float)SPLASH_W, (float)SPLASH_H),
-        IM_COL32(8, 9, 14, 218));
+        ThemeColorU32(theme.base, 218.0f / 255.0f));
 
     // Linea separadora superior del footer
     dl->AddLine(
         ImVec2(0.0f,          footerY),
         ImVec2((float)SPLASH_W, footerY),
-        IM_COL32(255, 255, 255, 18), 1.0f);
+        ThemeColorU32(theme.borderFaint, 18.0f / 255.0f), 1.0f);
 
     // Texto de estado (Carga de componentes)
     ImGui::SetCursorPos(ImVec2(padX, footerY + 28.0f));
     if (smallFont) ImGui::PushFont(smallFont);
-    ImGui::TextColored(ImVec4(0.75f, 0.75f, 0.80f, 1.0f), "%s", status.c_str());
+    ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", status.c_str());
 
     // Version y copyright alineados a la derecha
     const std::string versionLine = "Version " PROYECTHOR_VERSION_STRING "  |  Build 2026";
@@ -231,10 +251,10 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     const float cW = ImGui::CalcTextSize(copyLine.c_str()).x;
 
     ImGui::SetCursorPos(ImVec2((float)SPLASH_W - vW - padX, footerY + 18.0f));
-    ImGui::TextColored(ImVec4(0.48f, 0.48f, 0.54f, 1.0f), "%s", versionLine.c_str());
+    ImGui::TextColored(ThemeColorVec4(theme.textFaint), "%s", versionLine.c_str());
 
     ImGui::SetCursorPos(ImVec2((float)SPLASH_W - cW - padX, footerY + 42.0f));
-    ImGui::TextColored(ImVec4(0.36f, 0.36f, 0.42f, 1.0f), "%s", copyLine.c_str());
+    ImGui::TextColored(ThemeColorVec4(theme.textFaint, theme.textFaint[3] * 0.75f), "%s", copyLine.c_str());
     if (smallFont) ImGui::PopFont();
 
     // ── Barra de progreso animada (con efecto de brillo) ──────────────────
@@ -245,7 +265,7 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     dl->AddRectFilled(
         ImVec2(0.0f, (float)SPLASH_H - barH),
         ImVec2((float)SPLASH_W, (float)SPLASH_H),
-        IM_COL32(8, 9, 14, 255));
+        ThemeColorU32(theme.surface0));
 
     if (barEnd > 2.0f)
     {
@@ -253,13 +273,13 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
         dl->AddRectFilled(
             ImVec2(0.0f, (float)SPLASH_H - barH - 2.0f),
             ImVec2(barEnd, (float)SPLASH_H - barH),
-            IM_COL32(35, 145, 255, 60));
+            ThemeColorU32(theme.accent, 60.0f / 255.0f));
 
         // Barra de progreso activa
         dl->AddRectFilled(
             ImVec2(0.0f, (float)SPLASH_H - barH),
             ImVec2(barEnd, (float)SPLASH_H),
-            IM_COL32(35, 145, 255, 255));
+            ThemeColorU32(theme.accent));
 
         // Punta brillante al final de la barra
         if (barEnd > 8.0f)
@@ -267,7 +287,7 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
             dl->AddRectFilled(
                 ImVec2(barEnd - 8.0f, (float)SPLASH_H - barH),
                 ImVec2(barEnd, (float)SPLASH_H),
-                IM_COL32(210, 235, 255, 230));
+                ThemeColorU32(theme.accentLight));
         }
     }
     // ────────────────────────────────────────────────────────────────────────
@@ -295,7 +315,8 @@ struct LoadStep
 static void RunStep(const LoadStep& step, int idx, int total, GLFWwindow* splashWindow,
                      GLuint logoTex, GLuint bgTex,
                      ImFont* titleFont, ImFont* regularFont, ImFont* smallFont,
-                     const std::string& creditText)
+                     const std::string& creditText,
+                     const ProyecThor::Settings::ThemeSettings& theme)
 {
     const float p0 = (float)idx / (float)total;
     const float p1 = (float)(idx + 1) / (float)total;
@@ -314,7 +335,7 @@ static void RunStep(const LoadStep& step, int idx, int total, GLFWwindow* splash
         // sin importar lo que haya tocado la tarea (ver step.task()).
         glfwMakeContextCurrent(splashWindow);
         RenderSplashScreen(splashWindow, step.msg, progress,
-            logoTex, bgTex, titleFont, regularFont, smallFont, creditText);
+            logoTex, bgTex, titleFont, regularFont, smallFont, creditText, theme);
 
         if (!taskDone)
         {
@@ -332,6 +353,12 @@ int main()
 {
     if (!glfwInit())
         return -1;
+
+    // Cargamos los settings (incluyendo el tema) antes de crear cualquier
+    // ventana, para que el splash screen ya pinte con los colores correctos
+    // desde el primer frame.
+    ProyecThor::Settings::SettingsManager::Get().LoadSettings();
+    auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
 
     glfwWindowHint(GLFW_DECORATED,             GLFW_FALSE);
     glfwWindowHint(GLFW_FLOATING,              GLFW_TRUE);
@@ -407,10 +434,9 @@ int main()
     GLFWwindow* mainWindow = nullptr;
 
     const std::vector<LoadStep> steps = {
-        // Paso 0: leer preferencias del sistema
-        { "Leyendo preferencias del sistema...", 0.55f, [](){
-            ProyecThor::Settings::SettingsManager::Get().LoadSettings();
-        }},
+        // Paso 0: los settings ya se cargaron antes de crear el splash,
+        // este paso solo se mantiene para la animación de carga.
+        { "Leyendo preferencias del sistema...", 0.55f, [](){}},
 
         // Paso 1: crear la ventana principal y su contexto OpenGL
         { "Inicializando motor grafico OpenGL...", 0.50f, [&](){
@@ -498,7 +524,7 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
 
     for (int i = 0; i < (int)steps.size(); ++i)
         RunStep(steps[i], i, LOAD_STEPS, splashWindow,
-                logoTex, bgTex, titleFont, regularFont, smallFont, creditText);
+                logoTex, bgTex, titleFont, regularFont, smallFont, creditText, theme);
 
     if (!mainWindow)
     {
@@ -533,6 +559,10 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
     ImGui_ImplOpenGL3_Init("#version 130");
     ImGui::StyleColorsDark();
+
+    // Aplica el tema (preset o personalizado) guardado en settings sobre
+    // el estilo de ImGui recien creado para la ventana principal.
+    ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
 
     {
         ImGuiStyle& style = ImGui::GetStyle();
@@ -582,7 +612,7 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         if (fw > 0 && fh > 0)
         {
             glViewport(0, 0, fw, fh);
-            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
 
             ImGui_ImplOpenGL3_NewFrame();
@@ -639,7 +669,7 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
 
         uiManager.GetGlassRenderer().Resize(fw, fh);
         glViewport(0, 0, fw, fh);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         ImGui_ImplOpenGL3_NewFrame();

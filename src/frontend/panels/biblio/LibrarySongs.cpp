@@ -33,6 +33,61 @@ static constexpr int kCat_Documents = 4;
 namespace ProyecThor::Library {
 
 // =============================================================================
+//  GlassIconButton — boton con icono de StyleGeneralApp (fallback a glifo corto)
+//  Mismo helper que en LibraryVideos.cpp / LibraryDocuments.cpp, replicado
+//  aqui para que el footer de "Letra" (canciones) tambien use iconos en vez
+//  de texto, igual que Video y Documentos.
+//
+//  FIX (tamaños): el icono se recorta como un cuadrado centrado a partir
+//  del lado MENOR del boton, para no estirarse en botones anchos y bajos.
+// =============================================================================
+static bool GlassIconButton(const char* id,
+                             const char* iconKey,
+                             const char* fallbackGlyph,
+                             const char* tooltip,
+                             ImVec2      size,
+                             ImVec4      tint = ImVec4(0.80f, 0.84f, 0.96f, 1.0f))
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.09f, 0.10f, 0.19f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.18f, 0.32f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.19f, 0.24f, 0.42f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text,          tint);
+
+    auto it = StyleGeneralApp::Icons.find(iconKey);
+    bool hasIcon = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
+    std::string label = (hasIcon ? "" : std::string(fallbackGlyph)) + "##" + id;
+
+    bool clicked = ImGui::Button(label.c_str(), size);
+
+    if (hasIcon) {
+        ImVec2 bMin = ImGui::GetItemRectMin();
+        ImVec2 bMax = ImGui::GetItemRectMax();
+
+        // Cuadrado centrado, basado en el lado MENOR del boton (no estira).
+        const float minSide  = std::min(size.x, size.y);
+        const float iconSide = minSide * 0.48f;
+        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+        const ImVec2 pMin    = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
+        const ImVec2 pMax    = { center.x + iconSide * 0.5f, center.y + iconSide * 0.5f };
+
+        ImGui::GetWindowDrawList()->AddImage(
+            it->second.textureID,
+            pMin, pMax,
+            ImVec2(0, 0), ImVec2(1, 1),
+            ImGui::ColorConvertFloat4ToU32(tint));
+    }
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar();
+
+    if (tooltip && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tooltip);
+
+    return clicked;
+}
+
+// =============================================================================
 //  ApplyDefaultStyleIfSet
 // =============================================================================
 static void ApplyDefaultStyleIfSet(LibraryContext& ctx)
@@ -363,27 +418,32 @@ if (ctx.currentCategoryInt == kCat_Songs)
 
     ImGui::Spacing();
 
-    // ── Footer con botones ─────────────────────────────────────────────────
+    // ── Footer con botones — solo iconos, universales, con tooltip ─────────
+    // Antes usaba DS::GlassButton con texto ("Nuevo"/"Importar"/"Eliminar"/
+    // "Actualizar"); ahora usa GlassIconButton, igual que Video y Documentos.
     {
         const float avail = ImGui::GetContentRegionAvail().x;
         const float sp    = ImGui::GetStyle().ItemSpacing.x;
 
         // Fila 1: Nuevo | Importar | Eliminar (tres iguales)
         const float bw3 = std::floor((avail - sp * 2.0f) / 3.0f);
+        const ImVec2 btnSize3(bw3, DS::ButtonHeight);
 
-        if (DS::GlassButton(str.newLabel,    { bw3, DS::ButtonHeight }))
+        if (GlassIconButton("newSong", "add", "+", "Nuevo", btnSize3))
             CreateNewSong(ctx);
         ImGui::SameLine();
-        if (DS::GlassButton(str.importLabel, { bw3, DS::ButtonHeight }))
+        if (GlassIconButton("importSong", "upload_file", "^", "Importar", btnSize3))
             ctx.importFile();
         ImGui::SameLine();
-        if (DS::GlassButton(str.deleteLabel, { bw3, DS::ButtonHeight }, DS::DangerColor))
+        if (GlassIconButton("deleteSong", "delete", "X", "Eliminar", btnSize3,
+                            ImGui::ColorConvertU32ToFloat4(DS::DangerColor)))
             ctx.deleteSelectedItem();
 
         ImGui::Spacing();
 
         // Fila 2: Actualizar — ancho completo para que no quede suelto
-        if (DS::GlassButton(str.refresh, { -1.f, DS::ButtonHeight }))
+        if (GlassIconButton("refreshSong", "repeat", "R", "Actualizar",
+                            { -1.f, DS::ButtonHeight }))
             ctx.refreshList();
     }
 }

@@ -17,8 +17,6 @@
 #include "panels/CanvasStylesPanel.h"
 #include "frontend/panels/StreamingPanel.h"
 #include "qrcodegen.hpp"
-#include "UIManager.h"
-#include "SettingsManager.h"
 
 namespace ProyecThor::UI {
 
@@ -37,15 +35,15 @@ bool UIManager::Initialize(GLFWwindow* window)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
+    // Crear el TransitionPanel aqui para que este disponible antes de AddPanel
     m_TransitionPanelOwned = std::make_shared<TransitionPanel>();
     m_TransitionPanel      = m_TransitionPanelOwned.get();
 
-    ProyecThor::Settings::SettingsManager::Get().LoadSettings();
-    ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
-
-    int fbWidth, fbHeight;
-    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
-    m_GlassRenderer.Initialize(fbWidth, fbHeight);
+    ApplyProfessionalTheme();
+    m_SettingsPanel.InitializeTheme();
+int fbWidth, fbHeight;
+glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+m_GlassRenderer.Initialize(fbWidth, fbHeight);
     return true;
 }
 

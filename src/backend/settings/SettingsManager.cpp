@@ -63,50 +63,74 @@ static std::string ThemePresetToKey(ThemePreset preset) {
 }
 
 // ── Presets ──────────────────────────────────────────────────────────────
+// Nota: de momento todos los presets usan colores mas apagados/oscuros
+// que lo habitual (menos saturacion, menos brillo) para evitar problemas
+// de contraste mientras varios paneles todavia no estan terminados.
 ThemeSettings MakeThemePreset(ThemePreset preset) {
     ThemeSettings t;
     t.preset = preset;
 
     switch (preset) {
 
+    case ThemePreset::Dark: {
+        t.base[0]=0.055f; t.base[1]=0.060f; t.base[2]=0.075f; t.base[3]=1.0f;
+        t.surface0[0]=0.075f; t.surface0[1]=0.082f; t.surface0[2]=0.100f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.095f; t.surface1[1]=0.104f; t.surface1[2]=0.125f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.115f; t.surface2[1]=0.125f; t.surface2[2]=0.150f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.140f; t.surface3[1]=0.150f; t.surface3[2]=0.180f; t.surface3[3]=1.0f;
+        t.accent[0]=0.60f; t.accent[1]=0.52f; t.accent[2]=0.30f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.70f; t.accentLight[1]=0.62f; t.accentLight[2]=0.40f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.40f; t.accentDim[1]=0.34f; t.accentDim[2]=0.18f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.60f; t.accentFaint[1]=0.52f; t.accentFaint[2]=0.30f; t.accentFaint[3]=0.15f;
+        t.border[0]=0.20f; t.border[1]=0.215f; t.border[2]=0.260f; t.border[3]=0.20f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.88f; t.textPrimary[1]=0.87f; t.textPrimary[2]=0.84f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.55f; t.textDim[1]=0.55f; t.textDim[2]=0.54f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=0.75f; t.danger[1]=0.25f; t.danger[2]=0.25f; t.danger[3]=1.0f;
+        t.success[0]=0.35f; t.success[1]=0.60f; t.success[2]=0.35f; t.success[3]=1.0f;
+        t.windowRounding=8.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
     case ThemePreset::Light: {
-        t.base[0]=0.94f; t.base[1]=0.95f; t.base[2]=0.97f; t.base[3]=1.0f;
-        t.surface0[0]=0.99f; t.surface0[1]=0.99f; t.surface0[2]=1.00f; t.surface0[3]=1.0f;
-        t.surface1[0]=1.00f; t.surface1[1]=1.00f; t.surface1[2]=1.00f; t.surface1[3]=1.0f;
-        t.surface2[0]=0.90f; t.surface2[1]=0.91f; t.surface2[2]=0.94f; t.surface2[3]=1.0f;
-        t.surface3[0]=0.85f; t.surface3[1]=0.86f; t.surface3[2]=0.90f; t.surface3[3]=1.0f;
-        t.accent[0]=0.17f; t.accent[1]=0.45f; t.accent[2]=0.95f; t.accent[3]=1.0f;
-        t.accentLight[0]=0.35f; t.accentLight[1]=0.60f; t.accentLight[2]=1.00f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.17f; t.accentDim[1]=0.45f; t.accentDim[2]=0.95f; t.accentDim[3]=0.5f;
-        t.accentFaint[0]=0.17f; t.accentFaint[1]=0.45f; t.accentFaint[2]=0.95f; t.accentFaint[3]=0.15f;
-        t.border[0]=0; t.border[1]=0; t.border[2]=0; t.border[3]=0.12f;
-        t.borderFaint[0]=0; t.borderFaint[1]=0; t.borderFaint[2]=0; t.borderFaint[3]=0.06f;
-        t.textPrimary[0]=0.08f; t.textPrimary[1]=0.09f; t.textPrimary[2]=0.12f; t.textPrimary[3]=1.0f;
-        t.textDim[0]=0.35f; t.textDim[1]=0.37f; t.textDim[2]=0.42f; t.textDim[3]=1.0f;
-        t.textFaint[0]=0; t.textFaint[1]=0; t.textFaint[2]=0; t.textFaint[3]=0.35f;
-        t.danger[0]=0.85f; t.danger[1]=0.20f; t.danger[2]=0.25f; t.danger[3]=1.0f;
-        t.success[0]=0.15f; t.success[1]=0.60f; t.success[2]=0.35f; t.success[3]=1.0f;
-        t.windowRounding=10.0f; t.frameRounding=7.0f; t.scrollbarSize=7.0f;
+        t.base[0]=0.86f; t.base[1]=0.87f; t.base[2]=0.89f; t.base[3]=1.0f;
+        t.surface0[0]=0.92f; t.surface0[1]=0.93f; t.surface0[2]=0.94f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.95f; t.surface1[1]=0.95f; t.surface1[2]=0.96f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.82f; t.surface2[1]=0.83f; t.surface2[2]=0.85f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.76f; t.surface3[1]=0.77f; t.surface3[2]=0.80f; t.surface3[3]=1.0f;
+        t.accent[0]=0.35f; t.accent[1]=0.45f; t.accent[2]=0.58f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.48f; t.accentLight[1]=0.58f; t.accentLight[2]=0.70f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.30f; t.accentDim[1]=0.38f; t.accentDim[2]=0.48f; t.accentDim[3]=0.5f;
+        t.accentFaint[0]=0.30f; t.accentFaint[1]=0.38f; t.accentFaint[2]=0.48f; t.accentFaint[3]=0.15f;
+        t.border[0]=0; t.border[1]=0; t.border[2]=0; t.border[3]=0.10f;
+        t.borderFaint[0]=0; t.borderFaint[1]=0; t.borderFaint[2]=0; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.15f; t.textPrimary[1]=0.16f; t.textPrimary[2]=0.18f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.40f; t.textDim[1]=0.41f; t.textDim[2]=0.44f; t.textDim[3]=1.0f;
+        t.textFaint[0]=0; t.textFaint[1]=0; t.textFaint[2]=0; t.textFaint[3]=0.32f;
+        t.danger[0]=0.75f; t.danger[1]=0.25f; t.danger[2]=0.28f; t.danger[3]=1.0f;
+        t.success[0]=0.25f; t.success[1]=0.55f; t.success[2]=0.38f; t.success[3]=1.0f;
+        t.windowRounding=8.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
         break;
     }
 
     case ThemePreset::OrangeBlack: {
-        t.base[0]=0.05f; t.base[1]=0.04f; t.base[2]=0.03f; t.base[3]=1.0f;
-        t.surface0[0]=0.09f; t.surface0[1]=0.06f; t.surface0[2]=0.03f; t.surface0[3]=1.0f;
-        t.surface1[0]=0.12f; t.surface1[1]=0.08f; t.surface1[2]=0.04f; t.surface1[3]=1.0f;
-        t.surface2[0]=0.16f; t.surface2[1]=0.10f; t.surface2[2]=0.05f; t.surface2[3]=1.0f;
-        t.surface3[0]=0.20f; t.surface3[1]=0.13f; t.surface3[2]=0.06f; t.surface3[3]=1.0f;
-        t.accent[0]=1.00f; t.accent[1]=0.55f; t.accent[2]=0.05f; t.accent[3]=1.0f;
-        t.accentLight[0]=1.00f; t.accentLight[1]=0.72f; t.accentLight[2]=0.30f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.70f; t.accentDim[1]=0.38f; t.accentDim[2]=0.03f; t.accentDim[3]=1.0f;
-        t.accentFaint[0]=1.00f; t.accentFaint[1]=0.55f; t.accentFaint[2]=0.05f; t.accentFaint[3]=0.18f;
-        t.border[0]=1.00f; t.border[1]=0.55f; t.border[2]=0.05f; t.border[3]=0.20f;
+        t.base[0]=0.050f; t.base[1]=0.045f; t.base[2]=0.040f; t.base[3]=1.0f;
+        t.surface0[0]=0.080f; t.surface0[1]=0.065f; t.surface0[2]=0.045f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.110f; t.surface1[1]=0.085f; t.surface1[2]=0.060f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.140f; t.surface2[1]=0.105f; t.surface2[2]=0.070f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.170f; t.surface3[1]=0.130f; t.surface3[2]=0.090f; t.surface3[3]=1.0f;
+        t.accent[0]=0.75f; t.accent[1]=0.42f; t.accent[2]=0.10f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.85f; t.accentLight[1]=0.55f; t.accentLight[2]=0.25f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.50f; t.accentDim[1]=0.28f; t.accentDim[2]=0.05f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.75f; t.accentFaint[1]=0.42f; t.accentFaint[2]=0.10f; t.accentFaint[3]=0.15f;
+        t.border[0]=0.75f; t.border[1]=0.42f; t.border[2]=0.10f; t.border[3]=0.15f;
         t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
-        t.textPrimary[0]=1.00f; t.textPrimary[1]=0.95f; t.textPrimary[2]=0.90f; t.textPrimary[3]=1.0f;
-        t.textDim[0]=0.85f; t.textDim[1]=0.65f; t.textDim[2]=0.45f; t.textDim[3]=1.0f;
-        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.30f;
-        t.danger[0]=1.00f; t.danger[1]=0.25f; t.danger[2]=0.20f; t.danger[3]=1.0f;
-        t.success[0]=0.60f; t.success[1]=0.90f; t.success[2]=0.30f; t.success[3]=1.0f;
+        t.textPrimary[0]=0.92f; t.textPrimary[1]=0.88f; t.textPrimary[2]=0.82f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.70f; t.textDim[1]=0.55f; t.textDim[2]=0.40f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=0.85f; t.danger[1]=0.28f; t.danger[2]=0.24f; t.danger[3]=1.0f;
+        t.success[0]=0.50f; t.success[1]=0.75f; t.success[2]=0.28f; t.success[3]=1.0f;
         t.windowRounding=6.0f; t.frameRounding=4.0f; t.scrollbarSize=7.0f;
         break;
     }
@@ -117,87 +141,87 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
         t.surface1[0]=0.17f; t.surface1[1]=0.09f; t.surface1[2]=0.13f; t.surface1[3]=1.0f;
         t.surface2[0]=0.22f; t.surface2[1]=0.12f; t.surface2[2]=0.17f; t.surface2[3]=1.0f;
         t.surface3[0]=0.27f; t.surface3[1]=0.15f; t.surface3[2]=0.20f; t.surface3[3]=1.0f;
-        t.accent[0]=0.80f; t.accent[1]=0.62f; t.accent[2]=0.25f; t.accent[3]=1.0f;
-        t.accentLight[0]=0.92f; t.accentLight[1]=0.78f; t.accentLight[2]=0.45f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.55f; t.accentDim[1]=0.40f; t.accentDim[2]=0.15f; t.accentDim[3]=1.0f;
-        t.accentFaint[0]=0.80f; t.accentFaint[1]=0.62f; t.accentFaint[2]=0.25f; t.accentFaint[3]=0.16f;
-        t.border[0]=0.80f; t.border[1]=0.62f; t.border[2]=0.25f; t.border[3]=0.25f;
+        t.accent[0]=0.68f; t.accent[1]=0.52f; t.accent[2]=0.24f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.80f; t.accentLight[1]=0.66f; t.accentLight[2]=0.38f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.46f; t.accentDim[1]=0.34f; t.accentDim[2]=0.14f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.68f; t.accentFaint[1]=0.52f; t.accentFaint[2]=0.24f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.68f; t.border[1]=0.52f; t.border[2]=0.24f; t.border[3]=0.20f;
         t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
-        t.textPrimary[0]=0.96f; t.textPrimary[1]=0.92f; t.textPrimary[2]=0.85f; t.textPrimary[3]=1.0f;
-        t.textDim[0]=0.75f; t.textDim[1]=0.60f; t.textDim[2]=0.55f; t.textDim[3]=1.0f;
-        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.30f;
-        t.danger[0]=0.85f; t.danger[1]=0.25f; t.danger[2]=0.30f; t.danger[3]=1.0f;
-        t.success[0]=0.55f; t.success[1]=0.75f; t.success[2]=0.45f; t.success[3]=1.0f;
+        t.textPrimary[0]=0.90f; t.textPrimary[1]=0.86f; t.textPrimary[2]=0.80f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.70f; t.textDim[1]=0.56f; t.textDim[2]=0.51f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=0.80f; t.danger[1]=0.25f; t.danger[2]=0.30f; t.danger[3]=1.0f;
+        t.success[0]=0.50f; t.success[1]=0.70f; t.success[2]=0.42f; t.success[3]=1.0f;
         t.windowRounding=14.0f; t.frameRounding=9.0f; t.scrollbarSize=8.0f;
         break;
     }
 
     case ThemePreset::Kofi: {
-        t.base[0]=0.98f; t.base[1]=0.94f; t.base[2]=0.88f; t.base[3]=1.0f;
-        t.surface0[0]=1.00f; t.surface0[1]=0.97f; t.surface0[2]=0.92f; t.surface0[3]=1.0f;
-        t.surface1[0]=1.00f; t.surface1[1]=1.00f; t.surface1[2]=0.97f; t.surface1[3]=1.0f;
-        t.surface2[0]=0.95f; t.surface2[1]=0.88f; t.surface2[2]=0.78f; t.surface2[3]=1.0f;
-        t.surface3[0]=0.90f; t.surface3[1]=0.80f; t.surface3[2]=0.68f; t.surface3[3]=1.0f;
-        t.accent[0]=1.00f; t.accent[1]=0.37f; t.accent[2]=0.36f; t.accent[3]=1.0f; // #FF5E5B
-        t.accentLight[0]=1.00f; t.accentLight[1]=0.55f; t.accentLight[2]=0.53f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.85f; t.accentDim[1]=0.30f; t.accentDim[2]=0.29f; t.accentDim[3]=1.0f;
-        t.accentFaint[0]=1.00f; t.accentFaint[1]=0.37f; t.accentFaint[2]=0.36f; t.accentFaint[3]=0.15f;
+        t.base[0]=0.93f; t.base[1]=0.90f; t.base[2]=0.85f; t.base[3]=1.0f;
+        t.surface0[0]=0.95f; t.surface0[1]=0.92f; t.surface0[2]=0.87f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.96f; t.surface1[1]=0.96f; t.surface1[2]=0.94f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.88f; t.surface2[1]=0.82f; t.surface2[2]=0.74f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.83f; t.surface3[1]=0.75f; t.surface3[2]=0.66f; t.surface3[3]=1.0f;
+        t.accent[0]=0.85f; t.accent[1]=0.42f; t.accent[2]=0.42f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.90f; t.accentLight[1]=0.55f; t.accentLight[2]=0.55f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.68f; t.accentDim[1]=0.30f; t.accentDim[2]=0.30f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.85f; t.accentFaint[1]=0.42f; t.accentFaint[2]=0.42f; t.accentFaint[3]=0.15f;
         t.border[0]=0; t.border[1]=0; t.border[2]=0; t.border[3]=0.10f;
         t.borderFaint[0]=0; t.borderFaint[1]=0; t.borderFaint[2]=0; t.borderFaint[3]=0.05f;
         t.textPrimary[0]=0.20f; t.textPrimary[1]=0.13f; t.textPrimary[2]=0.10f; t.textPrimary[3]=1.0f;
         t.textDim[0]=0.45f; t.textDim[1]=0.35f; t.textDim[2]=0.30f; t.textDim[3]=1.0f;
         t.textFaint[0]=0; t.textFaint[1]=0; t.textFaint[2]=0; t.textFaint[3]=0.35f;
-        t.danger[0]=0.80f; t.danger[1]=0.15f; t.danger[2]=0.15f; t.danger[3]=1.0f;
-        t.success[0]=0.25f; t.success[1]=0.65f; t.success[2]=0.35f; t.success[3]=1.0f;
+        t.danger[0]=0.72f; t.danger[1]=0.20f; t.danger[2]=0.20f; t.danger[3]=1.0f;
+        t.success[0]=0.28f; t.success[1]=0.58f; t.success[2]=0.35f; t.success[3]=1.0f;
         t.windowRounding=16.0f; t.frameRounding=10.0f; t.scrollbarSize=8.0f;
         break;
     }
 
     case ThemePreset::Deadlock: {
-        t.base[0]=0.035f; t.base[1]=0.060f; t.base[2]=0.050f; t.base[3]=1.0f;
-        t.surface0[0]=0.050f; t.surface0[1]=0.090f; t.surface0[2]=0.075f; t.surface0[3]=1.0f;
-        t.surface1[0]=0.070f; t.surface1[1]=0.120f; t.surface1[2]=0.100f; t.surface1[3]=1.0f;
-        t.surface2[0]=0.090f; t.surface2[1]=0.150f; t.surface2[2]=0.125f; t.surface2[3]=1.0f;
-        t.surface3[0]=0.120f; t.surface3[1]=0.190f; t.surface3[2]=0.155f; t.surface3[3]=1.0f;
-        t.accent[0]=0.55f; t.accent[1]=0.95f; t.accent[2]=0.35f; t.accent[3]=1.0f;
-        t.accentLight[0]=0.72f; t.accentLight[1]=1.00f; t.accentLight[2]=0.55f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.30f; t.accentDim[1]=0.55f; t.accentDim[2]=0.20f; t.accentDim[3]=1.0f;
-        t.accentFaint[0]=0.55f; t.accentFaint[1]=0.95f; t.accentFaint[2]=0.35f; t.accentFaint[3]=0.15f;
-        t.border[0]=0.55f; t.border[1]=0.95f; t.border[2]=0.35f; t.border[3]=0.18f;
+        t.base[0]=0.045f; t.base[1]=0.065f; t.base[2]=0.055f; t.base[3]=1.0f;
+        t.surface0[0]=0.060f; t.surface0[1]=0.095f; t.surface0[2]=0.080f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.080f; t.surface1[1]=0.125f; t.surface1[2]=0.105f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.100f; t.surface2[1]=0.155f; t.surface2[2]=0.130f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.130f; t.surface3[1]=0.195f; t.surface3[2]=0.160f; t.surface3[3]=1.0f;
+        t.accent[0]=0.42f; t.accent[1]=0.70f; t.accent[2]=0.32f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.55f; t.accentLight[1]=0.80f; t.accentLight[2]=0.45f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.26f; t.accentDim[1]=0.44f; t.accentDim[2]=0.20f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.42f; t.accentFaint[1]=0.70f; t.accentFaint[2]=0.32f; t.accentFaint[3]=0.15f;
+        t.border[0]=0.42f; t.border[1]=0.70f; t.border[2]=0.32f; t.border[3]=0.15f;
         t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
-        t.textPrimary[0]=0.90f; t.textPrimary[1]=0.98f; t.textPrimary[2]=0.92f; t.textPrimary[3]=1.0f;
-        t.textDim[0]=0.60f; t.textDim[1]=0.75f; t.textDim[2]=0.65f; t.textDim[3]=1.0f;
-        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
-        t.danger[0]=0.95f; t.danger[1]=0.30f; t.danger[2]=0.30f; t.danger[3]=1.0f;
-        t.success[0]=0.55f; t.success[1]=0.95f; t.success[2]=0.35f; t.success[3]=1.0f;
+        t.textPrimary[0]=0.85f; t.textPrimary[1]=0.90f; t.textPrimary[2]=0.86f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.58f; t.textDim[1]=0.70f; t.textDim[2]=0.62f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.85f; t.danger[1]=0.28f; t.danger[2]=0.28f; t.danger[3]=1.0f;
+        t.success[0]=0.42f; t.success[1]=0.70f; t.success[2]=0.32f; t.success[3]=1.0f;
         t.windowRounding=10.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
         break;
     }
 
     case ThemePreset::Galaxy: {
-        t.base[0]=0.040f; t.base[1]=0.030f; t.base[2]=0.080f; t.base[3]=1.0f;
-        t.surface0[0]=0.070f; t.surface0[1]=0.050f; t.surface0[2]=0.140f; t.surface0[3]=1.0f;
-        t.surface1[0]=0.100f; t.surface1[1]=0.070f; t.surface1[2]=0.190f; t.surface1[3]=1.0f;
-        t.surface2[0]=0.140f; t.surface2[1]=0.100f; t.surface2[2]=0.250f; t.surface2[3]=1.0f;
-        t.surface3[0]=0.180f; t.surface3[1]=0.130f; t.surface3[2]=0.320f; t.surface3[3]=1.0f;
-        t.accent[0]=0.65f; t.accent[1]=0.35f; t.accent[2]=1.00f; t.accent[3]=1.0f;
-        t.accentLight[0]=0.80f; t.accentLight[1]=0.55f; t.accentLight[2]=1.00f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.42f; t.accentDim[1]=0.22f; t.accentDim[2]=0.68f; t.accentDim[3]=1.0f;
-        t.accentFaint[0]=0.65f; t.accentFaint[1]=0.35f; t.accentFaint[2]=1.00f; t.accentFaint[3]=0.16f;
-        t.border[0]=0.65f; t.border[1]=0.35f; t.border[2]=1.00f; t.border[3]=0.22f;
+        t.base[0]=0.045f; t.base[1]=0.038f; t.base[2]=0.075f; t.base[3]=1.0f;
+        t.surface0[0]=0.065f; t.surface0[1]=0.050f; t.surface0[2]=0.125f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.090f; t.surface1[1]=0.068f; t.surface1[2]=0.170f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.120f; t.surface2[1]=0.092f; t.surface2[2]=0.220f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.155f; t.surface3[1]=0.118f; t.surface3[2]=0.280f; t.surface3[3]=1.0f;
+        t.accent[0]=0.48f; t.accent[1]=0.32f; t.accent[2]=0.70f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.60f; t.accentLight[1]=0.45f; t.accentLight[2]=0.80f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.32f; t.accentDim[1]=0.20f; t.accentDim[2]=0.46f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.48f; t.accentFaint[1]=0.32f; t.accentFaint[2]=0.70f; t.accentFaint[3]=0.15f;
+        t.border[0]=0.48f; t.border[1]=0.32f; t.border[2]=0.70f; t.border[3]=0.18f;
         t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
-        t.textPrimary[0]=0.92f; t.textPrimary[1]=0.90f; t.textPrimary[2]=0.98f; t.textPrimary[3]=1.0f;
-        t.textDim[0]=0.68f; t.textDim[1]=0.62f; t.textDim[2]=0.85f; t.textDim[3]=1.0f;
-        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.30f;
-        t.danger[0]=1.00f; t.danger[1]=0.35f; t.danger[2]=0.55f; t.danger[3]=1.0f;
-        t.success[0]=0.35f; t.success[1]=0.90f; t.success[2]=0.75f; t.success[3]=1.0f;
+        t.textPrimary[0]=0.86f; t.textPrimary[1]=0.84f; t.textPrimary[2]=0.90f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.62f; t.textDim[1]=0.58f; t.textDim[2]=0.75f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=0.85f; t.danger[1]=0.32f; t.danger[2]=0.45f; t.danger[3]=1.0f;
+        t.success[0]=0.32f; t.success[1]=0.75f; t.success[2]=0.62f; t.success[3]=1.0f;
         t.windowRounding=16.0f; t.frameRounding=10.0f; t.scrollbarSize=8.0f;
         break;
     }
 
-    case ThemePreset::Dark:
     default:
-        // Valores por defecto de ThemeSettings ya son el tema Oscuro.
+        // Cae aca solo si llega ThemePreset::Custom, que no genera colores
+        // desde codigo (se cargan desde settings.json en LoadSettings).
         break;
     }
 
