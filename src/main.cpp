@@ -519,7 +519,7 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
         { "Cargando tipografias y modulos de interfaz...", 0.45f, [](){}},
 
         // Paso 4: listo, la barra llega al 100%
-        { "Listo para iniciar", 0.30f, [](){}},
+        { "Listo", 0.30f, [](){}},
     };
 
     for (int i = 0; i < (int)steps.size(); ++i)
