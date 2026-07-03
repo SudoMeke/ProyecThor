@@ -2,7 +2,7 @@
  * vlc_access.h: Access descriptor, queries and methods
  *****************************************************************************
  * Copyright (C) 1999-2006 VLC authors and VideoLAN
- * $Id$
+ * $Id: da06554814885d03823aefbf58e858f6941b3400 $
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *

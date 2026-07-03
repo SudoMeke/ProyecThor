@@ -135,10 +135,8 @@ VLC_API unsigned vlc_CPU(void);
 
 #  ifdef ALTIVEC
 #   define vlc_CPU_ALTIVEC() (1)
-#   define VLC_ALTIVEC
 #  else
 #   define vlc_CPU_ALTIVEC() ((vlc_CPU() & VLC_CPU_ALTIVEC) != 0)
-#   define VLC_ALTIVEC __attribute__ ((__target__ ("altivec")))
 #  endif
 
 # elif defined (__arm__)
@@ -180,11 +178,6 @@ VLC_API unsigned vlc_CPU(void);
 
 # elif defined (__mips_hard_float)
 #  define HAVE_FPU 1
-
-# elif defined (__riscv)
-#  ifdef __riscv_flen
-#   define HAVE_FPU 1
-#  endif
 
 # else
 /**

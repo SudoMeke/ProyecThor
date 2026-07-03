@@ -8,8 +8,4 @@ iss/installer_output/
 web/
 lite/
 
-src/backend/sdk/**/*.dll
-src/backend/sdk/**/*.lib
-src/backend/sdk/**/*.a
-src/backend/sdk/**/*.jar
 src/notes.txt

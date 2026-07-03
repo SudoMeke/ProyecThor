@@ -89,7 +89,7 @@
 #  define VLC_DEPRECATED_ENUM
 # endif
 
-# if defined( _WIN32 ) && !defined( __clang__ )
+# if defined( _WIN32 )
 #  define VLC_FORMAT(x,y) __attribute__ ((format(gnu_printf,x,y)))
 # else
 #  define VLC_FORMAT(x,y) __attribute__ ((format(printf,x,y)))
@@ -152,11 +152,7 @@
  * epoch). Note that date and time intervals can be manipulated using regular
  * arithmetic operators, and that no special functions are required.
  */
-typedef int64_t vlc_tick_t;
-typedef vlc_tick_t mtime_t; /* deprecated, use vlc_tick_t */
-
-#define VLC_TICK_INVALID  VLC_TS_INVALID
-#define VLC_TICK_0        VLC_TS_0
+typedef int64_t mtime_t;
 
 /**
  * The vlc_fourcc_t type.
