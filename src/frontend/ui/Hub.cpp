@@ -1,6 +1,5 @@
 #include "Hub.h"
 
-// Includes del sistema que clangd no encontraba porque Hub.h no los incluia
 #include <GL/glew.h>
 #include <imgui.h>
 #include <GLFW/glfw3.h>
@@ -45,6 +44,12 @@ struct UpdateVersionInfo {
 // Para agregar una nueva actualizacion con su propia portada, solo hay que
 // anadir una nueva linea a esta lista con su archivo de imagen.
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
+    {
+        3, "0.3.2",
+        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
+        "splash_bg0.png",
+        "Cambios de logica en el motor VLC y limpieza general de codigo."
+    },
     {
         1, "0.3.1",
         " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
@@ -746,8 +751,18 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::PopTextWrapPos(); ImGui::PopStyleColor();
                 ImGui::Dummy(ImVec2(0,4));
             };
-            // ── Bloque de contenido condicional por versión ──────────────────
-            if (selectedUpdateVer == 1) { // v0.3.1
+if (selectedUpdateVer == 3) { // v0.3.2
+    Cat("Motor de Video (VLC)");
+    Bul("Cambios en la logica interna de manejo del motor VLC para mejorar la estabilidad de la reproduccion.");
+    Bul("Ajustes en la forma en que se inicializan y liberan los recursos del reproductor.");
+    Bul("Correcciones menores relacionadas con la sincronizacion del motor multimedia.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Limpieza de Codigo");
+    Bul("Refactorizacion y limpieza general del codigo base, sin cambios visibles para el usuario.");
+    Bul("Eliminacion de codigo obsoleto y simplificacion de varias rutinas internas.");
+    Bul("Mejoras de mantenibilidad para facilitar el desarrollo de futuras versiones.");
+} else if (selectedUpdateVer == 1) { // v0.3.1
                 Cat("Audio Rework");
                 Bul("Nueva interfaz para la seccion de audio, con animaciones renovadas y un sistema de portadas (covers) para cada pista.");
                 Bul("Diseno mas versatil, adaptable e intuitivo.");
