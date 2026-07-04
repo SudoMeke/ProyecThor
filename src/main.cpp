@@ -41,34 +41,27 @@
 #endif
 
 static constexpr int   SPLASH_W       = 600;
-static constexpr int   SPLASH_H       = 380; // Aumentado para dar más espacio a la imagen
+static constexpr int   SPLASH_H       = 380;
 static constexpr int   MAIN_W         = 1280;
 static constexpr int   MAIN_H         = 720;
 static constexpr int   LOAD_STEPS     = 5;
 
-
-// ── Registro de Ilustraciones y Autores ─────────────────────────────────
 struct SplashArt {
     std::string filename;
     std::string author;
 };
 
-// Puedes agregar fácilmente más autores e ilustraciones a esta lista
 static const std::vector<SplashArt> splashRegistry = {
     {"splash_bg1.png", "Fabiola Fernandez"},
     {"splash_bg2.png", "TheVixcho"},
 };
-// ────────────────────────────────────────────────────────────────────────
 
-// ── Easing para la animación de la barra de progreso ─────────────────────
 static float EaseOutCubic(float t)
 {
     const float f = 1.0f - t;
     return 1.0f - f * f * f;
 }
-// ────────────────────────────────────────────────────────────────────────
 
-// ── Conversión de colores del ThemeSettings a formatos de ImGui ──────────
 static ImU32 ThemeColorU32(const float c[4], float alphaOverride = -1.0f)
 {
     auto toByte = [](float v) -> int {
@@ -85,7 +78,6 @@ static ImVec4 ThemeColorVec4(const float c[4], float alphaOverride = -1.0f)
     const float a = (alphaOverride >= 0.0f) ? alphaOverride : c[3];
     return ImVec4(c[0], c[1], c[2], a);
 }
-// ────────────────────────────────────────────────────────────────────────
 
 std::string GetAppDataFilePath(const std::string& filename) {
     const char* appData = std::getenv("APPDATA");
@@ -100,7 +92,7 @@ std::string GetAppDataFilePath(const std::string& filename) {
 
     return (dirPath / filename).string();
 }
-// ────────────────────────────────────────────────────────────────────────
+
 GLuint LoadTextureFromFile(const char* filename)
 {
     int w = 0, h = 0, ch = 0;
@@ -150,7 +142,6 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Imagen de fondo cubriendo toda la ventana (primera capa, detras de todo)
     if (bgTexture != 0)
     {
         dl->AddImage(
@@ -166,7 +157,6 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
             ThemeColorU32(theme.surface0));
     }
 
-    // Mascara de degradado: oscuro a la izquierda, transparente a la derecha
     dl->AddRectFilledMultiColor(
         ImVec2(0.0f, 0.0f),
         ImVec2((float)SPLASH_W, (float)SPLASH_H),
