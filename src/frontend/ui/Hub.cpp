@@ -1,5 +1,6 @@
 #include "Hub.h"
 
+// Includes del sistema que clangd no encontraba porque Hub.h no los incluia
 #include <GL/glew.h>
 #include <imgui.h>
 #include <GLFW/glfw3.h>
@@ -47,7 +48,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         3, "0.3.2",
         " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
-        "splash_bg0.png",
+        "splash_bg1.png", // TODO: reemplazar por una portada propia de la 0.3.2; se reutiliza esta mientras tanto
         "Cambios de logica en el motor VLC y limpieza general de codigo."
     },
     {
@@ -480,7 +481,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 1; // id de kUpdateRegistry (1 = v0.3.1, 2 = v0.3.0)
+    static int    selectedUpdateVer = 3; // id de kUpdateRegistry (3 = v0.3.2, 1 = v0.3.1, 2 = v0.3.0)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -513,12 +514,13 @@ void Hub::RenderMainContent(float w, float h) {
     }
 
     const float marginX       = 50.0f;
+    const float marginTop     = 40.0f;
     const float spacingX      = 40.0f;
     const float totalWidth    = w - (marginX * 2.0f);
     const float leftColWidth  = totalWidth * 0.55f;
     const float rightColWidth = totalWidth * 0.45f - spacingX;
 
-    ImGui::SetCursorPos(ImVec2(marginX, 40.0f));
+    ImGui::SetCursorPos(ImVec2(marginX, marginTop));
 
     // ── Columna izquierda ─────────────────────────────────────────────────────
     ImGui::BeginGroup();
@@ -528,8 +530,24 @@ void Hub::RenderMainContent(float w, float h) {
     ImGui::SetWindowFontScale(1.0f);
     ImGui::Dummy(ImVec2(0.0f, 15.0f));
 
+    // Altura del bloque de acciones que va debajo de la lista (boton "Buscar
+    // actualizaciones" + "Foro / Soporte"), para poder descontarla del calculo
+    // del scroll y que este siempre termine justo antes de dichos botones.
+    const float actionsRowH   = 36.0f;
+    const float gapBeforeList = ImGui::GetCursorPosY(); // lo ya consumido: titulo + dummy
+    const float gapAfterList  = 15.0f;                  // Dummy entre la lista y los botones
+    const float bottomMargin  = 55.0f;                  // espacio final, grande, tras los botones
+
+    // Alto restante disponible para la lista scrolleable: ocupa todo lo que
+    // sobra hasta el final del panel, dejando lugar para los botones de abajo
+    // y un margen inferior comodo.
+    const float updatesListH = std::max(
+        220.0f,
+        h - marginTop - gapBeforeList - gapAfterList - actionsRowH - bottomMargin
+    );
+
     // Contenedor scrolleable para la lista de actualizaciones
-    ImGui::BeginChild("##UpdatesList", ImVec2(leftColWidth, 310.0f), false);
+    ImGui::BeginChild("##UpdatesList", ImVec2(leftColWidth, updatesListH), false);
 
     // Función auxiliar para dibujar tarjetas de actualización.
     // Cada tarjeta usa la portada especifica de su propia entrada en el registro,
@@ -605,18 +623,18 @@ void Hub::RenderMainContent(float w, float h) {
 
     ImGui::EndChild(); // Fin de UpdatesList
 
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
+    ImGui::Dummy(ImVec2(0.0f, gapAfterList));
 
     ImGui::BeginGroup();
     ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(42, 42, 50, 255));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(60, 60, 72, 255));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(32, 32, 40, 255));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    if (ImGui::Button("Buscar actualizaciones", ImVec2(180.0f, 36.0f))) {
+    if (ImGui::Button("Buscar actualizaciones", ImVec2(180.0f, actionsRowH))) {
         m_ActiveTab = 5; m_OpenSettingsRequested = true;
     }
     ImGui::SameLine(0.0f, 15.0f);
-    if (ImGui::Button("Foro / Soporte", ImVec2(180.0f, 36.0f)))
+    if (ImGui::Button("Foro / Soporte", ImVec2(180.0f, actionsRowH)))
         ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/discussions");
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
@@ -751,18 +769,19 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::PopTextWrapPos(); ImGui::PopStyleColor();
                 ImGui::Dummy(ImVec2(0,4));
             };
-if (selectedUpdateVer == 3) { // v0.3.2
-    Cat("Motor de Video (VLC)");
-    Bul("Cambios en la logica interna de manejo del motor VLC para mejorar la estabilidad de la reproduccion.");
-    Bul("Ajustes en la forma en que se inicializan y liberan los recursos del reproductor.");
-    Bul("Correcciones menores relacionadas con la sincronizacion del motor multimedia.");
-    ImGui::Dummy(ImVec2(0,12));
+            // ── Bloque de contenido condicional por versión ──────────────────
+            if (selectedUpdateVer == 3) { // v0.3.2
+                Cat("Motor de Video (VLC)");
+                Bul("Cambios en la logica interna de manejo del motor VLC para mejorar la estabilidad de la reproduccion.");
+                Bul("Ajustes en la forma en que se inicializan y liberan los recursos del reproductor.");
+                Bul("Correcciones menores relacionadas con la sincronizacion del motor multimedia.");
+                ImGui::Dummy(ImVec2(0,12));
 
-    Cat("Limpieza de Codigo");
-    Bul("Refactorizacion y limpieza general del codigo base, sin cambios visibles para el usuario.");
-    Bul("Eliminacion de codigo obsoleto y simplificacion de varias rutinas internas.");
-    Bul("Mejoras de mantenibilidad para facilitar el desarrollo de futuras versiones.");
-} else if (selectedUpdateVer == 1) { // v0.3.1
+                Cat("Limpieza de Codigo");
+                Bul("Refactorizacion y limpieza general del codigo base, sin cambios visibles para el usuario.");
+                Bul("Eliminacion de codigo obsoleto y simplificacion de varias rutinas internas.");
+                Bul("Mejoras de mantenibilidad para facilitar el desarrollo de futuras versiones.");
+            } else if (selectedUpdateVer == 1) { // v0.3.1
                 Cat("Audio Rework");
                 Bul("Nueva interfaz para la seccion de audio, con animaciones renovadas y un sistema de portadas (covers) para cada pista.");
                 Bul("Diseno mas versatil, adaptable e intuitivo.");
