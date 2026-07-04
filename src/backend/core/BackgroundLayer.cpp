@@ -107,21 +107,23 @@ void main() {
     VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
     VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
 
-    void BackgroundLayer::PerformSwap()
-    {
-        VLCBasePlayer& oldActive = Active();
-        m_ActiveIsA = !m_ActiveIsA;
-        VLCBasePlayer& newActive = Active();
+   void BackgroundLayer::PerformSwap()
+{
+    VLCBasePlayer& oldActive = Active();
+    m_ActiveIsA = !m_ActiveIsA;
+    VLCBasePlayer& newActive = Active();
 
-        newActive.SetMute(m_TargetMuted);
-        newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
-        newActive.SetPause(false);
+    newActive.SetAudioActive(true);
+    newActive.SetMute(m_TargetMuted);
+    newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+    newActive.SetPause(false);
 
-        oldActive.SetMute(true);
-        oldActive.Stop();
+    oldActive.SetAudioActive(false);
+    oldActive.SetMute(true);
+    oldActive.Stop();
 
-        m_SwapPending = false;
-    }
+    m_SwapPending = false;
+}
 
     void BackgroundLayer::Update()
     {

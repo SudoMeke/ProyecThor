@@ -349,6 +349,72 @@ static void RunStep(const LoadStep& step, int idx, int total, GLFWwindow* splash
 }
 // ────────────────────────────────────────────────────────────────────────
 
+// ── Profiling temporal por secciones del frame ──────────────────────────
+// Acumula el tiempo de cada seccion durante N frames y despues imprime el
+// promedio en milisegundos a consola. Solo diagnostico, no toca ninguna
+// logica real del programa. Se puede sacar por completo una vez encontrado
+// el cuello de botella.
+namespace FrameProfiler
+{
+    static constexpr int kSampleFrames = 60;
+
+    struct Accum
+    {
+        double totalMs = 0.0;
+        int    count   = 0;
+    };
+
+    static Accum s_PollEvents;
+    static Accum s_CoreUpdate;
+    static Accum s_ImGuiBuild;
+    static Accum s_ImGuiRender;
+    static Accum s_PlatformWindows;
+    static Accum s_SwapBuffers;
+    static Accum s_FrameTotal;
+
+    using Clock = std::chrono::steady_clock;
+
+    static double ElapsedMs(Clock::time_point start)
+    {
+        return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+    }
+
+    static void Add(Accum& a, double ms)
+    {
+        a.totalMs += ms;
+        a.count++;
+    }
+
+    static void ReportIfReady()
+    {
+        if (s_FrameTotal.count < kSampleFrames)
+            return;
+
+        auto avg = [](const Accum& a) { return a.totalMs / a.count; };
+
+        double fps = 1000.0 / avg(s_FrameTotal);
+
+        std::cout << "\n[PROFILE] Promedio ultimos " << kSampleFrames << " frames"
+                  << " (fps estimado: " << fps << ")\n"
+                  << "  PollEvents        : " << avg(s_PollEvents)       << " ms\n"
+                  << "  core.Update()     : " << avg(s_CoreUpdate)       << " ms\n"
+                  << "  ImGui build       : " << avg(s_ImGuiBuild)       << " ms\n"
+                  << "  ImGui render(GL)  : " << avg(s_ImGuiRender)      << " ms\n"
+                  << "  PlatformWindows   : " << avg(s_PlatformWindows)  << " ms\n"
+                  << "  SwapBuffers       : " << avg(s_SwapBuffers)      << " ms\n"
+                  << "  TOTAL frame       : " << avg(s_FrameTotal)       << " ms\n";
+
+        s_PollEvents      = {};
+        s_CoreUpdate      = {};
+        s_ImGuiBuild      = {};
+        s_ImGuiRender     = {};
+        s_PlatformWindows = {};
+        s_SwapBuffers     = {};
+        s_FrameTotal      = {};
+    }
+}
+// ────────────────────────────────────────────────────────────────────────
+
 int main()
 {
     if (!glfwInit())
@@ -550,15 +616,39 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     io.IniFilename  = "proyecthor_ui.ini";
 
     io.Fonts->AddFontFromFileTTF("bin/assets/fonts/OpenSans-Regular.ttf", 16.0f);
     ProyecThor::Core::PresentationCore::Get().LoadFontsIntoImGui();
 
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
-    ImGui::StyleColorsDark();
+ImGui_ImplOpenGL3_Init("#version 130");
+ImGui::StyleColorsDark();
+
+// ── Fix crítico: las ventanas de viewports secundarios (incluida la del
+//    proyector en el segundo monitor) NO deben esperar su propio vsync.
+//    RenderPlatformWindowsDefault() las swapea sincrónicamente en este
+//    mismo hilo cada frame; si alguna espera vsync de un monitor a
+//    distinto refresh (ej. 60Hz) que la ventana principal (144Hz), todo
+//    el hilo queda atrapado esperando el más lento.
+{
+    ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+    static void (*s_OrigCreateWindow)(ImGuiViewport*) = platform_io.Platform_CreateWindow;
+
+    platform_io.Platform_CreateWindow = [](ImGuiViewport* viewport)
+    {
+        s_OrigCreateWindow(viewport); // crea la ventana GLFW real del viewport
+
+        GLFWwindow* w = static_cast<GLFWwindow*>(viewport->PlatformHandle);
+        if (w)
+        {
+            GLFWwindow* backup = glfwGetCurrentContext();
+            glfwMakeContextCurrent(w);
+            glfwSwapInterval(0);   // <- clave
+            glfwMakeContextCurrent(backup);
+        }
+    };
+}
 
     // Aplica el tema (preset o personalizado) guardado en settings sobre
     // el estilo de ImGui recien creado para la ventana principal.
@@ -646,7 +736,12 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
 
     while (!glfwWindowShouldClose(mainWindow))
     {
+        using Clock = FrameProfiler::Clock;
+        auto frameStart = Clock::now();
+
+        auto t0 = Clock::now();
         glfwPollEvents();
+        FrameProfiler::Add(FrameProfiler::s_PollEvents, FrameProfiler::ElapsedMs(t0));
 
         auto& core = ProyecThor::Core::PresentationCore::Get();
 
@@ -656,7 +751,9 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
             core.ClearLayer2();
         }
 
+        auto t1 = Clock::now();
         core.Update();
+        FrameProfiler::Add(FrameProfiler::s_CoreUpdate, FrameProfiler::ElapsedMs(t1));
 
         int fw, fh;
         glfwGetFramebufferSize(mainWindow, &fw, &fh);
@@ -672,6 +769,7 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        auto t2 = Clock::now();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -679,16 +777,27 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         uiManager.RenderAll();
 
         ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        FrameProfiler::Add(FrameProfiler::s_ImGuiBuild, FrameProfiler::ElapsedMs(t2));
 
+        auto t3 = Clock::now();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        FrameProfiler::Add(FrameProfiler::s_ImGuiRender, FrameProfiler::ElapsedMs(t3));
+
+        auto t4 = Clock::now();
         {
             GLFWwindow* ctxBackup = glfwGetCurrentContext();
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(ctxBackup);
         }
+        FrameProfiler::Add(FrameProfiler::s_PlatformWindows, FrameProfiler::ElapsedMs(t4));
 
+        auto t5 = Clock::now();
         glfwSwapBuffers(mainWindow);
+        FrameProfiler::Add(FrameProfiler::s_SwapBuffers, FrameProfiler::ElapsedMs(t5));
+
+        FrameProfiler::Add(FrameProfiler::s_FrameTotal, FrameProfiler::ElapsedMs(frameStart));
+        FrameProfiler::ReportIfReady();
     }
 
     uiManager.Shutdown();

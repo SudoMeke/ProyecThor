@@ -13,8 +13,18 @@ namespace ProyecThor::Core {
         // El swap solo ocurre cuando el standby ya decodifico un frame real,
         // eliminando el congelamiento/corte de audio de reabrir el mismo
         // reproductor para cada clip nuevo.
-        VLCBasePlayer m_PlayerA;
-        VLCBasePlayer m_PlayerB;
+        //
+        // Se les pasa un limite explicito de hilos de decode (en vez de 0 =
+        // automatico) porque con avcodec-threads=0 cada instancia reclama un
+        // pool de hilos del tamano de los nucleos de CPU disponibles. Con dos
+        // instancias full-auto compitiendo por los mismos nucleos durante la
+        // ventana de precarga (standby decodificando mientras el activo sigue
+        // reproduciendo), ambas se pisan y el resultado es caida de fps en el
+        // video que esta en pantalla. Acotando cada una a un numero fijo y
+        // razonable de hilos, la suma de ambas se mantiene dentro de un
+        // presupuesto de CPU predecible.
+        VLCBasePlayer m_PlayerA{ 2 };
+        VLCBasePlayer m_PlayerB{ 2 };
         bool          m_ActiveIsA = true;
 
         bool   m_SwapPending      = false;

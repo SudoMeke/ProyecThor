@@ -15,8 +15,6 @@ typedef SSIZE_T ssize_t;
 #include <cstdio>
 #include <cmath>
 #include <atomic>
-#include <chrono>
-#include <thread>
 #include <algorithm>
 #include <cctype>
 
@@ -29,6 +27,17 @@ typedef SSIZE_T ssize_t;
 #endif
 #pragma comment(lib, "winmm.lib")
 #endif
+
+// =============================================================================
+//  Version SIN hilo de trabajo propio. Play()/Stop() son sincronicos y se
+//  ejecutan en el hilo que los llama. Esta es la version que va fluida: el
+//  WorkerLoop con debounce de 90ms que se agrego despues generaba contencion
+//  de CPU/GPU entre el hilo de trabajo y el hilo de render, y quedo mezclado
+//  con codigo duplicado fuera del namespace (no compilaba de forma
+//  consistente contra el header actual, que ya no declara m_WorkerThread,
+//  m_WorkMutex, etc). Se revierte a este diseño sincrono + doble buffer de
+//  video, que es el que coincide con VLCBasePlayer.h.
+// =============================================================================
 
 namespace {
 
@@ -51,6 +60,9 @@ std::string GetDirectYoutubeURL(const std::string& youtubeURL)
     return result;
 }
 
+// Normaliza una ruta para comparacion: pasa todo a minusculas y reemplaza
+// backslashes por forward slashes. Se usa unicamente para decidir si una
+// ruta solicitada en Play() coincide con la ruta bloqueada por BlockPath().
 std::string NormalizePathForCompare(const std::string& path)
 {
     std::string result = path;
@@ -60,6 +72,8 @@ std::string NormalizePathForCompare(const std::string& path)
     return result;
 }
 
+// Actualiza un maximo atomico sin locks. Se usa para los picos de audio,
+// leidos cada frame por el VU meter sin competir con el hilo de audio real.
 static inline void AtomicUpdateMax(std::atomic<float>& target, float value)
 {
     float current = target.load(std::memory_order_relaxed);
@@ -75,19 +89,29 @@ struct VLCAudioCtx {
 
     std::atomic<float>* volumeMultiplier = nullptr;
     std::atomic<bool>*  muted            = nullptr;
+    std::atomic<bool>*  audioActive      = nullptr;
 
 #ifdef _WIN32
     HWAVEOUT hWaveOut = nullptr;
     static const int NUM_BUFFERS = 8;
     WAVEHDR waveHeaders[NUM_BUFFERS] = {};
     int currentHeader = 0;
+
+    // true una vez que waveOutOpen tuvo exito. El dispositivo se abre UNA
+    // sola vez por reproductor y se mantiene abierto durante toda su vida,
+    // sin importar cuantos clips se reproduzcan despues.
     bool deviceInitialized = false;
 #endif
 };
 
+// Doble buffer para el video: el decoder de VLC escribe en backBuf
+// (vlc_lock/vlc_unlock) mientras el hilo de render sube frontBuf a GL
+// (UpdateTexture). Se intercambian punteros en vlc_unlock, asi que el lock
+// que protege el intercambio se mantiene por un tiempo minimo.
 struct VLCVideoCtx {
     std::mutex mutex;
-    void*    pixels = nullptr;
+    void*    frontBuf = nullptr; // listo para subir a GL
+    void*    backBuf  = nullptr; // lo escribe el decoder de VLC
     unsigned width  = 0;
     unsigned height = 0;
     bool     dirty  = false;
@@ -101,6 +125,10 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
     *channels = 2;
 
 #ifdef _WIN32
+    // El formato de salida es siempre el mismo, asi que si el dispositivo
+    // ya fue abierto no hay nada que reconfigurar. libVLC llama a este
+    // callback en cada cambio de clip: reabrir aqui el HWAVEOUT era una
+    // causa de microcortes de audio.
     if (ctx->deviceInitialized)
         return 0;
 
@@ -134,11 +162,16 @@ static void vlc_audio_cleanup(void* opaque)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
 #ifdef _WIN32
+    // NO se cierra el dispositivo aqui, solo se vacia la cola pendiente.
+    // El cierre real ocurre unicamente en vlc_audio_destroy_device(), al
+    // destruir el reproductor completo.
     if (ctx->hWaveOut)
         waveOutReset(ctx->hWaveOut);
 #endif
 }
 
+// Libera de verdad el dispositivo de audio nativo. Solo se llama desde
+// VLCBasePlayer::DestroyVLC().
 static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
 {
 #ifdef _WIN32
@@ -161,6 +194,10 @@ static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
 static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t /*pts*/)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
+
+    if (ctx->audioActive && !ctx->audioActive->load(std::memory_order_relaxed))
+        return;
+
     if (!ctx->volumeMultiplier || !ctx->muted) return;
 
     bool  isMuted = ctx->muted->load(std::memory_order_relaxed);
@@ -217,25 +254,32 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
     ctx->height = *height;
     *pitches    = (*width) * 4;
     *lines      = *height;
-    if (ctx->pixels) delete[] static_cast<uint8_t*>(ctx->pixels);
-    ctx->pixels = new uint8_t[(*pitches) * (*lines)];
-    std::memset(ctx->pixels, 0, (*pitches) * (*lines));
+
+    size_t sz = static_cast<size_t>(*pitches) * (*lines);
+    delete[] static_cast<uint8_t*>(ctx->frontBuf);
+    delete[] static_cast<uint8_t*>(ctx->backBuf);
+    ctx->frontBuf = new uint8_t[sz];
+    ctx->backBuf  = new uint8_t[sz];
+    std::memset(ctx->frontBuf, 0, sz);
+    std::memset(ctx->backBuf,  0, sz);
+    ctx->dirty = false;
     return 1;
 }
 
-static void  vlc_cleanup(void* /*opaque*/) {}
+static void vlc_cleanup(void* /*opaque*/) {}
 
 static void* vlc_lock(void* opaque, void** planes)
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     ctx->mutex.lock();
-    *planes = ctx->pixels;
+    *planes = ctx->backBuf;
     return nullptr;
 }
 
 static void vlc_unlock(void* opaque, void* /*picture*/, void* const* /*planes*/)
 {
-    auto* ctx  = static_cast<VLCVideoCtx*>(opaque);
+    auto* ctx = static_cast<VLCVideoCtx*>(opaque);
+    std::swap(ctx->frontBuf, ctx->backBuf);
     ctx->dirty = true;
     ctx->mutex.unlock();
 }
@@ -246,12 +290,12 @@ static void vlc_display(void* /*opaque*/, void* /*picture*/) {}
 
 namespace ProyecThor::Core {
 
-VLCBasePlayer::VLCBasePlayer(int decodeThreads)
+VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode)
     : m_DecodeThreads(decodeThreads)
+    , m_UseHardwareDecode(useHardwareDecode)
 {
     InitVLC();
     CreatePersistentPlayer();
-    m_WorkerThread = std::thread(&VLCBasePlayer::WorkerLoop, this);
 }
 
 VLCBasePlayer::~VLCBasePlayer()
@@ -267,13 +311,16 @@ VLCBasePlayer::~VLCBasePlayer()
 void VLCBasePlayer::InitVLC()
 {
     std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
+    std::string hwDecodeArg = m_UseHardwareDecode
+        ? "--avcodec-hw=d3d11va"
+        : "--avcodec-hw=none";
 
     const char* args[] = {
         "--no-xlib",
         "--quiet",
         "--no-osd",
         "--no-video-title-show",
-        "--avcodec-hw=d3d11va",
+        hwDecodeArg.c_str(),
         threadsArg.c_str(),
         "--file-caching=300",
         "--clock-jitter=0",
@@ -286,6 +333,7 @@ void VLCBasePlayer::InitVLC()
 
 void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
 {
+    // Corre en un hilo interno de libVLC: solo tocar el atomico.
     auto* self = static_cast<VLCBasePlayer*>(userData);
     if (evt->type == libvlc_MediaPlayerEndReached ||
         evt->type == libvlc_MediaPlayerEncounteredError)
@@ -313,6 +361,7 @@ void VLCBasePlayer::CreatePersistentPlayer()
     auto* aCtx = new VLCAudioCtx();
     aCtx->volumeMultiplier = &m_VolumeMultiplier;
     aCtx->muted            = &m_Muted;
+    aCtx->audioActive      = &m_AudioActive;
     m_AudioCtx = aCtx;
     libvlc_audio_set_format_callbacks(m_MediaPlayer, vlc_audio_setup, vlc_audio_cleanup);
     libvlc_audio_set_callbacks(m_MediaPlayer, vlc_audio_play,
@@ -325,25 +374,22 @@ void VLCBasePlayer::CreatePersistentPlayer()
 
 void VLCBasePlayer::DestroyVLC()
 {
+    // Sin hilo de trabajo propio: no hay nada que apagar/join-ear antes de
+    // liberar recursos de libVLC. Stop() detiene sincronicamente.
     Stop();
-
-    {
-        std::lock_guard<std::mutex> lock(m_WorkMutex);
-        m_ShuttingDown = true;
-    }
-    m_WorkCV.notify_one();
-    if (m_WorkerThread.joinable())
-        m_WorkerThread.join();
 
     if (m_MediaPlayer)
     {
+        // release() garantiza que los callbacks de audio/video terminaron
+        // antes de retornar — solo entonces es seguro borrar los ctx.
         libvlc_media_player_release(m_MediaPlayer);
         m_MediaPlayer = nullptr;
     }
     if (m_VideoCtx)
     {
         auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
-        delete[] static_cast<uint8_t*>(ctx->pixels);
+        delete[] static_cast<uint8_t*>(ctx->frontBuf);
+        delete[] static_cast<uint8_t*>(ctx->backBuf);
         delete ctx;
         m_VideoCtx = nullptr;
     }
@@ -383,87 +429,33 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
 {
     if (!m_Instance || !m_MediaPlayer) return;
 
+    if (m_PathBlocked && NormalizePathForCompare(m_BlockedPath) == NormalizePathForCompare(path))
     {
-        std::lock_guard<std::mutex> lock(m_WorkMutex);
-        if (m_PathBlocked && NormalizePathForCompare(m_BlockedPath) == NormalizePathForCompare(path))
-        {
-            std::cerr << "[VLC] Play() ignorado, ruta bloqueada: " << path << "\n";
-            return;
-        }
+        std::cerr << "[VLC] Play() ignorado, ruta bloqueada: " << path << "\n";
+        return;
     }
 
     uint64_t myGen = ++m_LoadGeneration;
-    m_Loading.store(true, std::memory_order_relaxed);
 
     if (startMuted)
         m_Muted.store(true, std::memory_order_relaxed);
 
-    {
-        std::lock_guard<std::mutex> lock(m_WorkMutex);
-        m_PendingPath        = path;
-        m_PendingLoop        = loop;
-        m_PendingStartMuted  = startMuted;
-        m_PendingGeneration  = myGen;
-        m_HasPendingRequest  = true;
-    }
-    m_WorkCV.notify_one();
+    // Sincronico: se ejecuta ya mismo, en el hilo que llamo a Play(). No hay
+    // hilo de trabajo ni debounce: eso es justamente lo que introducia el
+    // retardo/entrecortado al cambiar de clip.
+    LoadAndPlay(path, loop, startMuted, myGen);
 }
 
 void VLCBasePlayer::BlockPath(const std::string& path)
 {
-    std::lock_guard<std::mutex> lock(m_WorkMutex);
     m_BlockedPath  = path;
     m_PathBlocked  = true;
 }
 
 void VLCBasePlayer::UnblockPath()
 {
-    std::lock_guard<std::mutex> lock(m_WorkMutex);
     m_PathBlocked = false;
     m_BlockedPath.clear();
-}
-
-void VLCBasePlayer::WorkerLoop()
-{
-    for (;;)
-    {
-        std::string path;
-        bool        loop       = false;
-        bool        startMuted = false;
-        uint64_t    generation = 0;
-
-        {
-            std::unique_lock<std::mutex> lock(m_WorkMutex);
-
-            m_WorkCV.wait(lock, [this] { return m_HasPendingRequest || m_ShuttingDown; });
-
-            if (m_ShuttingDown && !m_HasPendingRequest)
-                return;
-
-            for (;;)
-            {
-                uint64_t genAtWaitStart = m_LoadGeneration.load(std::memory_order_relaxed);
-                m_WorkCV.wait_for(lock, std::chrono::milliseconds(90));
-
-                if (m_ShuttingDown)
-                {
-                    m_HasPendingRequest = false;
-                    return;
-                }
-                if (m_LoadGeneration.load(std::memory_order_relaxed) == genAtWaitStart)
-                    break;
-            }
-
-            path                = m_PendingPath;
-            loop                = m_PendingLoop;
-            startMuted          = m_PendingStartMuted;
-            generation          = m_PendingGeneration;
-            m_HasPendingRequest = false;
-        }
-
-        LoadAndPlay(path, loop, startMuted, generation);
-        m_Loading.store(false, std::memory_order_relaxed);
-    }
 }
 
 void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*startMuted*/, uint64_t myGeneration)
@@ -506,6 +498,8 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
             return;
         }
 
+        // Detener primero, de forma sincrona, ANTES de cargar lo nuevo:
+        // evita correr dos pipelines de decode en paralelo.
         libvlc_media_player_stop(m_MediaPlayer);
         m_EndReached.store(false, std::memory_order_relaxed);
 
@@ -514,19 +508,13 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         m_Paused.store(false, std::memory_order_relaxed);
     }
 
-    libvlc_media_release(media);
+    libvlc_media_release(media); // el player ya tomo su propia referencia
 }
 
 void VLCBasePlayer::Stop()
 {
     ++m_LoadGeneration;
 
-    {
-        std::lock_guard<std::mutex> lock(m_WorkMutex);
-        m_HasPendingRequest = false;
-    }
-
-    m_Loading.store(false, std::memory_order_relaxed);
     m_EndReached.store(false, std::memory_order_relaxed);
 
     std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
@@ -542,6 +530,11 @@ bool VLCBasePlayer::ConsumeEndReached()
 void VLCBasePlayer::SetMute(bool mute)
 {
     m_Muted.store(mute, std::memory_order_relaxed);
+}
+
+void VLCBasePlayer::SetAudioActive(bool active)
+{
+    m_AudioActive.store(active, std::memory_order_relaxed);
 }
 
 void VLCBasePlayer::SetVolume(int volume)
@@ -603,31 +596,34 @@ void VLCBasePlayer::GetVideoSize(int& width, int& height)
     }
 }
 
-void VLCBasePlayer::UpdateTexture()
-{
-    if (!m_MediaPlayer || !m_VideoCtx) return;
-
-    auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
-    std::lock_guard<std::mutex> lock(ctx->mutex);
-
-    if (!ctx->dirty || !ctx->pixels || ctx->width == 0 || ctx->height == 0) return;
-
-    EnsureTexture(static_cast<int>(ctx->width), static_cast<int>(ctx->height));
-    glBindTexture(GL_TEXTURE_2D, m_TextureID);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
-                    static_cast<int>(ctx->width), static_cast<int>(ctx->height),
-                    GL_RGBA, GL_UNSIGNED_BYTE, ctx->pixels);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    ctx->dirty = false;
-}
-
 bool VLCBasePlayer::HasVideoFrame() const
 {
     if (!m_VideoCtx) return false;
     auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
     std::lock_guard<std::mutex> lock(ctx->mutex);
-    return ctx->dirty && ctx->pixels != nullptr && ctx->width > 0 && ctx->height > 0;
+    return ctx->dirty && ctx->frontBuf != nullptr && ctx->width > 0 && ctx->height > 0;
+}
+
+void VLCBasePlayer::UpdateTexture()
+{
+    if (!m_MediaPlayer || !m_VideoCtx) return;
+    auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
+
+    void*    pixelsToUpload = nullptr;
+    unsigned w = 0, h = 0;
+    {
+        std::lock_guard<std::mutex> lock(ctx->mutex);
+        if (!ctx->dirty || !ctx->frontBuf || ctx->width == 0 || ctx->height == 0) return;
+        pixelsToUpload = ctx->frontBuf;
+        w = ctx->width;
+        h = ctx->height;
+        ctx->dirty = false;
+    } // lock liberado antes de tocar GL: la subida a GL nunca bloquea al decoder
+
+    EnsureTexture(static_cast<int>(w), static_cast<int>(h));
+    glBindTexture(GL_TEXTURE_2D, m_TextureID);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices()
@@ -661,6 +657,8 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
         return;
     }
     auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+    // Lock-free: lee el pico acumulado y lo resetea a 0 en la misma
+    // operacion atomica, sin bloquear ni competir con el hilo de audio.
     left  = ctx->peakL.exchange(0.0f, std::memory_order_relaxed);
     right = ctx->peakR.exchange(0.0f, std::memory_order_relaxed);
 }

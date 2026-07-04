@@ -3,9 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <atomic>
-#include <thread>
 #include <mutex>
-#include <condition_variable>
 
 struct libvlc_instance_t;
 struct libvlc_media_player_t;
@@ -21,12 +19,21 @@ namespace ProyecThor::Core {
             std::string description;
         };
 
-        VLCBasePlayer(int decodeThreads = 0);
+        // useHardwareDecode controla si esta instancia usa el decodificador
+        // de hardware de la GPU (d3d11va) o decode por software. Se expone
+        // como parametro de construccion para poder diagnosticar contencion
+        // de sesiones de decode de hardware.
+        VLCBasePlayer(int decodeThreads = 0, bool useHardwareDecode = true);
         ~VLCBasePlayer();
 
         VLCBasePlayer(const VLCBasePlayer&)            = delete;
         VLCBasePlayer& operator=(const VLCBasePlayer&) = delete;
 
+        // NOTA: sincronico. Se ejecuta en el hilo que llama a Play(), sin
+        // hilo de fondo propio. Si el archivo tarda en abrir (disco lento,
+        // red, o resolucion de YouTube via yt-dlp), el hilo llamante se
+        // bloquea durante ese lapso. Es un evento puntual al cambiar de
+        // clip, no una carga sostenida por frame.
         void Play(const std::string& path, bool loop = false, bool startMuted = false);
         void Stop();
 
@@ -41,6 +48,11 @@ namespace ProyecThor::Core {
         void SetVolume(int volume);   // 0-200
         void SetSoftwareVolume(float percent);
 
+        // Corta la salida de audio real (HWAVEOUT) de raiz: el callback de
+        // audio de VLC retorna de inmediato sin tocar el dispositivo ni
+        // hacer busy-wait sobre los buffers.
+        void SetAudioActive(bool active);
+
         void SetPosition(float pos);
 
         int64_t GetTime() const;
@@ -50,22 +62,23 @@ namespace ProyecThor::Core {
         void  GetVideoSize(int& width, int& height);
         void  UpdateTexture();
 
-        // true si ya se decodifico al menos un frame de video real (no solo
-        // que VLC negocio el formato). Usado para saber cuando un
-        // reproductor en modo "standby" ya esta listo para volverse visible
-        // sin mostrar un frame negro.
+        // true si ya se decodifico al menos un frame de video real.
         bool HasVideoFrame() const;
 
         std::vector<AudioDevice> GetAvailableAudioDevices();
         void SetAudioDevice(const std::string& deviceId);
 
-        bool IsLoading() const { return m_Loading.load(std::memory_order_relaxed); }
+        // Sin hilo de fondo, la carga ya terminó cuando Play() retorna,
+        // asi que esto siempre es false. Se mantiene por compatibilidad
+        // con quien lo consulte (ej. BackgroundLayer).
+        bool IsLoading() const { return false; }
 
         bool ConsumeEndReached();
 
     private:
 
-        int m_DecodeThreads = 0;
+        int  m_DecodeThreads    = 0;
+        bool m_UseHardwareDecode = true;
 
         libvlc_instance_t*       m_Instance    = nullptr;
         libvlc_media_player_t*   m_MediaPlayer = nullptr;
@@ -78,24 +91,14 @@ namespace ProyecThor::Core {
         std::atomic<bool>  m_Muted{false};
         std::atomic<bool>  m_EndReached{false};
         std::atomic<bool>  m_Paused{false};
+        std::atomic<bool>  m_AudioActive{true};
         unsigned int m_TextureID = 0;
         int          m_VideoW    = 0;
         int          m_VideoH    = 0;
 
-        std::thread             m_WorkerThread;
-        mutable std::mutex      m_WorkMutex;
-        std::condition_variable m_WorkCV;
-        std::string             m_PendingPath;
-        bool                    m_PendingLoop       = false;
-        bool                    m_PendingStartMuted = false;
-        uint64_t                m_PendingGeneration = 0;
-        bool                    m_HasPendingRequest = false;
-        bool                    m_ShuttingDown      = false;
-
         bool                    m_PathBlocked       = false;
         std::string             m_BlockedPath;
 
-        std::atomic<bool>     m_Loading{false};
         std::atomic<uint64_t> m_LoadGeneration{0};
 
         void InitVLC();
@@ -103,7 +106,6 @@ namespace ProyecThor::Core {
         void EnsureTexture(int w, int h);
         void CreatePersistentPlayer();
 
-        void WorkerLoop();
         void LoadAndPlay(const std::string& path, bool loop, bool startMuted, uint64_t myGeneration);
 
         static void OnVlcEvent(const libvlc_event_t* evt, void* userData);
