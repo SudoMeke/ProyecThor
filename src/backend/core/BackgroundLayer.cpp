@@ -1,5 +1,6 @@
 #include "BackgroundLayer.h"
 #include <iostream>
+#include <chrono>
 #include <GL/glew.h>
 
 namespace ProyecThor::Core {
@@ -95,23 +96,59 @@ void main() {
             glBindTexture(GL_TEXTURE_2D, 0);
             glUseProgram(0);
         }
+
+        static double NowSeconds()
+        {
+            using namespace std::chrono;
+            return duration<double>(steady_clock::now().time_since_epoch()).count();
+        }
     } // anonymous namespace
+
+    VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
+    VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
+
+    void BackgroundLayer::PerformSwap()
+    {
+        VLCBasePlayer& oldActive = Active();
+        m_ActiveIsA = !m_ActiveIsA;
+        VLCBasePlayer& newActive = Active();
+
+        newActive.SetMute(m_TargetMuted);
+        newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        newActive.SetPause(false);
+
+        oldActive.SetMute(true);
+        oldActive.Stop();
+
+        m_SwapPending = false;
+    }
 
     void BackgroundLayer::Update()
     {
-        m_Player.UpdateTexture();
+        Active().UpdateTexture();
+
+        if (m_SwapPending)
+        {
+            VLCBasePlayer& standby = Standby();
+
+            bool ready    = standby.HasVideoFrame() && !standby.IsLoading();
+            bool timedOut = (NowSeconds() - m_PendingSwapStart) > 3.0;
+
+            if (ready || timedOut)
+                PerformSwap();
+        }
     }
 
     void BackgroundLayer::Render(int outputW, int outputH)
     {
         GLuint rawTex = static_cast<GLuint>(
-            reinterpret_cast<uintptr_t>(m_Player.GetTextureID()));
+            reinterpret_cast<uintptr_t>(Active().GetTextureID()));
 
         if (rawTex == 0)
             return;
 
         int srcW = 0, srcH = 0;
-        m_Player.GetVideoSize(srcW, srcH);
+        Active().GetVideoSize(srcW, srcH);
 
         if (srcW <= 0 || srcH <= 0)
             return;
@@ -207,28 +244,35 @@ void main() {
 
     void* BackgroundLayer::GetTextureID()
     {
-        return m_Player.GetTextureID();
+        return Active().GetTextureID();
     }
 
     VLCBasePlayer* BackgroundLayer::GetPlayer()
     {
-        return &m_Player;
+        return &Active();
     }
 
-void BackgroundLayer::SetVideo(const std::string& path)
-{
-    // loop SIEMPRE en false. Este es el unico punto del programa donde se
-    // carga un video de fondo (tanto la cola como el boton manual
-    // "TRANSMITIR" pasan por aqui). Pedirle loop=true a VLC hace que el
-    // clip se reinicie a nivel nativo y JAMAS dispare su evento de fin
-    // (libvlc_MediaPlayerEndReached) — esto era exactamente lo que hacia
-    // que la cola se quedara repitiendo el primer video sin avanzar nunca.
-    // Si se quiere loop manual de un solo clip (no de cola), eso se maneja
-    // en la UI escuchando ConsumeEndReached() y llamando SetPosition(0.0f),
-    // nunca aqui.
-    m_IsVideo = true;
-    m_Player.Play(path, false, true);
-}
+    void BackgroundLayer::SetVideo(const std::string& path)
+    {
+        m_IsVideo = true;
+
+        if (m_SwapPending || GetTextureID() != nullptr)
+        {
+            // Ya hay algo visible (o un swap en curso): precargar en
+            // standby y esperar a que tenga un frame real. El clip que ve
+            // el publico sigue reproduciendose sin interrupcion mientras
+            // tanto — cero congelamiento, cero corte de audio.
+            Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
+            m_SwapPending      = true;
+            m_PendingSwapStart = NowSeconds();
+        }
+        else
+        {
+            // No hay nada visible todavia: reproducir directo, no hay
+            // nada que proteger de un corte.
+            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+        }
+    }
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)
     {
@@ -236,48 +280,67 @@ void BackgroundLayer::SetVideo(const std::string& path)
         m_BgColor[0] = r;
         m_BgColor[1] = g;
         m_BgColor[2] = b;
-        m_Player.Stop();
+
+        m_SwapPending = false;
+        m_PlayerA.Stop();
+        m_PlayerB.Stop();
     }
-void* BackgroundLayer::GetProcessedTexture(int targetW, int targetH) {
-    GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(m_Player.GetTextureID()));
-    if (rawTex == 0 || targetW <= 0 || targetH <= 0) 
-        return nullptr;
 
-    if (!m_FSREnabled) 
-        return (void*)(uintptr_t)rawTex;
+    void* BackgroundLayer::GetProcessedTexture(int targetW, int targetH) {
+        GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Active().GetTextureID()));
+        if (rawTex == 0 || targetW <= 0 || targetH <= 0)
+            return nullptr;
 
-    int srcW = 0, srcH = 0;
-    m_Player.GetVideoSize(srcW, srcH);
-
-    if (srcW <= 0 || srcH <= 0 || (srcW >= targetW && srcH >= targetH)) 
-        return (void*)(uintptr_t)rawTex;
-
-    bool needReinit = (!m_FSR.IsInitialized() || 
-                       m_FSR.GetOutputW() != targetW || 
-                       m_FSR.GetOutputH() != targetH);
-
-    if (needReinit) {
-        if (m_FSR.Init(targetW, targetH)) {
-            m_FSR.SetSharpness(m_FSRSharpness);
-            m_FSR.SetEnabled(true);
-        } else {
-            m_FSREnabled = false;
+        if (!m_FSREnabled)
             return (void*)(uintptr_t)rawTex;
+
+        int srcW = 0, srcH = 0;
+        Active().GetVideoSize(srcW, srcH);
+
+        if (srcW <= 0 || srcH <= 0 || (srcW >= targetW && srcH >= targetH))
+            return (void*)(uintptr_t)rawTex;
+
+        bool needReinit = (!m_FSR.IsInitialized() ||
+                           m_FSR.GetOutputW() != targetW ||
+                           m_FSR.GetOutputH() != targetH);
+
+        if (needReinit) {
+            if (m_FSR.Init(targetW, targetH)) {
+                m_FSR.SetSharpness(m_FSRSharpness);
+                m_FSR.SetEnabled(true);
+            } else {
+                m_FSREnabled = false;
+                return (void*)(uintptr_t)rawTex;
+            }
         }
+
+        GLuint upscaled = m_FSR.Process(rawTex, srcW, srcH);
+        return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
     }
 
-    GLuint upscaled = m_FSR.Process(rawTex, srcW, srcH);
-    return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
-}
+    void BackgroundLayer::SetLiveVolume(int volume0to200)
+    {
+        m_TargetVolume = volume0to200;
+        Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+    }
+
+    void BackgroundLayer::SetLiveMute(bool mute)
+    {
+        m_TargetMuted = mute;
+        Active().SetMute(mute);
+        Active().SetVolume(mute ? 0 : m_TargetVolume);
+    }
 
     void BackgroundLayer::BlockPath(const std::string& path)
     {
-        m_Player.BlockPath(path);
+        m_PlayerA.BlockPath(path);
+        m_PlayerB.BlockPath(path);
     }
 
     void BackgroundLayer::UnblockPath()
     {
-        m_Player.UnblockPath();
+        m_PlayerA.UnblockPath();
+        m_PlayerB.UnblockPath();
     }
 
 } // namespace ProyecThor::Core

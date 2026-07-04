@@ -1,4 +1,10 @@
 #include "VLCBasePlayer.h"
+
+#ifdef _WIN32
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
 #include <vlc/vlc.h>
 #include <GL/glew.h>
 #include <iostream>
@@ -45,11 +51,6 @@ std::string GetDirectYoutubeURL(const std::string& youtubeURL)
     return result;
 }
 
-// Normaliza una ruta para comparacion: pasa todo a minusculas y
-// reemplaza backslashes por forward slashes. Se usa unicamente para
-// decidir si una ruta solicitada en Play() coincide con la ruta
-// bloqueada por BlockPath(), ya que en este proyecto conviven rutas
-// mezcladas (por ejemplo "C:\Users\...\assets/videos/archivo.mp4").
 std::string NormalizePathForCompare(const std::string& path)
 {
     std::string result = path;
@@ -59,13 +60,6 @@ std::string NormalizePathForCompare(const std::string& path)
     return result;
 }
 
-// Actualiza un maximo atomico sin locks. Se usa para los picos de audio,
-// que antes se protegian con un std::mutex compartido entre el hilo de
-// audio en tiempo real (vlc_audio_play) y el hilo de UI (GetAudioLevels,
-// llamado cada frame para el VU meter). Ese mutex generaba contencion
-// innecesaria justo cuando la UI esta ocupada (por ejemplo, cambiando de
-// video), lo cual en una maquina de bajos recursos se traduce en cortes
-// audibles evitables.
 static inline void AtomicUpdateMax(std::atomic<float>& target, float value)
 {
     float current = target.load(std::memory_order_relaxed);
@@ -84,13 +78,9 @@ struct VLCAudioCtx {
 
 #ifdef _WIN32
     HWAVEOUT hWaveOut = nullptr;
-    static const int NUM_BUFFERS = 4;
+    static const int NUM_BUFFERS = 8;
     WAVEHDR waveHeaders[NUM_BUFFERS] = {};
     int currentHeader = 0;
-
-    // true una vez que waveOutOpen tuvo exito. El dispositivo se abre UNA
-    // sola vez por reproductor y se mantiene abierto durante toda su vida,
-    // sin importar cuantos clips se reproduzcan despues.
     bool deviceInitialized = false;
 #endif
 };
@@ -111,13 +101,6 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
     *channels = 2;
 
 #ifdef _WIN32
-    // El formato de salida es siempre el mismo (S16N, 44100, estereo), asi
-    // que si el dispositivo ya fue abierto antes no hay absolutamente nada
-    // que reconfigurar. libVLC llama a este callback en cada cambio de
-    // clip: reabrir aqui el dispositivo (waveOutOpen) era la causa real
-    // del microcorte audible en cualquier otro audio sonando en paralelo,
-    // ya que abrir/cerrar un HWAVEOUT renegocia el pipeline de audio
-    // compartido del sistema operativo.
     if (ctx->deviceInitialized)
         return 0;
 
@@ -151,24 +134,11 @@ static void vlc_audio_cleanup(void* opaque)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
 #ifdef _WIN32
-    // Ya NO se cierra el dispositivo aqui. libVLC invoca este callback en
-    // cada cambio de clip (cuando el reproductor persistente recibe un
-    // medio nuevo), y cerrarlo con waveOutClose implicaba reabrirlo poco
-    // despues en vlc_audio_setup: dos operaciones de hardware costosas por
-    // cada cambio de video. Ahora solo se vacia la cola de buffers
-    // pendientes con waveOutReset, que detiene el sonido del clip anterior
-    // de inmediato pero deja el handle del dispositivo intacto. El cierre
-    // real solo ocurre cuando el reproductor completo se destruye, ver
-    // vlc_audio_destroy_device().
     if (ctx->hWaveOut)
         waveOutReset(ctx->hWaveOut);
 #endif
 }
 
-// Libera de verdad el dispositivo de audio nativo. Se llama unicamente
-// desde VLCBasePlayer::DestroyVLC(), NUNCA desde el callback de libVLC,
-// para que abrir/cerrar el HWAVEOUT ocurra como maximo una vez por
-// reproductor y no en cada cambio de clip.
 static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
 {
 #ifdef _WIN32
@@ -297,14 +267,17 @@ VLCBasePlayer::~VLCBasePlayer()
 void VLCBasePlayer::InitVLC()
 {
     std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
+
     const char* args[] = {
         "--no-xlib",
         "--quiet",
         "--no-osd",
         "--no-video-title-show",
-        "--avcodec-hw=none",
+        "--avcodec-hw=d3d11va",
         threadsArg.c_str(),
-        "--file-caching=400",
+        "--file-caching=300",
+        "--clock-jitter=0",
+        "--clock-synchro=0",
     };
     m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
     if (!m_Instance)
@@ -313,7 +286,6 @@ void VLCBasePlayer::InitVLC()
 
 void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
 {
-    // Corre en un hilo interno de libVLC: solo tocar el atomico.
     auto* self = static_cast<VLCBasePlayer*>(userData);
     if (evt->type == libvlc_MediaPlayerEndReached ||
         evt->type == libvlc_MediaPlayerEncounteredError)
@@ -353,18 +325,8 @@ void VLCBasePlayer::CreatePersistentPlayer()
 
 void VLCBasePlayer::DestroyVLC()
 {
-    Stop(); // cancela pedidos pendientes y detiene el medio actual
+    Stop();
 
-    // Apagar el hilo de trabajo persistente ANTES de liberar cualquier
-    // recurso de libVLC. Esto garantiza que, cuando lleguemos a borrar
-    // m_MediaPlayer/m_VideoCtx/m_AudioCtx mas abajo, no exista ningun
-    // hilo en segundo plano que todavia pueda estar tocando 'this'.
-    // Antes, cada Play() creaba un hilo nuevo y desprendia (detach) el
-    // anterior si seguia vivo: esos hilos huerfanos podian seguir
-    // ejecutandose despues de que el objeto ya estuviera destruido
-    // (use-after-free), lo cual explica inestabilidad seria bajo uso
-    // intensivo (por ejemplo, recorrer la biblioteca rapido activando
-    // muchos previews seguidos).
     {
         std::lock_guard<std::mutex> lock(m_WorkMutex);
         m_ShuttingDown = true;
@@ -375,8 +337,6 @@ void VLCBasePlayer::DestroyVLC()
 
     if (m_MediaPlayer)
     {
-        // release() garantiza que los callbacks de audio/video terminaron
-        // antes de retornar — solo entonces es seguro borrar los ctx.
         libvlc_media_player_release(m_MediaPlayer);
         m_MediaPlayer = nullptr;
     }
@@ -390,8 +350,6 @@ void VLCBasePlayer::DestroyVLC()
     if (m_AudioCtx)
     {
         auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-        // Aqui, y solo aqui, se cierra de verdad el dispositivo de audio
-        // nativo (una vez por reproductor, al destruirlo).
         vlc_audio_destroy_device(ctx);
         delete ctx;
         m_AudioCtx = nullptr;
@@ -429,7 +387,7 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
         std::lock_guard<std::mutex> lock(m_WorkMutex);
         if (m_PathBlocked && NormalizePathForCompare(m_BlockedPath) == NormalizePathForCompare(path))
         {
-            std::cerr << "[VLC] Play() ignorado, ruta bloqueada para eliminacion: " << path << "\n";
+            std::cerr << "[VLC] Play() ignorado, ruta bloqueada: " << path << "\n";
             return;
         }
     }
@@ -440,12 +398,6 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
     if (startMuted)
         m_Muted.store(true, std::memory_order_relaxed);
 
-    // No se crea ningun hilo aqui. Solo se deja el pedido mas reciente
-    // anotado y se despierta al hilo de trabajo persistente. Si el
-    // usuario dispara varios Play() seguidos (hover rapido sobre la
-    // biblioteca, cambios de preview), esto es practicamente gratis: son
-    // solo escrituras protegidas por mutex, nada de creacion de hilos ni
-    // de trabajo real hasta que el hilo de trabajo decide procesar.
     {
         std::lock_guard<std::mutex> lock(m_WorkMutex);
         m_PendingPath        = path;
@@ -488,14 +440,6 @@ void VLCBasePlayer::WorkerLoop()
             if (m_ShuttingDown && !m_HasPendingRequest)
                 return;
 
-            // Debounce: mientras sigan llegando pedidos nuevos (el usuario
-            // sigue moviendo el mouse sobre la biblioteca), seguimos
-            // esperando y reiniciando el temporizador. Solo procesamos
-            // cuando pasan 90ms sin que la generacion cambie, es decir,
-            // cuando el usuario realmente se detuvo en un item. Esto evita
-            // abrir/decodificar videos que el usuario ya de todas formas
-            // dejo atras, que era exactamente el trabajo desperdiciado que
-            // saturaba CPU/GPU y disparaba el icono de carga permanente.
             for (;;)
             {
                 uint64_t genAtWaitStart = m_LoadGeneration.load(std::memory_order_relaxed);
@@ -528,17 +472,11 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
     if (finalPath.find("youtube.com") != std::string::npos ||
         finalPath.find("youtu.be")    != std::string::npos)
     {
-        std::cout << "[yt-dlp] Resolviendo URL de YouTube...\n";
         std::string direct = GetDirectYoutubeURL(finalPath);
         if (!direct.empty())
-        {
             finalPath = direct;
-            std::cout << "[yt-dlp] URL directa obtenida.\n";
-        }
         else
-        {
             std::cerr << "[yt-dlp] Fallo al resolver la URL.\n";
-        }
     }
 
     if (m_LoadGeneration.load(std::memory_order_relaxed) != myGeneration)
@@ -568,15 +506,7 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
             return;
         }
 
-        // Detener primero, de forma sincrona, ANTES de cargar lo nuevo.
-        // Esto evita correr dos pipelines de decode en paralelo (la causa
-        // raiz de la contencion de CPU que producia el microcorte de
-        // audio y los "decode_slice_header error" en la version anterior).
         libvlc_media_player_stop(m_MediaPlayer);
-
-        // Limpiar la bandera de fin ANTES de asignar el medio nuevo: si
-        // quedaba un EndReached pendiente del clip anterior, no debe
-        // confundirse con el clip que recien empieza.
         m_EndReached.store(false, std::memory_order_relaxed);
 
         libvlc_media_player_set_media(m_MediaPlayer, media);
@@ -584,19 +514,13 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         m_Paused.store(false, std::memory_order_relaxed);
     }
 
-    libvlc_media_release(media); // el player ya tomo su propia referencia
-
-    std::cout << "[VLC] Reproduciendo: " << finalPath << "\n";
+    libvlc_media_release(media);
 }
 
 void VLCBasePlayer::Stop()
 {
     ++m_LoadGeneration;
 
-    // Descarta cualquier pedido pendiente que el hilo de trabajo todavia
-    // no haya empezado a procesar. No se hace join() del hilo aqui: el
-    // hilo de trabajo es persistente y solo se une (join) una vez, en
-    // DestroyVLC(), al final de la vida del objeto.
     {
         std::lock_guard<std::mutex> lock(m_WorkMutex);
         m_HasPendingRequest = false;
@@ -698,6 +622,14 @@ void VLCBasePlayer::UpdateTexture()
     ctx->dirty = false;
 }
 
+bool VLCBasePlayer::HasVideoFrame() const
+{
+    if (!m_VideoCtx) return false;
+    auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    return ctx->dirty && ctx->pixels != nullptr && ctx->width > 0 && ctx->height > 0;
+}
+
 std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices()
 {
     std::vector<AudioDevice> devices;
@@ -729,8 +661,6 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
         return;
     }
     auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-    // Lock-free: lee el pico acumulado y lo resetea a 0 en la misma
-    // operacion atomica, sin bloquear ni competir con el hilo de audio.
     left  = ctx->peakL.exchange(0.0f, std::memory_order_relaxed);
     right = ctx->peakR.exchange(0.0f, std::memory_order_relaxed);
 }

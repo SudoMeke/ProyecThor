@@ -11,20 +11,6 @@
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
 
-// =============================================================================
-//  MonitorLiveControls.cpp
-//  Panel de controles Live (PGM): deteccion de fin de clip, transporte,
-//  volumen y medidores VU.
-//
-//  IMPORTANTE: m_LivePlaying ya NO se asigna a mano en ningun click. Se
-//  recalcula SIEMPRE, al principio de esta funcion, leyendo el estado real
-//  de pausa del reproductor (bg->IsPaused()). Antes existian dos fuentes de
-//  verdad distintas (este flag puesto a mano aqui, y MonitorQueue.cpp
-//  pisandolo cada frame con m_QueueEngine.IsActive()) que competian entre
-//  si y dejaban el boton de play/pausa "pegado". Ahora solo hay una fuente
-//  de verdad: el reproductor mismo.
-// =============================================================================
-
 namespace ProyecThor::UI {
 
 namespace MT = MonitorTheme;
@@ -156,8 +142,9 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
             if (m_LivePlaying) {
                 bg->SetPause(true);
             } else {
-                bg->SetMute(m_LiveMuted);
-                bg->SetVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+                Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
+                Core::PresentationCore::Get().SetLiveVolume(
+                    m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
                 bg->SetPause(false);
                 m_PreviewPlaying = false;
             }
@@ -181,9 +168,9 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
 
     if (DrawIconButton(volIcon, 16.0f, volBtnBg, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {volBtnW, btnH}, m_LiveMuted)) {
         m_LiveMuted = !m_LiveMuted;
-        if (bg && m_LivePlaying) {
-            bg->SetMute(m_LiveMuted);
-            bg->SetVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+        if (m_LivePlaying) {
+            Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
+            Core::PresentationCore::Get().SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
         }
     }
     ImGui::PopID();
@@ -193,9 +180,9 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
     ImVec4 slGrab = isDanger ? ImVec4(0.92f, 0.20f, 0.20f, 1.0f) : MT::k_LiveGrab;
     ImVec4 slAct  = isDanger ? ImVec4(1.00f, 0.30f, 0.30f, 1.0f) : ImVec4(MT::k_LiveGrab.x * 1.1f, MT::k_LiveGrab.y * 1.1f, MT::k_LiveGrab.z * 1.1f, 1.0f);
 
-    if (BMSlider("##vol_l", &m_LiveVolume, 0.0f, 2.0f, "", slBg, slGrab, slAct, sliderW)) {
-        if (bg && m_LivePlaying) {
-            bg->SetVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+   if (BMSlider("##vol_l", &m_LiveVolume, 0.0f, 2.0f, "", slBg, slGrab, slAct, sliderW)) {
+        if (m_LivePlaying) {
+            Core::PresentationCore::Get().SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
         }
     }
 

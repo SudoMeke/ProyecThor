@@ -4,12 +4,12 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <cstring>
 #include "backend/settings/SettingsManager.h"
 #include <filesystem>
 #include <algorithm>
 #include "AppPaths.h"
 #include <fstream>
-#include <sstream>
 #include <windows.h>
 #include <shlobj.h>
 #include "NetworkStreamServer.h"
@@ -64,11 +64,6 @@ namespace ProyecThor::Core {
         ++m_StreamVersion;
     }
 
-    // ── Nota rápida SOLO LAN ─────────────────────────────────────────────
-    // A propósito NO toca currentText/showText/isProjecting: eso es lo que
-    // usa la pantalla principal/proyector. Este texto vive aparte y solo lo
-    // consume el SnapshotProvider de red (ver ToggleNetworkStream más abajo),
-    // por lo que jamás se dibuja localmente.
     void PresentationCore::SetLiveQuickNoteLAN(const std::string& text) {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.lanQuickNoteText = text;
@@ -87,21 +82,23 @@ namespace ProyecThor::Core {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_State;
     }
-void* PresentationCore::GetPreviewTexture() {
-    return m_Impl ? m_Impl->preview.GetTextureID() : nullptr;
-}
 
-VLCBasePlayer* PresentationCore::GetPreviewPlayer() {
-    return m_Impl ? m_Impl->preview.GetPlayer() : nullptr;
-}
+    void* PresentationCore::GetPreviewTexture() {
+        return m_Impl ? m_Impl->preview.GetTextureID() : nullptr;
+    }
 
-void PresentationCore::SetPreviewMedia(const std::string& path) {
-    if (m_Impl) m_Impl->preview.SetVideo(path);
-}
+    VLCBasePlayer* PresentationCore::GetPreviewPlayer() {
+        return m_Impl ? m_Impl->preview.GetPlayer() : nullptr;
+    }
 
-void PresentationCore::StopPreviewMedia() {
-    if (m_Impl) m_Impl->preview.SetSolidColor(0.0f, 0.0f, 0.0f); // internamente hace Stop()
-}
+    void PresentationCore::SetPreviewMedia(const std::string& path) {
+        if (m_Impl) m_Impl->preview.SetVideo(path);
+    }
+
+    void PresentationCore::StopPreviewMedia() {
+        if (m_Impl) m_Impl->preview.SetSolidColor(0.0f, 0.0f, 0.0f);
+    }
+
     void* PresentationCore::GetProcessedBackgroundTexture(int targetW, int targetH) {
         return m_Impl ? m_Impl->background.GetProcessedTexture(targetW, targetH) : nullptr;
     }
@@ -140,7 +137,7 @@ void PresentationCore::StopPreviewMedia() {
         if (m_Impl) {
             m_Impl->background.Update();
             m_Impl->overlay.Update();
-             m_Impl->preview.Update();
+            m_Impl->preview.Update();
         }
     }
 
@@ -157,8 +154,6 @@ void PresentationCore::StopPreviewMedia() {
     }
 
     void PresentationCore::CreateProjectorWindow() {
-        std::cout << "[Projector] Modo integrado: no se crea ventana nativa secundaria.\n";
-
         int targetIndex = ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.targetMonitor;
         if (targetIndex < 0) {
             int monitorCount = 0;
@@ -188,7 +183,8 @@ void PresentationCore::StopPreviewMedia() {
         if (m_Impl)
             m_Impl->background.SetVideo(path);
     }
-void PresentationCore::StopBackgroundMedia() {
+
+    void PresentationCore::StopBackgroundMedia() {
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
             m_State.bgPath     = "";
@@ -208,6 +204,7 @@ void PresentationCore::StopBackgroundMedia() {
     void PresentationCore::UnblockBackgroundPath() {
         if (m_Impl) m_Impl->background.UnblockPath();
     }
+
     void PresentationCore::SetLayer0_Color(float r, float g, float b) {
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -295,11 +292,8 @@ void PresentationCore::StopBackgroundMedia() {
     }
 
     void PresentationCore::SetTargetMonitor(int index) {
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_State.targetMonitorIndex = index;
-        }
-        std::cout << "[Projector] Monitor objetivo: " << index << "\n";
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.targetMonitorIndex = index;
     }
 
     void PresentationCore::SetProjectorSize(int w, int h) {
@@ -341,10 +335,13 @@ void PresentationCore::StopBackgroundMedia() {
             std::lock_guard<std::mutex> lock(m_Mutex);
             m_State.liveVolume = volume;
         }
-        if (m_Impl) {
-            VLCBasePlayer* player = m_Impl->background.GetPlayer();
-            if (player) player->SetVolume(volume);
-        }
+        if (m_Impl)
+            m_Impl->background.SetLiveVolume(volume);
+    }
+
+    void PresentationCore::SetLiveMute(bool mute) {
+        if (m_Impl)
+            m_Impl->background.SetLiveMute(mute);
     }
 
     void PresentationCore::LoadFontsIntoImGui() {
@@ -392,225 +389,187 @@ void PresentationCore::StopBackgroundMedia() {
             m_ImGuiFonts[fontName] = font;
     }
 
-// =============================================================================
-//  Helpers privados de disco
-// =============================================================================
-
-// Devuelve la ruta al directorio themes/ en AppData — mismo que LayersStyleTab
-static std::string ThemesDirPath()
-{
-    wchar_t buf[MAX_PATH] = {};
-    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
-    std::filesystem::path dir =
-        std::filesystem::path(buf) / "ProyecThor" / "themes";
-    std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
-    return dir.string();
-}
-
-// Lee un archivo .theme del disco y rellena un SavedStyle
-static bool LoadThemeFromDisk(const std::string& themesDir,
-                               const std::string& name,
-                               SavedStyle& out)
-{
-    std::filesystem::path p =
-        std::filesystem::path(themesDir) / (name + ".theme");
-    std::ifstream f(p);
-    if (!f.is_open()) return false;
-
-    out      = SavedStyle{};
-    out.name = name;
-
-    std::string line;
-    while (std::getline(f, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        auto sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        std::string k = line.substr(0, sep);
-        std::string v = line.substr(sep + 1);
-
-        if      (k == "textSize")   out.size      = std::stof(v);
-        else if (k == "textAlign")  out.hAlign    = std::stoi(v);
-        else if (k == "vAlign")     out.vAlign    = std::stoi(v);
-        else if (k == "autoScale")  out.autoScale = (std::stoi(v) != 0);
-        else if (k == "font")       out.fontName  = v;
-        else if (k == "textColor")
-            sscanf(v.c_str(), "%f,%f,%f,%f",
-                   &out.color[0], &out.color[1],
-                   &out.color[2], &out.color[3]);
-        else if (k == "margins")
-            sscanf(v.c_str(), "%f,%f,%f,%f",
-                   &out.margins[0], &out.margins[1],
-                   &out.margins[2], &out.margins[3]);
+    static std::string ThemesDirPath()
+    {
+        wchar_t buf[MAX_PATH] = {};
+        SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
+        std::filesystem::path dir =
+            std::filesystem::path(buf) / "ProyecThor" / "themes";
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        return dir.string();
     }
-    return true;
-}
 
-// =============================================================================
-//  SaveStyle — escribe en disco en formato compatible con LayersStyleTab
-// =============================================================================
-void PresentationCore::SaveStyle(const SavedStyle& style)
-{
-    std::string dir = ThemesDirPath();
-    std::ofstream f(std::filesystem::path(dir) / (style.name + ".theme"));
-    if (!f.is_open()) return;
+    static bool LoadThemeFromDisk(const std::string& themesDir,
+                                   const std::string& name,
+                                   SavedStyle& out)
+    {
+        std::filesystem::path p =
+            std::filesystem::path(themesDir) / (name + ".theme");
+        std::ifstream f(p);
+        if (!f.is_open()) return false;
 
-    f << "textColor="     << style.color[0]   << "," << style.color[1]   << ","
-                          << style.color[2]   << "," << style.color[3]   << "\n";
-    f << "textSize="      << style.size       << "\n";
-    f << "textAlign="     << style.hAlign     << "\n";
-    f << "vAlign="        << style.vAlign     << "\n";
-    f << "margins="       << style.margins[0] << "," << style.margins[1] << ","
-                          << style.margins[2] << "," << style.margins[3] << "\n";
-    f << "autoScale="     << (style.autoScale ? 1 : 0) << "\n";
-    f << "font="          << style.fontName   << "\n";
-    // Campos extra para compatibilidad con LayersStyleTab
-    f << "refTextSize="    << style.size * 0.46f << "\n";
-    f << "verseTextSize="  << style.size         << "\n";
-    f << "songTextAlign="  << style.hAlign       << "\n";
-    f << "songVAlign="     << style.vAlign       << "\n";
-    f << "bibleTextAlign=" << style.hAlign       << "\n";
-    f << "bibleVAlign="    << style.vAlign       << "\n";
+        out      = SavedStyle{};
+        out.name = name;
 
-    // Mantiene el mapa en memoria para acceso rápido durante la sesión
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    m_SavedStyles[style.name] = style;
-}
+        std::string line;
+        while (std::getline(f, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            auto sep = line.find('=');
+            if (sep == std::string::npos) continue;
+            std::string k = line.substr(0, sep);
+            std::string v = line.substr(sep + 1);
 
-// =============================================================================
-//  DeleteStyle — elimina el archivo .theme del disco
-// =============================================================================
-void PresentationCore::DeleteStyle(const std::string& name)
-{
-    std::error_code ec;
-    std::filesystem::remove(
-        std::filesystem::path(ThemesDirPath()) / (name + ".theme"), ec);
+            if      (k == "textSize")   out.size      = std::stof(v);
+            else if (k == "textAlign")  out.hAlign    = std::stoi(v);
+            else if (k == "vAlign")     out.vAlign    = std::stoi(v);
+            else if (k == "autoScale")  out.autoScale = (std::stoi(v) != 0);
+            else if (k == "font")       out.fontName  = v;
+            else if (k == "textColor")
+                sscanf(v.c_str(), "%f,%f,%f,%f",
+                       &out.color[0], &out.color[1],
+                       &out.color[2], &out.color[3]);
+            else if (k == "margins")
+                sscanf(v.c_str(), "%f,%f,%f,%f",
+                       &out.margins[0], &out.margins[1],
+                       &out.margins[2], &out.margins[3]);
+        }
+        return true;
+    }
 
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    m_SavedStyles.erase(name);
-}
+    void PresentationCore::SaveStyle(const SavedStyle& style)
+    {
+        std::string dir = ThemesDirPath();
+        std::ofstream f(std::filesystem::path(dir) / (style.name + ".theme"));
+        if (!f.is_open()) return;
 
-// =============================================================================
-//  GetSavedStyleNames — lee el directorio themes/ en disco
-// =============================================================================
-std::vector<std::string> PresentationCore::GetSavedStyleNames() const
-{
-    std::string dir = ThemesDirPath();
-    std::vector<std::string> names;
-    try {
-        for (const auto& e : std::filesystem::directory_iterator(dir))
-            if (e.path().extension() == ".theme")
-                names.push_back(e.path().stem().string());
-    } catch (...) {}
-    std::sort(names.begin(), names.end());
-    return names;
-}
+        f << "textColor="     << style.color[0]   << "," << style.color[1]   << ","
+                              << style.color[2]   << "," << style.color[3]   << "\n";
+        f << "textSize="      << style.size       << "\n";
+        f << "textAlign="     << style.hAlign     << "\n";
+        f << "vAlign="        << style.vAlign     << "\n";
+        f << "margins="       << style.margins[0] << "," << style.margins[1] << ","
+                              << style.margins[2] << "," << style.margins[3] << "\n";
+        f << "autoScale="     << (style.autoScale ? 1 : 0) << "\n";
+        f << "font="          << style.fontName   << "\n";
+        f << "refTextSize="    << style.size * 0.46f << "\n";
+        f << "verseTextSize="  << style.size         << "\n";
+        f << "songTextAlign="  << style.hAlign       << "\n";
+        f << "songVAlign="     << style.vAlign       << "\n";
+        f << "bibleTextAlign=" << style.hAlign       << "\n";
+        f << "bibleVAlign="    << style.vAlign       << "\n";
 
-// =============================================================================
-//  GetSavedStyle — lee el archivo .theme del disco
-// =============================================================================
-bool PresentationCore::GetSavedStyle(const std::string& name, SavedStyle& outStyle) const
-{
-    // Primero intenta el mapa en memoria (más rápido, válido en la sesión actual)
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_SavedStyles[style.name] = style;
+    }
+
+    void PresentationCore::DeleteStyle(const std::string& name)
+    {
+        std::error_code ec;
+        std::filesystem::remove(
+            std::filesystem::path(ThemesDirPath()) / (name + ".theme"), ec);
+
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_SavedStyles.erase(name);
+    }
+
+    std::vector<std::string> PresentationCore::GetSavedStyleNames() const
+    {
+        std::string dir = ThemesDirPath();
+        std::vector<std::string> names;
+        try {
+            for (const auto& e : std::filesystem::directory_iterator(dir))
+                if (e.path().extension() == ".theme")
+                    names.push_back(e.path().stem().string());
+        } catch (...) {}
+        std::sort(names.begin(), names.end());
+        return names;
+    }
+
+    bool PresentationCore::GetSavedStyle(const std::string& name, SavedStyle& outStyle) const
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            auto it = m_SavedStyles.find(name);
+            if (it != m_SavedStyles.end()) {
+                outStyle = it->second;
+                return true;
+            }
+        }
+        return LoadThemeFromDisk(ThemesDirPath(), name, outStyle);
+    }
+
+    static std::string CategoryStylesFilePath()
+    {
+        return ProyecThor::GetAssetsPath() + "/../category_styles.ini";
+    }
+
+    static void ApplySavedStyleToState(const SavedStyle& s, PresentationState& state,
+                                        std::string& activeFontName)
+    {
+        state.textSize      = s.size;
+        state.textAlignment = s.hAlign;
+        state.vAlignment    = s.vAlign;
+        state.autoScale     = s.autoScale;
+        activeFontName      = s.fontName;
+        state.selectedFont  = s.fontName;
+        for (int i = 0; i < 4; i++) {
+            state.textColor[i] = s.color[i];
+            state.margins[i]   = s.margins[i];
+        }
+        state.songTextAlignment  = s.hAlign;
+        state.songVAlignment     = s.vAlign;
+        state.bibleTextAlignment = s.hAlign;
+        state.bibleVAlignment    = s.vAlign;
+    }
+
+    void PresentationCore::SetCategoryDefaultStyle(ItemType category, const std::string& styleName)
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_CategoryDefaultStyles[static_cast<int>(category)] = styleName;
+        }
+        SaveCategoryStyles();
+    }
+
+    std::string PresentationCore::GetCategoryDefaultStyle(ItemType category) const
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        auto it = m_SavedStyles.find(name);
-        if (it != m_SavedStyles.end()) {
-            outStyle = it->second;
-            return true;
+        auto it = m_CategoryDefaultStyles.find(static_cast<int>(category));
+        if (it != m_CategoryDefaultStyles.end())
+            return it->second;
+        return {};
+    }
+
+    void PresentationCore::LoadCategoryStyles()
+    {
+        std::ifstream f(CategoryStylesFilePath());
+        if (!f.is_open()) return;
+
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::string line;
+        while (std::getline(f, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            auto sep = line.find('=');
+            if (sep == std::string::npos) continue;
+            int         key = std::stoi(line.substr(0, sep));
+            std::string val = line.substr(sep + 1);
+            if (!val.empty())
+                m_CategoryDefaultStyles[key] = val;
         }
     }
-    // Si no está en memoria (arranque en frío), lee desde disco
-    return LoadThemeFromDisk(ThemesDirPath(), name, outStyle);
-}
 
-// =============================================================================
-//  Helpers privados de estado
-// =============================================================================
-
-static std::string CategoryStylesFilePath()
-{
-    return ProyecThor::GetAssetsPath() + "/../category_styles.ini";
-}
-
-static void ApplySavedStyleToState(const SavedStyle& s, PresentationState& state,
-                                    std::string& activeFontName)
-{
-    state.textSize      = s.size;
-    state.textAlignment = s.hAlign;
-    state.vAlignment    = s.vAlign;
-    state.autoScale     = s.autoScale;
-    activeFontName      = s.fontName;
-    state.selectedFont  = s.fontName;
-    for (int i = 0; i < 4; i++) {
-        state.textColor[i] = s.color[i];
-        state.margins[i]   = s.margins[i];
-    }
-    state.songTextAlignment  = s.hAlign;
-    state.songVAlignment     = s.vAlign;
-    state.bibleTextAlignment = s.hAlign;
-    state.bibleVAlignment    = s.vAlign;
-}
-
-// =============================================================================
-//  SetCategoryDefaultStyle
-// =============================================================================
-void PresentationCore::SetCategoryDefaultStyle(ItemType category, const std::string& styleName)
-{
+    void PresentationCore::SaveCategoryStyles() const
     {
+        std::ofstream f(CategoryStylesFilePath());
+        if (!f.is_open()) return;
+
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_CategoryDefaultStyles[static_cast<int>(category)] = styleName;
+        for (const auto& pair : m_CategoryDefaultStyles) {
+            if (!pair.second.empty())
+                f << pair.first << "=" << pair.second << "\n";
+        }
     }
-    SaveCategoryStyles();
-}
-
-// =============================================================================
-//  GetCategoryDefaultStyle
-// =============================================================================
-std::string PresentationCore::GetCategoryDefaultStyle(ItemType category) const
-{
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    auto it = m_CategoryDefaultStyles.find(static_cast<int>(category));
-    if (it != m_CategoryDefaultStyles.end())
-        return it->second;
-    return {};
-}
-
-// =============================================================================
-//  LoadCategoryStyles
-// =============================================================================
-void PresentationCore::LoadCategoryStyles()
-{
-    std::ifstream f(CategoryStylesFilePath());
-    if (!f.is_open()) return;
-
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    std::string line;
-    while (std::getline(f, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        auto sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        int         key = std::stoi(line.substr(0, sep));
-        std::string val = line.substr(sep + 1);
-        if (!val.empty())
-            m_CategoryDefaultStyles[key] = val;
-    }
-}
-
-// =============================================================================
-//  SaveCategoryStyles
-// =============================================================================
-void PresentationCore::SaveCategoryStyles() const
-{
-    std::ofstream f(CategoryStylesFilePath());
-    if (!f.is_open()) return;
-
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    for (const auto& pair : m_CategoryDefaultStyles) {
-        if (!pair.second.empty())
-            f << pair.first << "=" << pair.second << "\n";
-    }
-}
 
     void PresentationCore::SyncFontListFromDisk(std::vector<std::string>& outList) {
         outList.clear();
@@ -645,331 +604,303 @@ void PresentationCore::SaveCategoryStyles() const
         return nullptr;
     }
 
-// =============================================================================
-//  ResolveFontFilePath — busca <assets>/fonts/<fontName>.{ttf,otf,ttc}
-// =============================================================================
-std::string PresentationCore::ResolveFontFilePath(const std::string& fontName) const
-{
-    if (fontName.empty() || fontName == "Predeterminada") return "";
-
-    std::string fontsDir = ProyecThor::GetAssetsPath() + "/fonts";
-    for (const char* ext : { ".ttf", ".otf", ".ttc" }) {
-        std::filesystem::path candidate =
-            std::filesystem::path(fontsDir) / (fontName + ext);
-        std::error_code ec;
-        if (std::filesystem::exists(candidate, ec))
-            return candidate.string();
-    }
-    return "";
-}
-
-// =============================================================================
-//  GetActiveFontFilePath — version publica, usada por el FontPathProvider
-// =============================================================================
-std::string PresentationCore::GetActiveFontFilePath() const
-{
-    std::string fontName;
+    std::string PresentationCore::ResolveFontFilePath(const std::string& fontName) const
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        fontName = m_ActiveFontName;
-    }
-    return ResolveFontFilePath(fontName);
-}
+        if (fontName.empty() || fontName == "Predeterminada") return "";
 
-// =============================================================================
-//  SetSelection — aplica el estilo por defecto de la categoría leyendo disco
-// =============================================================================
-void PresentationCore::SetSelection(const LibrarySelection& selection)
-{
-    // Primero guardamos la selección bajo el lock
+        std::string fontsDir = ProyecThor::GetAssetsPath() + "/fonts";
+        for (const char* ext : { ".ttf", ".otf", ".ttc" }) {
+            std::filesystem::path candidate =
+                std::filesystem::path(fontsDir) / (fontName + ext);
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec))
+                return candidate.string();
+        }
+        return "";
+    }
+
+    std::string PresentationCore::GetActiveFontFilePath() const
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_CurrentSelection = selection;
-    }
-
-    if (selection.type != ItemType::Song && selection.type != ItemType::Bible)
-        return;
-
-    // Obtenemos el nombre del estilo por defecto (bajo lock breve)
-    std::string styleName;
-    {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        auto it = m_CategoryDefaultStyles.find(static_cast<int>(selection.type));
-        if (it == m_CategoryDefaultStyles.end() || it->second.empty())
-            return;
-        styleName = it->second;
-    }
-
-    // Cargamos el estilo desde disco (sin lock, puede hacer I/O)
-    SavedStyle s;
-    if (!GetSavedStyle(styleName, s))
-        return;
-
-    // Aplicamos al estado bajo el lock
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    m_State.textSize      = s.size;
-    m_State.textAlignment = s.hAlign;
-    m_State.vAlignment    = s.vAlign;
-    m_State.autoScale     = s.autoScale;
-    m_ActiveFontName      = s.fontName;
-    m_State.selectedFont  = s.fontName;
-    for (int i = 0; i < 4; i++) {
-        m_State.textColor[i] = s.color[i];
-        m_State.margins[i]   = s.margins[i];
-    }
-
-    if (selection.type == ItemType::Song) {
-        m_State.songTextAlignment = s.hAlign;
-        m_State.songVAlignment    = s.vAlign;
-    } else {
-        m_State.bibleTextAlignment = s.hAlign;
-        m_State.bibleVAlignment    = s.vAlign;
-        m_State.refTextSize        = s.size * 0.46f;
-        m_State.verseTextSize      = s.size;
-    }
-}
-
-// =============================================================================
-//  ApplyStyleByName
-// =============================================================================
-void PresentationCore::ApplyStyleByName(const std::string& styleName)
-{
-    if (styleName.empty()) return;
-
-    // GetSavedStyle lee desde disco si no está en memoria — sin lock propio
-    SavedStyle style;
-    if (!GetSavedStyle(styleName, style)) return;
-
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    ApplySavedStyleToState(style, m_State, m_ActiveFontName);
-    ++m_StreamVersion;
-}
-
-// =============================================================================
-//  ToggleNetworkStream
-// =============================================================================
-void PresentationCore::ToggleNetworkStream(bool enable, int port)
-{
-    if (enable)
-    {
-        if (m_NetworkServer && m_NetworkServer->IsRunning())
-            return;
-
-        m_NetworkServer = std::make_unique<NetworkStreamServer>();
-
-        m_NetworkServer->SetSnapshotProvider([this]() -> StreamSnapshot
+        std::string fontName;
         {
-            PresentationState st = GetState();
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            fontName = m_ActiveFontName;
+        }
+        return ResolveFontFilePath(fontName);
+    }
 
-            StreamSnapshot snap;
-            snap.isProjecting  = st.isProjecting;
+    void PresentationCore::SetSelection(const LibrarySelection& selection)
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_CurrentSelection = selection;
+        }
 
-            // ── Prioridad de texto para clientes de RED ────────────────────
-            // Si hay una nota "Solo LAN" activa (OClock en modo Solo LAN /
-            // Ambos, o cualquier otro panel que use SetLiveQuickNoteLAN),
-            // se usa ese texto para el JSON de red en vez de currentText.
-            // Esto NO afecta a la pantalla principal/proyector, que sigue
-            // leyendo st.currentText/st.showText normalmente vía GetState().
-            if (st.showLanQuickNote) {
-                snap.currentText = st.lanQuickNoteText;
-                snap.showText    = true;
-            } else {
-                snap.currentText = st.currentText;
-                snap.showText    = st.showText;
-            }
+        if (selection.type != ItemType::Song && selection.type != ItemType::Bible)
+            return;
 
-            snap.textSize      = st.textSize;
-            snap.textAlignment = st.textAlignment;
-            snap.vAlignment    = st.vAlignment;
-            snap.autoScale     = st.autoScale;
-            snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);
-            snap.version       = m_StreamVersion.load();
-            snap.hasFrame      = m_FrameProviderActive.load();
+        std::string styleName;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            auto it = m_CategoryDefaultStyles.find(static_cast<int>(selection.type));
+            if (it == m_CategoryDefaultStyles.end() || it->second.empty())
+                return;
+            styleName = it->second;
+        }
 
-            // ── Resolucion real del proyector destino ───────────────────────
-            // Sin esto, el cliente web asumia siempre 1920x1080 y por lo
-            // tanto deformaba (o recortaba mal) cualquier otra resolucion o
-            // relacion de aspecto configurada por el usuario.
-            snap.refW = m_ProjectorWidth;
-            snap.refH = m_ProjectorHeight;
+        SavedStyle s;
+        if (!GetSavedStyle(styleName, s))
+            return;
 
-            // ── Margenes reales del usuario ──────────────────────────────────
-            // Antes el HTML usaba un padding fijo en vw, ignorando por
-            // completo los margenes configurados en UpdateTextStyle/estilos.
-            for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.textSize      = s.size;
+        m_State.textAlignment = s.hAlign;
+        m_State.vAlignment    = s.vAlign;
+        m_State.autoScale     = s.autoScale;
+        m_ActiveFontName      = s.fontName;
+        m_State.selectedFont  = s.fontName;
+        for (int i = 0; i < 4; i++) {
+            m_State.textColor[i] = s.color[i];
+            m_State.margins[i]   = s.margins[i];
+        }
 
-            // ── Fuente activa ─────────────────────────────────────────────
-            // fontVersion es un hash estable del nombre: el cliente solo
-            // vuelve a pedir /font cuando este valor cambia, evitando
-            // recargar el archivo de fuente en cada poll de /state.
+        if (selection.type == ItemType::Song) {
+            m_State.songTextAlignment = s.hAlign;
+            m_State.songVAlignment    = s.vAlign;
+        } else {
+            m_State.bibleTextAlignment = s.hAlign;
+            m_State.bibleVAlignment    = s.vAlign;
+            m_State.refTextSize        = s.size * 0.46f;
+            m_State.verseTextSize      = s.size;
+        }
+    }
+
+    void PresentationCore::ApplyStyleByName(const std::string& styleName)
+    {
+        if (styleName.empty()) return;
+
+        SavedStyle style;
+        if (!GetSavedStyle(styleName, style)) return;
+
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        ApplySavedStyleToState(style, m_State, m_ActiveFontName);
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::ToggleNetworkStream(bool enable, int port)
+    {
+        if (enable)
+        {
+            if (m_NetworkServer && m_NetworkServer->IsRunning())
+                return;
+
+            m_NetworkServer = std::make_unique<NetworkStreamServer>();
+
+            m_NetworkServer->SetSnapshotProvider([this]() -> StreamSnapshot
             {
-                std::lock_guard<std::mutex> lock(m_Mutex);
-                snap.fontFamily = m_ActiveFontName;
+                PresentationState st = GetState();
+
+                StreamSnapshot snap;
+                snap.isProjecting  = st.isProjecting;
+
+                if (st.showLanQuickNote) {
+                    snap.currentText = st.lanQuickNoteText;
+                    snap.showText    = true;
+                } else {
+                    snap.currentText = st.currentText;
+                    snap.showText    = st.showText;
+                }
+
+                snap.textSize      = st.textSize;
+                snap.textAlignment = st.textAlignment;
+                snap.vAlignment    = st.vAlignment;
+                snap.autoScale     = st.autoScale;
+                snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);
+                snap.version       = m_StreamVersion.load();
+                snap.hasFrame      = m_FrameProviderActive.load();
+
+                snap.refW = m_ProjectorWidth;
+                snap.refH = m_ProjectorHeight;
+
+                for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
+
+                {
+                    std::lock_guard<std::mutex> lock(m_Mutex);
+                    snap.fontFamily = m_ActiveFontName;
+                }
+                snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
+
+                for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
+                for (int i = 0; i < 3; i++) snap.bgColor[i]   = st.bgColor[i];
+
+                return snap;
+            });
+
+            m_NetworkServer->SetFrameProvider([this]() -> std::vector<uint8_t>
+            {
+                std::lock_guard<std::mutex> lk(m_FrameMutex);
+                return m_LatestFrame;
+            });
+
+            m_NetworkServer->SetFontPathProvider([this]() -> std::string
+            {
+                return GetActiveFontFilePath();
+            });
+
+            if (!m_NetworkServer->Start(port))
+            {
+                m_NetworkServer.reset();
+                std::cerr << "[NetworkStream] No se pudo iniciar en puerto " << port << ".\n";
+                return;
             }
-            snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
 
-            for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
-            for (int i = 0; i < 3; i++) snap.bgColor[i]   = st.bgColor[i];
-
-            return snap;
-        });
-
-        m_NetworkServer->SetFrameProvider([this]() -> std::vector<uint8_t>
-        {
-            std::lock_guard<std::mutex> lk(m_FrameMutex);
-            return m_LatestFrame;
-        });
-
-        // ── Provider de la fuente activa para el endpoint /font ────────────
-        // Permite que el cliente web descargue el .ttf/.otf real que el
-        // usuario eligio y lo cargue via FontFace, en vez de usar siempre
-        // una fuente generica del navegador.
-        m_NetworkServer->SetFontPathProvider([this]() -> std::string
-        {
-            return GetActiveFontFilePath();
-        });
-
-        if (!m_NetworkServer->Start(port))
-        {
-            m_NetworkServer.reset();
-            std::cerr << "[NetworkStream] No se pudo iniciar en puerto " << port << ".\n";
-            return;
+            std::lock_guard<std::mutex> lk(m_Mutex);
+            m_State.isStreamingNet = true;
+            m_State.networkURL     = m_NetworkServer->GetBaseURL();
         }
+        else
+        {
+            if (m_NetworkServer)
+            {
+                m_NetworkServer->Stop();
+                m_NetworkServer.reset();
+            }
 
-        std::lock_guard<std::mutex> lk(m_Mutex);
-        m_State.isStreamingNet = true;
-        m_State.networkURL     = m_NetworkServer->GetBaseURL();
+            m_FrameProviderActive.store(false);
+            {
+                std::lock_guard<std::mutex> lk(m_FrameMutex);
+                m_LatestFrame.clear();
+            }
+
+            std::lock_guard<std::mutex> lk(m_Mutex);
+            m_State.isStreamingNet = false;
+            m_State.networkURL.clear();
+        }
     }
-    else
-    {
-        if (m_NetworkServer)
-        {
-            m_NetworkServer->Stop();
-            m_NetworkServer.reset();
-        }
 
-        m_FrameProviderActive.store(false);
-        {
-            std::lock_guard<std::mutex> lk(m_FrameMutex);
-            m_LatestFrame.clear();
-        }
-
-        std::lock_guard<std::mutex> lk(m_Mutex);
-        m_State.isStreamingNet = false;
-        m_State.networkURL.clear();
-    }
-}
-
-// =============================================================================
-//  IsStreamingNet
-// =============================================================================
-bool PresentationCore::IsStreamingNet() const
-{
-    std::lock_guard<std::mutex> lk(m_Mutex);
-    return m_State.isStreamingNet;
-}
-
-// =============================================================================
-//  FBO helpers
-// =============================================================================
-void PresentationCore::EnsureFBO(int w, int h)
-{
-    if (m_FBO != 0 && m_FBOWidth == w && m_FBOHeight == h) return;
-
-    DestroyFBO();
-
-    glGenFramebuffers(1, &m_FBO);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-
-    glGenTextures(1, &m_FBOTex);
-    glBindTexture(GL_TEXTURE_2D, m_FBOTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           GL_TEXTURE_2D, m_FBOTex, 0);
-
-    glGenRenderbuffers(1, &m_FBORenderBuf);
-    glBindRenderbuffer(GL_RENDERBUFFER, m_FBORenderBuf);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                              GL_RENDERBUFFER, m_FBORenderBuf);
-
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE)
-        std::cerr << "[FBO] Framebuffer incompleto: " << status << "\n";
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    m_FBOWidth  = w;
-    m_FBOHeight = h;
-}
-
-void PresentationCore::DestroyFBO()
-{
-    if (m_FBO)          { glDeleteFramebuffers(1,  &m_FBO);          m_FBO          = 0; }
-    if (m_FBOTex)       { glDeleteTextures(1,       &m_FBOTex);      m_FBOTex       = 0; }
-    if (m_FBORenderBuf) { glDeleteRenderbuffers(1,  &m_FBORenderBuf); m_FBORenderBuf = 0; }
-    m_FBOWidth  = 0;
-    m_FBOHeight = 0;
-}
-
-// =============================================================================
-//  RenderProjectorToFBO
-// =============================================================================
-bool PresentationCore::RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB)
-{
-    if (w <= 0 || h <= 0) return false;
-    if (!m_Impl)          return false;
-
-    // Si no hay nadie transmitiendo, no hacemos absolutamente nada. Esto
-    // evita el costo de renderizar + leer pixeles de la GPU cuando la
-    // funcion se llama "por si acaso" en cada frame del render principal.
-    if (!IsStreamingNet())
-        return false;
-
-    // Limitamos la tasa de captura: la transmision en red por MJPEG no
-    // necesita ir a la misma tasa de refresco que el render principal
-    // (60+ fps). glReadPixels bloquea hasta que el pipeline grafico termina
-    // de procesar todo lo pendiente — hacerlo cada frame es la principal
-    // causa del consumo excesivo de CPU/GPU al transmitir.
-    static constexpr double kMinCaptureIntervalSec = 1.0 / 15.0; // ~15 fps
-    double now = glfwGetTime();
-    if (now - m_LastFBOCaptureTime < kMinCaptureIntervalSec)
-        return false;
-    m_LastFBOCaptureTime = now;
-
-    EnsureFBO(w, h);
-    if (m_FBO == 0) return false;
-
-    GLint prevFBO         = 0;
-    GLint prevViewport[4] = {};
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
-    glGetIntegerv(GL_VIEWPORT,            prevViewport);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-    glViewport(0, 0, w, h);
-
+    bool PresentationCore::IsStreamingNet() const
     {
         std::lock_guard<std::mutex> lk(m_Mutex);
-        glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
+        return m_State.isStreamingNet;
     }
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    m_Impl->background.Render(w, h);
-    m_Impl->overlay.Render();
+    void PresentationCore::EnsureFBO(int w, int h)
+    {
+        if (m_FBO != 0 && m_FBOWidth == w && m_FBOHeight == h) return;
 
-    outRGB.resize(static_cast<size_t>(w) * h * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, outRGB.data());
+        DestroyFBO();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
-    glViewport(prevViewport[0], prevViewport[1],
-               prevViewport[2], prevViewport[3]);
+        glGenFramebuffers(1, &m_FBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
 
-    return true;
-}
+        glGenTextures(1, &m_FBOTex);
+        glBindTexture(GL_TEXTURE_2D, m_FBOTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0,
+                     GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, m_FBOTex, 0);
+
+        glGenRenderbuffers(1, &m_FBORenderBuf);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_FBORenderBuf);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                  GL_RENDERBUFFER, m_FBORenderBuf);
+
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+            std::cerr << "[FBO] Framebuffer incompleto: " << status << "\n";
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        glGenBuffers(2, m_PBO);
+        for (int i = 0; i < 2; i++)
+        {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[i]);
+            glBufferData(GL_PIXEL_PACK_BUFFER,
+                         static_cast<GLsizeiptr>(w) * h * 3,
+                         nullptr, GL_STREAM_READ);
+        }
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        m_PBOIndex = 0;
+
+        m_FBOWidth  = w;
+        m_FBOHeight = h;
+    }
+
+    void PresentationCore::DestroyFBO()
+    {
+        if (m_FBO)          { glDeleteFramebuffers(1,  &m_FBO);          m_FBO          = 0; }
+        if (m_FBOTex)       { glDeleteTextures(1,       &m_FBOTex);      m_FBOTex       = 0; }
+        if (m_FBORenderBuf) { glDeleteRenderbuffers(1,  &m_FBORenderBuf); m_FBORenderBuf = 0; }
+        if (m_PBO[0] || m_PBO[1])
+        {
+            glDeleteBuffers(2, m_PBO);
+            m_PBO[0] = m_PBO[1] = 0;
+        }
+        m_FBOWidth  = 0;
+        m_FBOHeight = 0;
+    }
+
+    bool PresentationCore::RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB)
+    {
+        if (w <= 0 || h <= 0) return false;
+        if (!m_Impl)          return false;
+        if (!IsStreamingNet()) return false;
+
+        static constexpr double kMinCaptureIntervalSec = 1.0 / 15.0;
+        double now = glfwGetTime();
+        if (now - m_LastFBOCaptureTime < kMinCaptureIntervalSec)
+            return false;
+        m_LastFBOCaptureTime = now;
+
+        EnsureFBO(w, h);
+        if (m_FBO == 0) return false;
+
+        GLint prevFBO         = 0;
+        GLint prevViewport[4] = {};
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
+        glGetIntegerv(GL_VIEWPORT,            prevViewport);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+        glViewport(0, 0, w, h);
+
+        {
+            std::lock_guard<std::mutex> lk(m_Mutex);
+            glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
+        }
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        m_Impl->background.Render(w, h);
+        m_Impl->overlay.Render();
+
+        outRGB.resize(static_cast<size_t>(w) * h * 3);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+        int nextIndex = (m_PBOIndex + 1) % 2;
+
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[m_PBOIndex]);
+        glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, 0);
+
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[nextIndex]);
+        GLubyte* ptr = static_cast<GLubyte*>(
+            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+        if (ptr)
+        {
+            std::memcpy(outRGB.data(), ptr, static_cast<size_t>(w) * h * 3);
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+        }
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+        m_PBOIndex = nextIndex;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
+        glViewport(prevViewport[0], prevViewport[1],
+                   prevViewport[2], prevViewport[3]);
+
+        return true;
+    }
 
 } // namespace ProyecThor::Core

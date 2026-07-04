@@ -93,10 +93,9 @@ void MonitorQueueEngine::Clear()
 
 void MonitorQueueEngine::ApplyAV()
 {
-    auto* p = ActivePlayer();
-    if (!p) return;
-    p->SetMute(m_Muted);
-    p->SetVolume(m_Muted ? 0 : static_cast<int>(std::min(m_Volume, 2.0f) * 100.0f));
+    Core::PresentationCore::Get().SetLiveMute(m_Muted);
+    Core::PresentationCore::Get().SetLiveVolume(
+        m_Muted ? 0 : static_cast<int>(std::min(m_Volume, 2.0f) * 100.0f));
 }
 
 void MonitorQueueEngine::PlayIndex(int index)

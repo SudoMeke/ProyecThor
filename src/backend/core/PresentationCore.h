@@ -187,7 +187,8 @@ void ApplyStyleByName(const std::string& styleName);
         void  SetLivePosition(float pos);
         int   GetLiveVolume();
         void  SetLiveVolume(int volume);
-
+ void SetLiveMute(bool mute);
+ 
         void        LoadFontsIntoImGui();
         void        LoadSingleFontIntoImGui(const std::string& fontPath);
         void        SyncFontListFromDisk(std::vector<std::string>& outList);
@@ -236,16 +237,18 @@ bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
         void EnsureFBO(int w, int h);
         void DestroyFBO();
 
-        // Helper interno de disco: busca <assets>/fonts/<fontName>.{ttf,otf,ttc}
-        // y devuelve la ruta completa si existe, o "" en caso contrario.
         std::string ResolveFontFilePath(const std::string& fontName) const;
 
-        unsigned int m_FBO          = 0;
+  unsigned int m_FBO          = 0;
         unsigned int m_FBOTex       = 0;
         unsigned int m_FBORenderBuf = 0;
         int          m_FBOWidth     = 0;
         int          m_FBOHeight    = 0;
-         double       m_LastFBOCaptureTime = 0.0;
+        double       m_LastFBOCaptureTime = 0.0;
+
+
+        unsigned int m_PBO[2] = { 0, 0 };
+        int          m_PBOIndex = 0;
 
         bool m_stretchToFill = false;
         std::unique_ptr<PresentationCoreImpl> m_Impl;
