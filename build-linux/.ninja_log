@@ -1,0 +1,9 @@
+# ninja log v7
+1	8	1783288181681860533	/home/vixcho/Documentos/ProyecThor/build-linux/CMakeFiles/cmake.verify_globs	420da6e44a253bdd
+9	302	1783288181689814952	CMakeFiles/ProyecThor.dir/src/frontend/views/audio/AudioWaveform.cpp.o	43d94620e01a43db
+10	394	1783288181690657697	CMakeFiles/ProyecThor.dir/src/frontend/ui/bin/StyleGeneralApp.cpp.o	4e37f6f08c47c89c
+10	440	1783288181690770597	CMakeFiles/ProyecThor.dir/src/backend/core/BackgroundLayer.cpp.o	3ff018093b9b8836
+12	517	1783288181692405844	CMakeFiles/ProyecThor.dir/src/backend/settings/CategoryAudio.cpp.o	266c5d6a6d62d6fe
+9	589	1783288181689405841	CMakeFiles/ProyecThor.dir/src/frontend/views/audio/AudioAlbumArt.cpp.o	ba81a9383c3ad187
+11	615	1783288181691917289	CMakeFiles/ProyecThor.dir/src/backend/media/VLCBasePlayer.cpp.o	8ad97a68e6fb9e31
+10	3613	1783288181690886313	CMakeFiles/ProyecThor.dir/src/backend/core/NetworkStreamServer.cpp.o	81bdb7df8a730148

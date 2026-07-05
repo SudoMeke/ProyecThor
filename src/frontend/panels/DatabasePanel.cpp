@@ -2,7 +2,7 @@
 
 // Ajusta esta ruta al lugar real donde tengas AssetsPath.h en tu proyecto.
 // Expone ProyecThor::SongsPath() -> "%APPDATA%/ProyecThor/assets/songs/"
-#include "..\src\backend\core\AppPaths.h"
+#include "../src/backend/core/AppPaths.h"
 
 #include <imgui.h>
 #include <filesystem>

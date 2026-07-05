@@ -217,12 +217,7 @@ endif()
 
 # ── 7. OPCIONES DE COMPILACION ────────────────────────────────────────────────
 target_link_options(ProyecThor PRIVATE
-    "-static-libgcc"
-    "-static-libstdc++"
-    "-static" 
-    "-Wl,-Bstatic"
-    "-lwinpthread"
-    "-Wl,-Bdynamic"
+    "-static"
 )
 # Copiar DLLs de VLC
 if(EXISTS "${VLC_SDK}/libvlc.dll")
@@ -246,17 +241,3 @@ if(EXISTS "${VLC_SDK}/plugins")
         COMMENT "Copiando plugins de VLC"
     )
 endif()
-# ── 9. COPIA AUTOMATICA DE DEPENDENCIAS (Para Distribución) ──────────────────
-# Ajusta estas rutas a donde realmente residen tus DLLs
-set(DLLS_TO_COPY 
-    "C:/msys64/ucrt64/bin/libwinpthread-1.dll"
-    "C:/msys64/ucrt64/bin/libstdc++-6.dll"
-    "C:/msys64/ucrt64/bin/libgcc_s_seh-1.dll"
-    # Añade aquí las de VLC si son necesarias
-)
-
-foreach(DLL ${DLLS_TO_COPY})
-    add_custom_command(TARGET ProyecThor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}" "$<TARGET_FILE_DIR:ProyecThor>"
-    )
-endforeach()

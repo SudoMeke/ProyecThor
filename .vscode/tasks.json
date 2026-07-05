@@ -1,52 +1,43 @@
 {
     "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "platform",
+            "type": "pickString",
+            "description": "¿Compilar para qué plataforma?",
+            "options": ["linux", "windows", "windows-run"],
+            "default": "linux"
+        }
+    ],
     "tasks": [
         {
-            "label": "CMake: configure",
+            "label": "Build ProyecThor",
             "type": "shell",
-            "command": "cmake",
-            "args": [
-                "-S",
-                "${workspaceFolder}",
-                "-B",
-                "${workspaceFolder}/build",
-                "-G",
-                "MinGW Makefiles",
-                "-DCMAKE_C_COMPILER=C:/msys64/ucrt64/bin/gcc.exe",
-                "-DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe",
-                "-DCMAKE_MAKE_PROGRAM=C:/msys64/ucrt64/bin/mingw32-make.exe"
-            ],
-            "options": {
-                "env": {
-                    "PATH": "C:\\msys64\\ucrt64\\bin;${env:PATH}"
-                }
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "CMake: build",
-            "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "${workspaceFolder}/build",
-                "--",
-                "-j",
-                "8"
-            ],
-            "options": {
-                "env": {
-                    "PATH": "C:\\msys64\\ucrt64\\bin;${env:PATH}"
-                }
-            },
+            "command": "${workspaceFolder}/scripts/build.sh",
+            "args": ["${input:platform}"],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": "CMake: configure",
-            "problemMatcher": [
-                "$gcc"
-            ]
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "Run ProyecThor (Wine)",
+            "type": "shell",
+            "command": "wine",
+            "args": ["ProyecThor.exe"],
+            "options": {
+                "cwd": "${workspaceFolder}/build-win"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
         }
     ]
 }
