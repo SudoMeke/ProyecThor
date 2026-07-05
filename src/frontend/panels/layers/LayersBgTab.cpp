@@ -3,27 +3,51 @@
 #include "backend/core/PresentationCore.h"
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
+#ifdef _WIN32
 #include <windows.h>
+#include <shobjidl.h>
+#include <shlobj.h>
+#endif
 #include <string>
 #include <fstream>
+#include <sstream>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
 #include <GL/gl.h>
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
 #include "stb_image.h"
-#include <shobjidl.h>
-#include <shlobj.h>
 
 namespace fs = std::filesystem;
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Rutas
+//  Multiplataforma: en Windows usa la carpeta AppData del usuario, en Linux
+//  sigue la convencion XDG ($XDG_CONFIG_HOME o $HOME/.config).
 // ─────────────────────────────────────────────────────────────────────────────
 static fs::path GetAppDataDir() {
+    fs::path dir;
+#ifdef _WIN32
     wchar_t buf[MAX_PATH] = {};
     SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
-    fs::path dir = fs::path(buf) / "ProyecThor";
+    dir = fs::path(buf) / "ProyecThor";
+#else
+    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+    fs::path base;
+    if (xdgConfig && *xdgConfig)
+    {
+        base = fs::path(xdgConfig);
+    }
+    else
+    {
+        const char* home = std::getenv("HOME");
+        base = fs::path(home ? home : ".") / ".config";
+    }
+    dir = base / "ProyecThor";
+#endif
     std::error_code ec;
     fs::create_directories(dir / "themes", ec);
     return dir;
@@ -38,12 +62,14 @@ static fs::path BgRootDir() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers locales
 // ─────────────────────────────────────────────────────────────────────────────
+#ifdef _WIN32
 static std::wstring ToWide(const std::string& s) {
     int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
     std::wstring r(n, 0);
     MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &r[0], n);
     return r;
 }
+#endif
 static bool IsMedia(const std::string& ext) {
     return ext==".mp4"||ext==".mkv"||ext==".avi"||ext==".mov"
           ||ext==".jpg"||ext==".jpeg"||ext==".png";
@@ -55,6 +81,7 @@ static bool IsImage(const std::string& ext) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Thumbnails
 // ─────────────────────────────────────────────────────────────────────────────
+#ifdef _WIN32
 static ImTextureID LoadVideoThumb(const std::string& path) {
     CoInitialize(nullptr);
     std::wstring wp = ToWide(path);
@@ -91,6 +118,15 @@ static ImTextureID LoadVideoThumb(const std::string& path) {
                  0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
     return (ImTextureID)(intptr_t)tex;
 }
+#else
+static ImTextureID LoadVideoThumb(const std::string& /*path*/) {
+    // No existe en Linux un generador de miniaturas de video equivalente al
+    // Shell de Windows sin depender de librerias externas (ffmpeg, GStreamer,
+    // etc.). Se devuelve 0 y la tarjeta/fila correspondiente cae en el
+    // dibujo de icono generico "VID" que ya contempla el codigo de render.
+    return 0;
+}
+#endif
 static ImTextureID LoadImageThumb(const char* path) {
     int w, h, n;
     unsigned char* d = stbi_load(path, &w, &h, &n, 4);
@@ -165,6 +201,7 @@ void LayersBgTab::ReloadList() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Operaciones de disco
 // ─────────────────────────────────────────────────────────────────────────────
+#ifdef _WIN32
 bool LayersBgTab::ImportBackground() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     IFileOpenDialog* dlg = nullptr;
@@ -207,6 +244,46 @@ bool LayersBgTab::ImportBackground() {
     dlg->Release();
     return imported;
 }
+#else
+bool LayersBgTab::ImportBackground() {
+    // En Linux se usa "zenity --file-selection" con seleccion multiple como
+    // reemplazo del dialogo IFileOpenDialog de Windows. Requiere que zenity
+    // este instalado en el sistema (paquete "zenity" en la mayoria de las
+    // distribuciones).
+    std::string command =
+        "zenity --file-selection --multiple --separator=\"\\n\" "
+        "--file-filter=\"Video e Imagen | *.mp4 *.mkv *.avi *.mov *.jpg *.jpeg *.png\" "
+        "--title=\"Importar Fondo\" 2>/dev/null";
+
+    std::string result;
+    char buffer[1024];
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) return false;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        result += buffer;
+    int status = pclose(pipe);
+    if (status != 0 || result.empty()) return false;
+
+    fs::path dest = BgRootDir();
+    if (!m_CurrentBgFolder.empty()) dest = dest / m_CurrentBgFolder;
+    std::error_code ec;
+    fs::create_directories(dest, ec);
+
+    bool imported = false;
+    std::istringstream iss(result);
+    std::string line;
+    while (std::getline(iss, line)) {
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+            line.pop_back();
+        if (line.empty()) continue;
+        fs::path src(line);
+        fs::path dst = dest / src.filename();
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        if (!ec) imported = true;
+    }
+    return imported;
+}
+#endif
 
 bool LayersBgTab::CreateBgFolder(const std::string& name) {
     if (name.empty()) return false;

@@ -9,8 +9,12 @@
 #include <ctime>
 #include <fstream>
 #include <vector>
+#ifdef _WIN32
 #include <windows.h>
+#endif
+#ifdef _WIN32
 #include <shellapi.h>
+#endif
 
 #if defined(_WIN32)
     #include <windows.h>

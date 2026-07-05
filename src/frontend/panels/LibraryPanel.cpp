@@ -7,9 +7,11 @@
 #include "biblio/LibraryDocuments.h"
 #include "biblio/LibraryModals.h"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
 #include <commdlg.h>
+#endif
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -23,6 +25,7 @@
 #include <sstream>
 #include <filesystem>
 #include <cstring>
+#include <cstdio>
 #include <vector>
 #include <string>
 #include <iterator>
@@ -54,6 +57,43 @@ bool TryRemoveWithRetry(const fs::path& target, int maxAttempts = 8, int delayMs
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
     }
     return false;
+}
+
+// -----------------------------------------------------------------------------
+//  ImportSelectedFileToLibrary
+//  Logica de copia compartida entre la rama Windows y la rama Linux de
+//  ImportFile(). Recibe la ruta ya seleccionada por el usuario (via el dialogo
+//  nativo en Windows o via zenity en Linux) y la copia a la carpeta que
+//  corresponda segun la categoria actual de la biblioteca.
+// -----------------------------------------------------------------------------
+void ImportSelectedFileToLibrary(const fs::path& src, LibraryCategory category, const std::string& base)
+{
+    try {
+        if (category == LibraryCategory::Documents) {
+#ifdef _WIN32
+            std::string docName = WideToUtf8(src.stem().wstring());
+#else
+            std::string docName = src.stem().string();
+#endif
+            fs::path docDir = U8Path(base + "/documents") / U8Path(docName);
+            fs::create_directories(docDir);
+            fs::copy(src, docDir / src.filename(),
+                     fs::copy_options::overwrite_existing);
+        } else {
+            std::string destFolder;
+            switch (category) {
+                case LibraryCategory::Songs:  destFolder = base + "/songs";  break;
+                case LibraryCategory::Videos: destFolder = base + "/videos"; break;
+                case LibraryCategory::Images: destFolder = base + "/images"; break;
+                case LibraryCategory::Bibles: destFolder = base + "/bibles"; break;
+                default:                      destFolder = base + "/audio";  break;
+            }
+            fs::copy(src, U8Path(destFolder) / src.filename(),
+                     fs::copy_options::overwrite_existing);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[LibraryPanel] Error al importar: " << e.what() << '\n';
+    }
 }
 
 } // namespace
@@ -169,7 +209,11 @@ void LibraryPanel::RefreshList()
         fs::path fsPath = U8Path(path);
         if (fs::exists(fsPath)) {
             for (const auto& entry : fs::directory_iterator(fsPath)) {
+#ifdef _WIN32
                 std::string name = WideToUtf8(entry.path().filename().wstring());
+#else
+                std::string name = entry.path().filename().string();
+#endif
                 if (m_CurrentCategory == LibraryCategory::Documents) {
                     if (entry.is_directory()) m_Items.push_back(name);
                 } else {
@@ -516,9 +560,15 @@ std::vector<std::string> LibraryPanel::LoadSongVerses(const std::string& filenam
 
 // =============================================================================
 //  ImportFile
+//  Multiplataforma: en Windows abre el dialogo nativo (OPENFILENAMEW). En
+//  Linux invoca "zenity --file-selection" (requiere tener zenity instalado
+//  en el sistema). En ambos casos, una vez elegido el archivo, la copia a la
+//  carpeta correspondiente se hace con ImportSelectedFileToLibrary, que es
+//  identica para las dos plataformas.
 // =============================================================================
 void LibraryPanel::ImportFile()
 {
+#ifdef _WIN32
     wchar_t filename[MAX_PATH] = {};
     OPENFILENAMEW ofn;
     ZeroMemory(&ofn, sizeof(ofn));
@@ -542,32 +592,51 @@ void LibraryPanel::ImportFile()
 
     if (!GetOpenFileNameW(&ofn)) return;
 
-    try {
-        fs::path src(filename);
-        const std::string& base = GetAssetsPath();
-
-        if (m_CurrentCategory == LibraryCategory::Documents) {
-            std::string docName = WideToUtf8(src.stem().wstring());
-            fs::path    docDir  = U8Path(base + "/documents") / U8Path(docName);
-            fs::create_directories(docDir);
-            fs::copy(src, docDir / src.filename(),
-                     fs::copy_options::overwrite_existing);
-        } else {
-            std::string destFolder;
-            switch (m_CurrentCategory) {
-                case LibraryCategory::Songs:  destFolder = base + "/songs";  break;
-                case LibraryCategory::Videos: destFolder = base + "/videos"; break;
-                case LibraryCategory::Images: destFolder = base + "/images"; break;
-                case LibraryCategory::Bibles: destFolder = base + "/bibles"; break;
-                default:                      destFolder = base + "/audio";  break;
-            }
-            fs::copy(src, U8Path(destFolder) / src.filename(),
-                     fs::copy_options::overwrite_existing);
-        }
-        RefreshList();
-    } catch (const std::exception& e) {
-        std::cerr << "[LibraryPanel] Error al importar: " << e.what() << '\n';
+    fs::path src(filename);
+#else
+    std::string filter;
+    switch (m_CurrentCategory) {
+        case LibraryCategory::Videos:
+            filter = "--file-filter=Videos | *.mp4 *.mkv *.avi *.mov";
+            break;
+        case LibraryCategory::Images:
+            filter = "--file-filter=Imagenes | *.jpg *.jpeg *.png";
+            break;
+        case LibraryCategory::Songs:
+            filter = "--file-filter=Textos | *.txt";
+            break;
+        case LibraryCategory::Documents:
+            filter = "--file-filter=Documentos | *.pdf *.pptx *.ppt *.odp";
+            break;
+        default:
+            filter = "--file-filter=Todos | *";
+            break;
     }
+
+    std::string command = "zenity --file-selection --title=\"Importar archivo\" \"" +
+                          filter + "\" 2>/dev/null";
+
+    std::string result;
+    char buffer[1024];
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "[LibraryPanel] No se pudo abrir el selector de archivos (zenity).\n";
+        return;
+    }
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        result += buffer;
+    int status = pclose(pipe);
+
+    if (status != 0 || result.empty()) return;
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+        result.pop_back();
+    if (result.empty()) return;
+
+    fs::path src(result);
+#endif
+
+    ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+    RefreshList();
 }
 
 } // namespace ProyecThor::UI

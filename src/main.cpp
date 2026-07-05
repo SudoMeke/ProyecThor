@@ -1,12 +1,16 @@
 #include "StreamingPanel.h"
+#ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
+#endif
 #define STB_IMAGE_IMPLEMENTATION
 #include "frontend/panels/stb_image.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
+#ifdef _WIN32
 #include <dwmapi.h>
+#endif
 #include <memory>
 #include <thread>
 #include <chrono>

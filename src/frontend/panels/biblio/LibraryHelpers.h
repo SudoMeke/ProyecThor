@@ -3,10 +3,15 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <windows.h>
-#include <shlobj.h>
 #include <filesystem>
 #include <imgui.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shlobj.h>
+#else
+#include <cstdlib>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -15,6 +20,7 @@ namespace ProyecThor::Library {
 // =============================================================================
 //  Conversiones UTF-16 <-> UTF-8 / ANSI
 // =============================================================================
+#ifdef _WIN32
 inline std::string WideToUtf8(const std::wstring& w)
 {
     if (w.empty()) return {};
@@ -43,7 +49,18 @@ inline std::string AnsiToUtf8(const std::string& ansi)
     MultiByteToWideChar(CP_ACP, 0, ansi.data(), (int)ansi.size(), w.data(), wn);
     return WideToUtf8(w);
 }
-
+#endif
+// =============================================================================
+//  Conversion de fs::path a UTF-8 (cross-platform)
+// =============================================================================
+inline std::string PathToUtf8(const fs::path& p)
+{
+#ifdef _WIN32
+    return WideToUtf8(p.wstring());
+#else
+    return p.string();
+#endif
+}
 // =============================================================================
 //  Validacion y normalizacion de UTF-8
 // =============================================================================
@@ -75,6 +92,7 @@ inline std::string NormalizeToUtf8(const std::string& raw)
 
     if (sz >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
         content.assign(raw.data() + 3, sz - 3);
+#ifdef _WIN32
     else if (sz >= 2 && b[0] == 0xFF && b[1] == 0xFE) {
         size_t wlen = (sz - 2) / 2;
         std::wstring w(reinterpret_cast<const wchar_t*>(raw.data() + 2), wlen);
@@ -87,10 +105,16 @@ inline std::string NormalizeToUtf8(const std::string& raw)
             w.push_back((wchar_t)((b[i] << 8) | b[i+1]));
         content = WideToUtf8(w);
     }
+#endif
     else if (IsValidUtf8(raw.data(), sz))
         content = raw;
+#ifdef _WIN32
     else
         content = AnsiToUtf8(raw);
+#else
+    else
+        content = raw;
+#endif
 
     content.erase(std::remove(content.begin(), content.end(), '\r'), content.end());
     return content;
@@ -103,18 +127,33 @@ inline const std::string& GetAssetsPath()
 {
     static std::string s_path;
     if (!s_path.empty()) return s_path;
+
+#ifdef _WIN32
     wchar_t buf[MAX_PATH] = {};
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr,
                                    SHGFP_TYPE_CURRENT, buf)))
         s_path = WideToUtf8(buf) + "\\ProyecThor\\assets";
     else
         s_path = "assets";
+#else
+    const char* home = std::getenv("HOME");
+    if (home) {
+        s_path = std::string(home) + "/.local/share/ProyecThor/assets";
+        std::filesystem::create_directories(s_path);
+    } else {
+        s_path = "assets";
+    }
+#endif
     return s_path;
 }
 
 inline fs::path U8Path(const std::string& utf8)
 {
+#ifdef _WIN32
     return fs::path(Utf8ToWide(utf8));
+#else
+    return fs::path(utf8);
+#endif
 }
 
 // =============================================================================

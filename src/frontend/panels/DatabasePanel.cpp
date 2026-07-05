@@ -10,24 +10,39 @@
 #include <cstring>
 #include <cctype>
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <unistd.h>
+#include <limits.h>
+#endif
 
 namespace ProyecThor::UI {
 
 namespace {
 
 // Carpeta donde vive el ejecutable (ej: .../build/default/)
+// Carpeta donde vive el ejecutable (ej: .../build/default/)
 std::filesystem::path GetExecutableDirectory()
 {
+#ifdef _WIN32
     char buffer[MAX_PATH] = {};
     DWORD len = GetModuleFileNameA(nullptr, buffer, MAX_PATH);
     if (len == 0 || len == MAX_PATH)
         return std::filesystem::current_path();
 
     return std::filesystem::path(buffer).parent_path();
-}
+#else
+    char buffer[PATH_MAX] = {};
+    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (len <= 0)
+        return std::filesystem::current_path();
 
+    buffer[len] = '\0';
+    return std::filesystem::path(buffer).parent_path();
+#endif
+}
 // Carpeta con las canciones que vienen incluidas con el programa:
 // build/default/songs
 std::filesystem::path GetBundledSongsDirectory()

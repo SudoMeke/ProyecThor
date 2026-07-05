@@ -374,7 +374,7 @@ if (ctx.currentCategoryInt == kCat_Songs)
                         std::vector<std::string> pages;
                         for (const auto& pe : fs::directory_iterator(docDir))
                             if (pe.is_regular_file())
-                                pages.push_back(WideToUtf8(pe.path().wstring()));
+                                pages.push_back(ProyecThor::Library::PathToUtf8(pe.path()));
                         std::sort(pages.begin(), pages.end());
                         s.contentData = pages;
                     }

@@ -5,13 +5,16 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cstring>
+#include <cstdlib>
 #include "backend/settings/SettingsManager.h"
 #include <filesystem>
 #include <algorithm>
 #include "AppPaths.h"
 #include <fstream>
+#ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
+#endif
 #include "NetworkStreamServer.h"
 
 namespace ProyecThor::Core {
@@ -389,12 +392,35 @@ namespace ProyecThor::Core {
             m_ImGuiFonts[fontName] = font;
     }
 
+    // -------------------------------------------------------------------------
+    //  ThemesDirPath — multiplataforma.
+    //  En Windows usa la carpeta AppData del usuario (via SHGetFolderPathW).
+    //  En Linux sigue la convencion XDG: usa $XDG_CONFIG_HOME si esta definida,
+    //  o $HOME/.config en caso contrario.
+    // -------------------------------------------------------------------------
     static std::string ThemesDirPath()
     {
+        std::filesystem::path dir;
+
+#ifdef _WIN32
         wchar_t buf[MAX_PATH] = {};
         SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
-        std::filesystem::path dir =
-            std::filesystem::path(buf) / "ProyecThor" / "themes";
+        dir = std::filesystem::path(buf) / "ProyecThor" / "themes";
+#else
+        const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+        std::filesystem::path base;
+        if (xdgConfig && *xdgConfig)
+        {
+            base = std::filesystem::path(xdgConfig);
+        }
+        else
+        {
+            const char* home = std::getenv("HOME");
+            base = std::filesystem::path(home ? home : ".") / ".config";
+        }
+        dir = base / "ProyecThor" / "themes";
+#endif
+
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         return dir.string();

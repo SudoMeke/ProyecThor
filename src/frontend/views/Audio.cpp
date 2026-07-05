@@ -17,6 +17,13 @@
 #include <iomanip>
 #include <iostream>
 #include <cstdlib>
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#else
+#include <cstdio>
+#include <array>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -271,6 +278,45 @@ static void DrawTextCenteredFree(ImDrawList* dl, ImFont* font, float fontSize,
                 color, text);
 }
 
+#ifndef _WIN32
+// ─────────────────────────────────────────────────────────────────────────
+//  Selector de archivos de audio para Linux/macOS.
+//  Igual que en TabTypography.cpp: delegamos en zenity/kdialog ya que no
+//  hay un dialogo nativo unico multiplataforma disponible sin dependencias
+//  extra. Si ninguna herramienta esta instalada, se devuelve vacio (equivale
+//  a que el usuario cancele el dialogo en Windows).
+// ─────────────────────────────────────────────────────────────────────────
+static std::string OpenAudioFileDialogUnix() {
+    const char* commands[] = {
+        "zenity --file-selection --title=\"Seleccionar audio\" "
+        "--file-filter=\"Audio | *.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff\" 2>/dev/null",
+        "kdialog --getopenfilename . "
+        "\"*.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff|Audio\" 2>/dev/null"
+    };
+
+    for (const char* cmd : commands) {
+        std::array<char, 1024> buffer{};
+        std::string result;
+
+        FILE* pipe = popen(cmd, "r");
+        if (!pipe) continue;
+
+        while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
+            result += buffer.data();
+
+        int status = pclose(pipe);
+        if (status != 0) continue; // el usuario cancelo o la herramienta no existe
+
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+            result.pop_back();
+
+        if (!result.empty())
+            return result;
+    }
+    return {};
+}
+#endif
+
 } // namespace anonimo
 
 namespace ProyecThor::UI {
@@ -333,12 +379,25 @@ AudioPanel::~AudioPanel()
 // ─────────────────────────────────────────────────────────────────────────────
 
 void AudioPanel::InitVLC() {
+    // FIXED: "--aout=directsound" es un backend de audio exclusivo de
+    // Windows. En Linux (PulseAudio/ALSA) o macOS (CoreAudio) ese modulo no
+    // existe y libvlc_new fallaba o ignoraba el argumento silenciosamente.
+    // Dejamos que VLC auto-seleccione el mejor backend disponible salvo en
+    // Windows, donde mantenemos directsound como antes.
+#ifdef _WIN32
     const char* args[] = {
         "--no-video",
         "--aout=directsound",
         "--verbose=2"
     };
     m_VLC = libvlc_new(3, args);
+#else
+    const char* args[] = {
+        "--no-video",
+        "--verbose=2"
+    };
+    m_VLC = libvlc_new(2, args);
+#endif
     if (!m_VLC) {
         std::cerr << "[AudioPanel] libvlc_new falló\n";
         return;
@@ -584,8 +643,17 @@ void AudioPanel::RefreshLibrary()
         for (const auto& entry : fs::directory_iterator(basePath)) {
             if (!entry.is_regular_file()) continue;
 
+            // FIXED: entry.path().extension().wstring() se llamaba sin
+            // proteccion de plataforma, pero la sobrecarga de WideToUtf8
+            // fuera de Windows recibe un std::string, no un std::wstring:
+            // el codigo ni siquiera compilaba en Linux. En sistemas no-Windows
+            // fs::path ya usa char nativo, asi que basta con .string().
+#ifdef _WIN32
             std::string ext = ProyecThor::Audio::WideToUtf8(
                 entry.path().extension().wstring());
+#else
+            std::string ext = entry.path().extension().string();
+#endif
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
             bool supported = false;
@@ -645,6 +713,23 @@ void AudioPanel::ImportAudioFile() {
         } catch (const std::exception& e) {
             std::cerr << "[AudioPanel] Import error: " << e.what() << '\n';
         }
+    }
+#else
+    // FIXED: antes este metodo no tenia ninguna rama para Linux/macOS, asi
+    // que el boton "+ Importar" simplemente no hacia nada fuera de Windows.
+    // Usamos el mismo enfoque zenity/kdialog que en TabTypography::ImportFont.
+    std::string selected = OpenAudioFileDialogUnix();
+    if (selected.empty()) return;
+
+    try {
+        fs::path src(selected);
+        fs::path destDir(ProyecThor::Audio::GetAudioPath());
+        fs::path dest = destDir / src.filename();
+        fs::create_directories(destDir);
+        fs::copy(src, dest, fs::copy_options::overwrite_existing);
+        RefreshLibrary();
+    } catch (const std::exception& e) {
+        std::cerr << "[AudioPanel] Import error: " << e.what() << '\n';
     }
 #endif
 }
@@ -804,9 +889,12 @@ if (m_CurrentTrack >= 0 && m_CurrentTrack < static_cast<int>(m_Tracks.size()))
     initials = ExtractInitials(track.displayName);
 
     // Usar la textura si ya fue subida a GPU
+    // FIXED: ImTextureID aqui es un entero (ImU64), no un puntero, asi que
+    // reinterpret_cast entre uintptr_t e ImTextureID no es una conversion
+    // valida en C++ estandar (fallaba al compilar en GCC/Clang). static_cast
+    // hace la conversion entero-a-entero correctamente.
     if (track.coverArt.HasTexture())
-        coverTexture = reinterpret_cast<ImTextureID>(
-            static_cast<uintptr_t>(track.coverArt.texID));
+        coverTexture = static_cast<ImTextureID>(track.coverArt.texID);
 }
 
     // --- 2. Plataforma del Tocadiscos (Base) ---

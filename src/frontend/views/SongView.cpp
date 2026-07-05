@@ -11,10 +11,15 @@
 #include <cstdlib>
 
 // Windows headers para SHGetKnownFolderPath
+#ifdef _WIN32
+// Windows headers para SHGetKnownFolderPath
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shlobj.h>
+#endif
+#ifdef _WIN32
 #include <winerror.h>
+#endif
 
 namespace ProyecThor::UI {
 
@@ -24,10 +29,11 @@ namespace ProyecThor::UI {
 // ─────────────────────────────────────────────────────────────────────────────
 static std::filesystem::path GetSongsDirectory()
 {
+    std::filesystem::path result;
+
+#ifdef _WIN32
     PWSTR pszPath = nullptr;
     HRESULT hr = SHGetKnownFolderPath(FOLDERID_RoamingAppData, KF_FLAG_CREATE, nullptr, &pszPath);
-
-    std::filesystem::path result;
 
     if (SUCCEEDED(hr) && pszPath)
     {
@@ -42,6 +48,13 @@ static std::filesystem::path GetSongsDirectory()
         else
             result = std::filesystem::current_path() / "ProyecThor" / "assets" / "songs";
     }
+#else
+    const char* home = std::getenv("HOME");
+    if (home)
+        result = std::filesystem::path(home) / ".local" / "share" / "ProyecThor" / "assets" / "songs";
+    else
+        result = std::filesystem::current_path() / "ProyecThor" / "assets" / "songs";
+#endif
 
     std::error_code ec;
     std::filesystem::create_directories(result, ec);

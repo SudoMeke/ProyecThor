@@ -2,8 +2,14 @@
 #include "LayersTheme.h"
 #include "../../backend/core/PresentationCore.h"
 #include <imgui.h>
+#ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
+#else
+#include <cstdlib>
+#include <pwd.h>
+#include <unistd.h>
+#endif
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -17,9 +23,26 @@ namespace ProyecThor::UI {
 //  Rutas
 // ─────────────────────────────────────────────────────────────────────────────
 static fs::path GetAppDataDir() {
+#ifdef _WIN32
     wchar_t buf[MAX_PATH] = {};
     SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
     fs::path dir = fs::path(buf) / "ProyecThor";
+#else
+    // En Linux/macOS seguimos la convencion XDG: usamos $XDG_DATA_HOME si
+    // esta definida, o $HOME/.local/share en su defecto. Si tampoco existe
+    // HOME, se consulta /etc/passwd como ultimo recurso.
+    fs::path base;
+    if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg) {
+        base = xdg;
+    } else if (const char* home = std::getenv("HOME"); home && *home) {
+        base = fs::path(home) / ".local" / "share";
+    } else if (struct passwd* pw = getpwuid(getuid())) {
+        base = fs::path(pw->pw_dir) / ".local" / "share";
+    } else {
+        base = fs::current_path();
+    }
+    fs::path dir = base / "ProyecThor";
+#endif
     std::error_code ec;
     fs::create_directories(dir / "themes", ec);
     return dir;

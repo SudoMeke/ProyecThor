@@ -111,12 +111,12 @@ void RenderDocumentSection(LibraryContext& ctx, UI::DocumentView& documentView)
 
                 if (fs::exists(docDir) && fs::is_directory(docDir)) {
                     for (const auto& entry : fs::directory_iterator(docDir)) {
-                        std::string ext = WideToUtf8(entry.path().extension().wstring());
+                        std::string ext = ProyecThor::Library::PathToUtf8(entry.path().extension());
                         std::transform(ext.begin(), ext.end(), ext.begin(),
                                        [](unsigned char c){ return (char)::tolower(c); });
                         if (ext == ".pdf" || ext == ".pptx" ||
                             ext == ".ppt" || ext == ".odp") {
-                            originalFile = WideToUtf8(entry.path().wstring());
+                            originalFile = ProyecThor::Library::PathToUtf8(entry.path());
                             break;
                         }
                     }
@@ -124,7 +124,7 @@ void RenderDocumentSection(LibraryContext& ctx, UI::DocumentView& documentView)
 
                 if (!originalFile.empty() && originalFile != ctx.loadedDocPath) {
                     ctx.loadedDocPath = originalFile;
-                    std::string cacheDir = WideToUtf8(docDir.wstring()) + "/cache";
+                    std::string cacheDir = ProyecThor::Library::PathToUtf8(docDir) + "/cache";
                     documentView.LoadDocument(originalFile, cacheDir);
                 }
             }

@@ -1,8 +1,14 @@
 #include "TabTypography.h"
 #include "backend/core/AppPaths.h"
 #include <imgui.h>
+#ifdef _WIN32
 #include <windows.h>
 #include <commdlg.h>
+#else
+#include <cstdio>
+#include <array>
+#include <memory>
+#endif
 #include <filesystem>
 #include <cstring>
 #include <algorithm>
@@ -10,6 +16,44 @@
 namespace fs = std::filesystem;
 
 namespace ProyecThor::UI {
+
+#ifndef _WIN32
+// ─────────────────────────────────────────────────────────────────────────
+//  Selector de archivos para Linux/macOS.
+//  No existe un dialogo nativo unico en estos sistemas, asi que se delega
+//  en herramientas externas ampliamente disponibles (zenity/kdialog). Si
+//  ninguna esta instalada, se devuelve una cadena vacia (equivalente a que
+//  el usuario cancele el dialogo en Windows).
+// ─────────────────────────────────────────────────────────────────────────
+static std::string OpenFontFileDialogUnix() {
+    const char* commands[] = {
+        "zenity --file-selection --title=\"Seleccionar fuente\" "
+        "--file-filter=\"Fuentes | *.ttf *.otf *.ttc\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.ttf *.otf *.ttc|Fuentes\" 2>/dev/null"
+    };
+
+    for (const char* cmd : commands) {
+        std::array<char, 1024> buffer{};
+        std::string result;
+
+        FILE* pipe = popen(cmd, "r");
+        if (!pipe) continue;
+
+        while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
+            result += buffer.data();
+
+        int status = pclose(pipe);
+        if (status != 0) continue; // el usuario cancelo o la herramienta no existe
+
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+            result.pop_back();
+
+        if (!result.empty())
+            return result;
+    }
+    return {};
+}
+#endif
 
 TabTypography::TabTypography(std::vector<std::string>* fontList,
                              OnFontImportedCallback onFontImported)
@@ -166,6 +210,9 @@ void TabTypography::RenderAutoScaleCheckbox(StyleData& data) {
 }
 
 void TabTypography::ImportFont() {
+    std::string selectedPath;
+
+#ifdef _WIN32
     char filename[MAX_PATH] = {};
     OPENFILENAMEA ofn       = {};
     ofn.lStructSize         = sizeof(ofn);
@@ -176,6 +223,12 @@ void TabTypography::ImportFont() {
     ofn.Flags               = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
     if (!GetOpenFileNameA(&ofn)) return;
+    selectedPath = filename;
+#else
+    // En Linux delegamos en zenity/kdialog (ver OpenFontFileDialogUnix arriba).
+    selectedPath = OpenFontFileDialogUnix();
+    if (selectedPath.empty()) return;
+#endif
 
     try {
         std::filesystem::path fontsDir =
@@ -183,7 +236,7 @@ void TabTypography::ImportFont() {
 
         std::filesystem::create_directories(fontsDir);
 
-        std::filesystem::path src(filename);
+        std::filesystem::path src(selectedPath);
         std::filesystem::path dst = fontsDir / src.filename();
 
         std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);

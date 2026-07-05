@@ -2,8 +2,11 @@
 #include <string>
 #include <filesystem>
 #include <imgui.h>
+#ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
+#endif
+#include <cstdlib>
 #include <cmath>
 #include "MonitorTheme.h"
 
@@ -66,16 +69,39 @@ inline std::string QueueDisplayName(const std::string& entry)
 }
 
 // ── Ruta de persistencia de la cola ──────────────────────────────────────────
+// Multiplataforma:
+//   - Windows: %APPDATA%\ProyecThor\assets\play_queue.txt
+//   - Linux:   $XDG_DATA_HOME/ProyecThor/assets/play_queue.txt
+//              (o $HOME/.local/share/ProyecThor/assets/play_queue.txt si
+//               XDG_DATA_HOME no esta definida)
 inline const std::string& GetQueueFilePath()
 {
     static std::string s_Path;
     if (!s_Path.empty()) return s_Path;
 
+#ifdef _WIN32
     char buf[MAX_PATH] = {};
     if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, buf)))
-        s_Path = std::string(buf) + "\\ProyecThor\\assets\\play_queue.txt";
+        s_Path = (fs::path(buf) / "ProyecThor" / "assets" / "play_queue.txt").string();
     else
         s_Path = "play_queue.txt";
+#else
+    const char* xdgData = std::getenv("XDG_DATA_HOME");
+    fs::path base;
+    if (xdgData && *xdgData)
+    {
+        base = fs::path(xdgData);
+    }
+    else
+    {
+        const char* home = std::getenv("HOME");
+        base = fs::path(home ? home : ".") / ".local" / "share";
+    }
+    s_Path = (base / "ProyecThor" / "assets" / "play_queue.txt").string();
+#endif
+
+    std::error_code ec;
+    fs::create_directories(fs::path(s_Path).parent_path(), ec);
 
     return s_Path;
 }

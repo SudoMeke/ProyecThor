@@ -349,13 +349,19 @@ void ImageView::Render(float maxWidth, float maxHeight) {
     ImVec2 cursorPos = ImGui::GetCursorPos();
     ImGui::SetCursorPos(ImVec2(cursorPos.x + offsetX, cursorPos.y));
 
+    // FIXED: ImTextureID en este proyecto es un entero (ImU64), no un puntero.
+    // reinterpret_cast entre dos tipos enteros no relacionados (uintptr_t y
+    // ImTextureID) no es una conversion valida en C++ estandar y falla al
+    // compilar con GCC/Clang en Linux (con MSVC "colaba" por ser mas permisivo
+    // en algunos casos). static_cast es la conversion entero-a-entero correcta
+    // y funciona igual en Windows, Linux y macOS.
     if (m_ShaderReady) {
         ApplyRenderWithShader(renderWidth, renderHeight, offsetX, cursorPos.y);
-        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_OutputTex)),
+        ImGui::Image(static_cast<ImTextureID>(m_OutputTex),
                      ImVec2(renderWidth, renderHeight));
     } else {
         // Fallback: imagen original sin ajustes
-        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_TextureID)),
+        ImGui::Image(static_cast<ImTextureID>(m_TextureID),
                      ImVec2(renderWidth, renderHeight));
     }
 }
