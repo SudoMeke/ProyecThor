@@ -1,75 +1,58 @@
-# Avisos de Terceros (Third-Party Notices)
+# Third-Party Notices
 
-ProyecThor es software libre bajo licencia MIT (ver `LICENSE`), pero **enlaza
-y distribuye SDKs y librerías de terceros que mantienen sus propias
-licencias**. Estas licencias son independientes de la de ProyecThor y deben
-leerse y respetarse por separado, tanto por el equipo de desarrollo como por
-cualquier persona que compile, modifique o redistribuya el proyecto.
+ProyecThor's own source code is released under the MIT License (see `LICENSE`), but the project **links against and distributes third-party SDKs and libraries that carry their own licenses**. These licenses are independent from ProyecThor's own license and must be read and respected separately, both by the development team and by anyone who builds, modifies, or redistributes the project.
 
-> Este documento es informativo y no constituye asesoría legal. Ante
-> cualquier duda sobre cómo aplican estas licencias a un caso concreto
-> (por ejemplo, distribución comercial, forks, o builds propias), consulta
-> con un profesional legal.
+> This document is informational and does not constitute legal advice. If you have questions about how these licenses apply to a specific case (for example, commercial distribution, forks, or custom builds), consult a legal professional.
 
 ---
 
-## Resumen por librería
+## Summary by Library
 
-| Librería | Licencia | Tipo | Enlace | Obligaciones relevantes |
+| Library | License | Type | Link | Relevant Obligations |
 | :--- | :--- | :--- | :--- | :--- |
-| **Dear ImGui** | MIT | Permisiva | [github.com/ocornut/imgui](https://github.com/ocornut/imgui) | Mantener aviso de copyright. |
-| **GLFW** | zlib/libpng | Permisiva | [glfw.org](https://www.glfw.org) | Mantener aviso de copyright. |
-| **GLEW** | MIT / BSD | Permisiva | [glew.sourceforge.net](http://glew.sourceforge.net) | Mantener aviso de copyright. |
-| **GLM** | MIT | Permisiva | [github.com/g-truc/glm](https://github.com/g-truc/glm) | Mantener aviso de copyright. |
-| **nlohmann/json** | MIT | Permisiva | [github.com/nlohmann/json](https://github.com/nlohmann/json) | Mantener aviso de copyright. |
-| **stb_image** | Public Domain / MIT | Permisiva | [github.com/nothings/stb](https://github.com/nothings/stb) | Ninguna obligación práctica. |
-| **PDFium** | BSD 3-Clause | Permisiva | [chromium.googlesource.com/.../pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) | Mantener aviso de copyright, no usar el nombre del proyecto para promoción sin permiso. |
-| **LibVLC SDK** | LGPL 2.1 | Copyleft débil | [videolan.org](https://www.videolan.org) | Ver sección especial abajo. |
-| **TagLib** | LGPL 2.1 / MPL 1.1 | Copyleft débil | [taglib.github.io](https://taglib.github.io) | Ver sección especial abajo. |
+| **Dear ImGui** | MIT | Permissive | [github.com/ocornut/imgui](https://github.com/ocornut/imgui) | Keep copyright notice. |
+| **GLFW** | zlib/libpng | Permissive | [glfw.org](https://www.glfw.org) | Keep copyright notice. |
+| **GLEW** | MIT / BSD | Permissive | [glew.sourceforge.net](http://glew.sourceforge.net) | Keep copyright notice. |
+| **GLM** | MIT | Permissive | [github.com/g-truc/glm](https://github.com/g-truc/glm) | Keep copyright notice. |
+| **nlohmann/json** | MIT | Permissive | [github.com/nlohmann/json](https://github.com/nlohmann/json) | Keep copyright notice. |
+| **stb_image** | Public Domain / MIT | Permissive | [github.com/nothings/stb](https://github.com/nothings/stb) | No practical obligation. |
+| **PDFium** | BSD 3-Clause | Permissive | [chromium.googlesource.com/.../pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) | Keep copyright notice; do not use the project's name for promotion without permission. |
+| **LibVLC SDK** | LGPL 2.1 | Weak copyleft | [videolan.org](https://www.videolan.org) | See special section below. |
+| **TagLib** | LGPL 2.1 / MPL 1.1 | Weak copyleft | [taglib.github.io](https://taglib.github.io) | See special section below. |
 
 ---
 
-## Atención especial: librerías LGPL (LibVLC y TagLib)
+## Special Attention: LGPL Libraries (LibVLC and TagLib)
 
-A diferencia de las licencias permisivas de la tabla anterior, **LGPL 2.1
-impone condiciones adicionales** cuando una librería se enlaza (sobre todo
-de forma estática) dentro de un ejecutable con otra licencia:
+Unlike the permissive licenses in the table above, **LGPL 2.1 imposes additional conditions** when a library is linked (especially statically) into an executable under a different license:
 
-- Debe quedar disponible el **código fuente** de la librería LGPL usada
-  (o al menos un enlace claro a la versión exacta), incluso si el resto
-  del proyecto no es LGPL.
-- Si el enlace es **estático** (como es el caso de TagLib en ProyecThor),
-  la LGPL exige que el usuario final pueda **volver a enlazar** una versión
-  modificada de la librería con el ejecutable — típicamente proporcionando
-  los archivos objeto (`.o`) o un mecanismo equivalente para relinking.
-- Si el enlace es **dinámico** (como LibVLC, distribuido como `.dll`/`.so`
-  separado), esta obligación normalmente se cumple con solo mantener la
-  librería como archivo aparte, reemplazable por el usuario.
+- The **source code** of the LGPL library used must remain available (or at least a clear link to the exact version used), even if the rest of the project is not LGPL.
+- If the linking is **static** (as is the case with TagLib in ProyecThor), the LGPL requires that the end user be able to **relink** a modified version of the library with the executable — typically by providing the object files (`.o`) or an equivalent relinking mechanism.
+- If the linking is **dynamic** (as with LibVLC, distributed as a separate `.dll`/`.so`), this obligation is normally satisfied simply by keeping the library as a separate, replaceable file.
 
-**Antes de tocar, actualizar o volver a empaquetar estas dos dependencias**,
-cualquier colaborador debe leer el texto completo de la LGPL 2.1 y confirmar
-que el método de build actual sigue cumpliendo estas condiciones. No asumas
-que el enlace estático actual de TagLib es válido sin revisar esto primero;
-si tienes dudas, consúltalo con el equipo antes de hacer merge de cambios
-relacionados con el sistema de build de estas librerías.
+**Before touching, updating, or repackaging these two dependencies**, any contributor must read the full text of the LGPL 2.1 and confirm that the current build method still meets these conditions. Do not assume that the current static linking of TagLib is compliant without reviewing this first; if in doubt, check with the team before merging any changes related to the build system for these libraries.
 
-Texto completo de la LGPL 2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+Full text of the LGPL 2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
 
 ---
 
-## Regla general para contribuidores
+## General Rule for Contributors
 
-Si tu contribución agrega, actualiza o reemplaza cualquier SDK o librería de
-terceros:
+If your contribution adds, updates, or replaces any third-party SDK or library:
 
-1. Identifica la licencia exacta de la nueva versión (las licencias pueden
-   cambiar entre versiones de una misma librería).
-2. Verifica que sea compatible con la distribución actual de ProyecThor.
-3. Actualiza este archivo (`THIRD-PARTY-NOTICES.md`) con la entrada
-   correspondiente.
-4. Si la licencia es copyleft (LGPL, GPL, MPL, etc.), coméntalo con el
-   equipo de desarrollo en Discord antes de integrarla, siguiendo el mismo
-   proceso de presentación de cambios descrito en el README.
+1. Identify the exact license of the new version (licenses can change between versions of the same library).
+2. Verify that it is compatible with ProyecThor's current distribution.
+3. Update this file (`THIRD-PARTY-NOTICES.md`) with the corresponding entry.
+4. If the license is copyleft (LGPL, GPL, MPL, etc.), discuss it with the development team on Discord before integrating it, following the same change-proposal process described in the README.
 
-Mantener este archivo actualizado no es opcional: protege al proyecto y a
-quien lo usa o redistribuye.
+Keeping this file up to date is not optional: it protects both the project and anyone who uses or redistributes it.
+
+---
+
+## Note on ProyecThor's Own License
+
+This MIT license applies only to ProyecThor's own source code (the code written by the project team within this repository).
+
+ProyecThor uses third-party SDKs and libraries (Dear ImGui, GLFW, GLEW, GLM, LibVLC, TagLib, PDFium, nlohmann/json, stb_image, among others) that keep their own licenses, independent of this one. Some of them — in particular LibVLC and TagLib, under LGPL 2.1 — impose additional conditions on how binaries linking against them can be distributed.
+
+Before distributing, modifying, or redistributing any ProyecThor build, review the sections above.
