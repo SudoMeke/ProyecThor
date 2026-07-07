@@ -42,6 +42,7 @@ set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glfw")
 set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glew")
 set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc")
 set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium")
+set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium-linux")
 set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk")
 
 # ── 3. ARCHIVOS FUENTE ───────────────────────────────────────────────────────
@@ -85,55 +86,95 @@ set(IMGUI_SOURCES
 )
 # -- AUDIO --
 file(GLOB AUDIO_SOURCES             CONFIGURE_DEPENDS "src/frontend/views/audio/*.cpp")
-# -- RECURSO WINDOWS --
-set(RESOURCE_FILE "src/resources.rc")
-set(CMAKE_RC_FLAGS "-O coff --use-temp-file")
+
+# -- RECURSO WINDOWS (solo aplica en Windows) --
+if(WIN32)
+    set(RESOURCE_FILE "src/resources.rc")
+    set(CMAKE_RC_FLAGS "-O coff --use-temp-file")
+else()
+    set(RESOURCE_FILE "")
+endif()
 
 # --- COPIA DE RECURSOS AL DIRECTORIO BUILD ---
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/shaders"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
-if(EXISTS "${PDFIUM_SDK}/bin/pdfium.dll")
+if(WIN32 AND EXISTS "${PDFIUM_SDK}/bin/pdfium.dll")
     file(COPY "${PDFIUM_SDK}/bin/pdfium.dll"
          DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # ── 4. CREACION DEL EJECUTABLE ───────────────────────────────────────────────
-add_executable(ProyecThor WIN32
-${AUDIO_SOURCES}   
-${FRONTEND_BIBLIO_SOURCES}
-    ${ROOT_SOURCES}
-    ${FRONTEND_UI_BIN_SOURCES}
-    ${BACKEND_CORE_SOURCES}
-    ${BACKEND_MEDIA_SOURCES}
-    ${BACKEND_SETTINGS_SOURCES}
-    ${BACKEND_LIBRARY_SOURCES}
-    ${BACKEND_CONTENT_SOURCES}
-    ${BACKEND_MONITOR_SOURCES}
-    ${BACKEND_SHADERS_SOURCES}
-    ${FRONTEND_PANELS_SOURCES}
-    ${FRONTEND_CAPTURE_SOURCES}
-    ${FRONTEND_LAYERS_SOURCES}
-    ${FRONTEND_MONITOR_SOURCES}
-    ${FRONTEND_STYLES_SOURCES}
-    ${FRONTEND_VIEWS_SOURCES}
-    ${FRONTEND_UI_SOURCES}
-    ${PREVIEW_DOC_SOURCES}
-    ${PREVIEW_MON_SOURCES}
-    ${EXTERNAL_TOOLS}
-    ${IMGUI_SOURCES}
-    ${RESOURCE_FILE}
-    "${GLEW_DIR}/src/glew.c"
-)
+# En Windows el ejecutable debe ser WIN32 (subsistema grafico, sin consola).
+# En Linux no existe ese concepto, asi que se crea como ejecutable normal.
+if(WIN32)
+    add_executable(ProyecThor WIN32
+        ${AUDIO_SOURCES}
+        ${FRONTEND_BIBLIO_SOURCES}
+        ${ROOT_SOURCES}
+        ${FRONTEND_UI_BIN_SOURCES}
+        ${BACKEND_CORE_SOURCES}
+        ${BACKEND_MEDIA_SOURCES}
+        ${BACKEND_SETTINGS_SOURCES}
+        ${BACKEND_LIBRARY_SOURCES}
+        ${BACKEND_CONTENT_SOURCES}
+        ${BACKEND_MONITOR_SOURCES}
+        ${BACKEND_SHADERS_SOURCES}
+        ${FRONTEND_PANELS_SOURCES}
+        ${FRONTEND_CAPTURE_SOURCES}
+        ${FRONTEND_LAYERS_SOURCES}
+        ${FRONTEND_MONITOR_SOURCES}
+        ${FRONTEND_STYLES_SOURCES}
+        ${FRONTEND_VIEWS_SOURCES}
+        ${FRONTEND_UI_SOURCES}
+        ${PREVIEW_DOC_SOURCES}
+        ${PREVIEW_MON_SOURCES}
+        ${EXTERNAL_TOOLS}
+        ${IMGUI_SOURCES}
+        ${RESOURCE_FILE}
+        "${GLEW_DIR}/src/glew.c"
+    )
+else()
+    add_executable(ProyecThor
+        ${AUDIO_SOURCES}
+        ${FRONTEND_BIBLIO_SOURCES}
+        ${ROOT_SOURCES}
+        ${FRONTEND_UI_BIN_SOURCES}
+        ${BACKEND_CORE_SOURCES}
+        ${BACKEND_MEDIA_SOURCES}
+        ${BACKEND_SETTINGS_SOURCES}
+        ${BACKEND_LIBRARY_SOURCES}
+        ${BACKEND_CONTENT_SOURCES}
+        ${BACKEND_MONITOR_SOURCES}
+        ${BACKEND_SHADERS_SOURCES}
+        ${FRONTEND_PANELS_SOURCES}
+        ${FRONTEND_CAPTURE_SOURCES}
+        ${FRONTEND_LAYERS_SOURCES}
+        ${FRONTEND_MONITOR_SOURCES}
+        ${FRONTEND_STYLES_SOURCES}
+        ${FRONTEND_VIEWS_SOURCES}
+        ${FRONTEND_UI_SOURCES}
+        ${PREVIEW_DOC_SOURCES}
+        ${PREVIEW_MON_SOURCES}
+        ${EXTERNAL_TOOLS}
+        ${IMGUI_SOURCES}
+        "${GLEW_DIR}/src/glew.c"
+    )
+endif()
 
 # ── 5. DEFINICIONES Y DIRECTORIOS DE INCLUDE ─────────────────────────────────
 target_compile_definitions(ProyecThor PRIVATE
     GLEW_STATIC
     GLFW_INCLUDE_NONE
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN
     CPPHTTPLIB_NO_EXCEPTIONS
 )
+
+if(WIN32)
+    target_compile_definitions(ProyecThor PRIVATE
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+    )
+endif()
 
 target_include_directories(ProyecThor PRIVATE
     # Version generada
@@ -141,7 +182,7 @@ target_include_directories(ProyecThor PRIVATE
 
     # Raiz src/ para includes absolutos desde src/
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
- "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views/audio" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views/audio"
     # BACKEND
     "${CMAKE_CURRENT_SOURCE_DIR}/src/backend"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/core"
@@ -165,7 +206,7 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/preview/monitors"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/toolbar"
-"${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/biblio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/biblio"
     # EXTERNAS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/external/tools"
     "${IMGUI_DIR}"
@@ -173,7 +214,6 @@ target_include_directories(ProyecThor PRIVATE
     "${GLFW_SDK}/include"
     "${GLEW_DIR}/include"
     "${VLC_SDK}/include"
-    "${PDFIUM_SDK}/include"
 
     # httplib — está directamente en src/backend/sdk/httplib.h
     "${HTTPLIB_DIR}"
@@ -182,62 +222,124 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/ui/bin"
 )
 
-# ── 6. LINKEO DE LIBRERIAS ───────────────────────────────────────────────────
-set(PDFIUM_LIB "${PDFIUM_SDK}/lib/pdfium.dll.lib")
-
-if(NOT EXISTS "${PDFIUM_LIB}")
-    message(FATAL_ERROR
-        "No se encontro pdfium.dll.lib en ${PDFIUM_SDK}/lib\n"
-        "Verifica que el archivo existe en: ${PDFIUM_LIB}"
-    )
+# El include de PDFium cambia segun la plataforma
+if(WIN32)
+    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include")
+else()
+    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK_LINUX}/include")
 endif()
 
-message(STATUS "PDFium encontrado: ${PDFIUM_LIB}")
+# ── 6. LINKEO DE LIBRERIAS ───────────────────────────────────────────────────
 
 target_link_libraries(ProyecThor PRIVATE
     nlohmann_json::nlohmann_json
-    "${GLFW_SDK}/lib-mingw-w64/libglfw3.a"
-    "${VLC_SDK}/lib/libvlc.lib"
-    "${VLC_SDK}/lib/libvlccore.lib"
-    glm::glm 
-    "${PDFIUM_LIB}"
-    opengl32
-    gdi32
-    shell32
-    dwmapi
-    comdlg32
-    winmm
-    ws2_32
-    iphlpapi
+    glm::glm
 )
 
 if(WIN32)
-    target_link_libraries(ProyecThor PRIVATE winhttp)
-endif()
+    # ── Rutas y librerias exclusivas de Windows ──────────────────────────────
+    set(PDFIUM_LIB "${PDFIUM_SDK}/lib/pdfium.dll.lib")
 
-# ── 7. OPCIONES DE COMPILACION ────────────────────────────────────────────────
-target_link_options(ProyecThor PRIVATE
-    "-static"
-)
-# Copiar DLLs de VLC
-if(EXISTS "${VLC_SDK}/libvlc.dll")
-    add_custom_command(TARGET ProyecThor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${VLC_SDK}/libvlc.dll"
-            "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${VLC_SDK}/libvlccore.dll"
-            "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMENT "Copiando DLLs de VLC al directorio de salida"
+    if(NOT EXISTS "${PDFIUM_LIB}")
+        message(FATAL_ERROR
+            "No se encontro pdfium.dll.lib en ${PDFIUM_SDK}/lib\n"
+            "Verifica que el archivo existe en: ${PDFIUM_LIB}"
+        )
+    endif()
+
+    message(STATUS "PDFium encontrado (Windows): ${PDFIUM_LIB}")
+
+    target_link_libraries(ProyecThor PRIVATE
+        "${GLFW_SDK}/lib-mingw-w64/libglfw3.a"
+        "${VLC_SDK}/lib/libvlc.lib"
+        "${VLC_SDK}/lib/libvlccore.lib"
+        "${PDFIUM_LIB}"
+        opengl32
+        gdi32
+        shell32
+        dwmapi
+        comdlg32
+        winmm
+        ws2_32
+        iphlpapi
+        winhttp
+    )
+
+    target_link_options(ProyecThor PRIVATE
+        "-static"
+    )
+
+else()
+    # ── Rutas y librerias exclusivas de Linux ────────────────────────────────
+
+    # GLFW: se busca en el sistema (paquete de desarrollo instalado)
+    find_package(glfw3 QUIET)
+    if(NOT glfw3_FOUND)
+        message(FATAL_ERROR
+            "No se encontro GLFW3 en el sistema.\n"
+            "Instala el paquete de desarrollo de GLFW3 para tu distribucion.\n"
+            "En CachyOS/Arch: sudo pacman -S glfw\n"
+            "En Debian/Ubuntu: sudo apt install libglfw3-dev"
+        )
+    endif()
+
+    # OpenGL
+    find_package(OpenGL REQUIRED)
+
+    # VLC: se busca via pkg-config
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(VLC REQUIRED libvlc)
+
+    # PDFium para Linux: debe existir un build .so colocado manualmente
+    set(PDFIUM_LIB_LINUX "${PDFIUM_SDK_LINUX}/lib/libpdfium.so")
+
+    if(NOT EXISTS "${PDFIUM_LIB_LINUX}")
+        message(FATAL_ERROR
+            "No se encontro libpdfium.so en ${PDFIUM_SDK_LINUX}/lib\n"
+            "Descarga el build de PDFium para Linux y colocalo en:\n"
+            "${PDFIUM_SDK_LINUX}/lib/libpdfium.so\n"
+            "Y sus headers en:\n"
+            "${PDFIUM_SDK_LINUX}/include"
+        )
+    endif()
+
+    message(STATUS "PDFium encontrado (Linux): ${PDFIUM_LIB_LINUX}")
+
+    target_include_directories(ProyecThor PRIVATE ${VLC_INCLUDE_DIRS})
+
+    target_link_libraries(ProyecThor PRIVATE
+        glfw
+        OpenGL::GL
+        ${VLC_LIBRARIES}
+        "${PDFIUM_LIB_LINUX}"
+        pthread
+        dl
     )
 endif()
 
-# Copiar carpeta plugins de VLC (necesaria en runtime)
-if(EXISTS "${VLC_SDK}/plugins")
-    add_custom_command(TARGET ProyecThor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VLC_SDK}/plugins"
-            "$<TARGET_FILE_DIR:ProyecThor>/plugins"
-        COMMENT "Copiando plugins de VLC"
-    )
+# ── 7. COPIA DE ARCHIVOS EN RUNTIME (solo Windows) ───────────────────────────
+
+if(WIN32)
+    # Copiar DLLs de VLC
+    if(EXISTS "${VLC_SDK}/libvlc.dll")
+        add_custom_command(TARGET ProyecThor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${VLC_SDK}/libvlc.dll"
+                "$<TARGET_FILE_DIR:ProyecThor>"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${VLC_SDK}/libvlccore.dll"
+                "$<TARGET_FILE_DIR:ProyecThor>"
+            COMMENT "Copiando DLLs de VLC al directorio de salida"
+        )
+    endif()
+
+    # Copiar carpeta plugins de VLC (necesaria en runtime)
+    if(EXISTS "${VLC_SDK}/plugins")
+        add_custom_command(TARGET ProyecThor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${VLC_SDK}/plugins"
+                "$<TARGET_FILE_DIR:ProyecThor>/plugins"
+            COMMENT "Copiando plugins de VLC"
+        )
+    endif()
 endif()

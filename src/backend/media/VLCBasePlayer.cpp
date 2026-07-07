@@ -43,8 +43,17 @@ namespace {
 
 std::string GetDirectYoutubeURL(const std::string& youtubeURL)
 {
+    // El nombre del binario de yt-dlp difiere entre plataformas: en Windows
+    // se distribuye como "yt-dlp.exe", mientras que en Linux (instalado via
+    // pip, pacman, o el gestor de paquetes de la distro) el ejecutable se
+    // llama simplemente "yt-dlp", sin extension.
+#ifdef _WIN32
     std::string command = "yt-dlp.exe -f \"best[ext=mp4]/best\" -g --no-playlist \""
                         + youtubeURL + "\"";
+#else
+    std::string command = "yt-dlp -f \"best[ext=mp4]/best\" -g --no-playlist \""
+                        + youtubeURL + "\"";
+#endif
     std::array<char, 1024> buffer;
     std::string result;
 #ifdef _WIN32
@@ -241,6 +250,17 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
     hdr.dwBufferLength = count * 2 * sizeof(int16_t);
     waveOutWrite(ctx->hWaveOut, &hdr, sizeof(WAVEHDR));
     ctx->currentHeader = (ctx->currentHeader + 1) % VLCAudioCtx::NUM_BUFFERS;
+#else
+    // NOTA DE PORTABILIDAD: en Linux este callback todavia no escribe a
+    // ningun dispositivo de audio real (no hay equivalente a WinMM aqui).
+    // El video se reproduce y se ve correctamente, pero el audio del clip
+    // no suena todavia en Linux. Esto no causa bloqueos ni cuelgues: el
+    // callback simplemente retorna sin hacer nada. Implementar salida de
+    // audio real en Linux requeriria integrar PulseAudio o ALSA de forma
+    // equivalente al bloque WinMM de arriba.
+    (void)pIn;
+    (void)maxL;
+    (void)maxR;
 #endif
 }
 
@@ -311,8 +331,20 @@ VLCBasePlayer::~VLCBasePlayer()
 void VLCBasePlayer::InitVLC()
 {
     std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
+
+    // IMPORTANTE (fix multiplataforma): antes este valor estaba fijo a
+    // "d3d11va", que es la API de aceleracion de hardware de Direct3D 11,
+    // exclusiva de Windows. En Linux, "d3d11va" no existe: libVLC intentaba
+    // negociar un modulo de decodificacion por hardware inexistente, y esa
+    // negociacion fallida es la causa del congelamiento al reproducir
+    // video/fondo en Linux.
+    //
+    // La solucion es usar "any": libVLC autodetecta el mejor metodo de
+    // aceleracion de hardware disponible segun la plataforma real en la que
+    // esta corriendo (D3D11VA/DXVA2 en Windows, VAAPI/VDPAU en Linux), sin
+    // necesidad de codificar el valor a mano para cada sistema operativo.
     std::string hwDecodeArg = m_UseHardwareDecode
-        ? "--avcodec-hw=d3d11va"
+        ? "--avcodec-hw=any"
         : "--avcodec-hw=none";
 
     const char* args[] = {

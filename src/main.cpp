@@ -84,10 +84,17 @@ static ImVec4 ThemeColorVec4(const float c[4], float alphaOverride = -1.0f)
 }
 
 std::string GetAppDataFilePath(const std::string& filename) {
+#ifdef _WIN32
     const char* appData = std::getenv("APPDATA");
     if (!appData) return filename;
 
     std::filesystem::path dirPath = std::filesystem::path(appData) / "ProyecThor";
+#else
+    const char* home = std::getenv("HOME");
+    if (!home) return filename;
+
+    std::filesystem::path dirPath = std::filesystem::path(home) / ".config" / "ProyecThor";
+#endif
 
     if (!std::filesystem::exists(dirPath)) {
         std::filesystem::create_directories(dirPath);
@@ -101,7 +108,10 @@ GLuint LoadTextureFromFile(const char* filename)
     int w = 0, h = 0, ch = 0;
     unsigned char* data = stbi_load(filename, &w, &h, &ch, 4);
     if (!data)
+    {
+        std::cerr << "[DIAG] LoadTextureFromFile: no se pudo cargar '" << filename << "'\n";
         return 0;
+    }
 
     GLuint tex;
     glGenTextures(1, &tex);
@@ -379,10 +389,27 @@ namespace FrameProfiler
 
 int main()
 {
+    std::cerr << "[DIAG] Iniciando main()\n";
+
+#ifndef _WIN32
+    // GLEW no soporta inicializacion nativa de Wayland: internamente intenta
+    // abrir un display GLX (X11) para cargar extensiones, y eso falla si GLFW
+    // crea la ventana usando el protocolo Wayland nativo. Forzamos a GLFW a
+    // usar el backend X11 (a traves de XWayland, que KDE Plasma mantiene
+    // corriendo automaticamente) para que exista un display X11 real.
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+    std::cerr << "[DIAG] Forzando backend GLFW a X11/XWayland (necesario para GLEW)\n";
+#endif
+
     if (!glfwInit())
+    {
+        std::cerr << "[DIAG] FALLO: glfwInit() devolvio false\n";
         return -1;
+    }
+    std::cerr << "[DIAG] glfwInit() OK\n";
 
     ProyecThor::Settings::SettingsManager::Get().LoadSettings();
+    std::cerr << "[DIAG] SettingsManager::LoadSettings() OK\n";
     auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
 
     glfwWindowHint(GLFW_DECORATED,             GLFW_FALSE);
@@ -395,9 +422,15 @@ int main()
     GLFWwindow* splashWindow = glfwCreateWindow(SPLASH_W, SPLASH_H, "ProyecThor", nullptr, nullptr);
     if (!splashWindow)
     {
+        const char* desc = nullptr;
+        int code = glfwGetError(&desc);
+        std::cerr << "[DIAG] FALLO: glfwCreateWindow(splash) devolvio nullptr. "
+                  << "Codigo GLFW: " << code << " Descripcion: "
+                  << (desc ? desc : "N/A") << "\n";
         glfwTerminate();
         return -1;
     }
+    std::cerr << "[DIAG] splashWindow creado OK\n";
 
     {
         const GLFWvidmode* vm = glfwGetVideoMode(glfwGetPrimaryMonitor());
@@ -409,11 +442,16 @@ int main()
 
     glfwMakeContextCurrent(splashWindow);
     glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK)
+    GLenum glewStatus = glewInit();
+    if (glewStatus != GLEW_OK)
     {
+        std::cerr << "[DIAG] FALLO: glewInit() devolvio error: "
+                  << glewGetErrorString(glewStatus) << "\n";
         glfwTerminate();
         return -1;
     }
+    std::cerr << "[DIAG] glewInit() OK. Version OpenGL: "
+              << (const char*)glGetString(GL_VERSION) << "\n";
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -425,9 +463,15 @@ int main()
     ImFont* regularFont = splashIO.Fonts->AddFontFromFileTTF(fontPath, 20.0f);
     ImFont* smallFont   = splashIO.Fonts->AddFontFromFileTTF(fontPath, 16.0f);
 
+    if (!titleFont || !regularFont || !smallFont)
+        std::cerr << "[DIAG] ADVERTENCIA: no se pudo cargar la fuente en '"
+                  << fontPath << "'. Verifica que el binario se ejecute desde "
+                  << "el directorio correcto (donde existe bin/assets/...).\n";
+
     ImGui_ImplGlfw_InitForOpenGL(splashWindow, true);
     ImGui_ImplOpenGL3_Init("#version 130");
     ImGui::StyleColorsDark();
+    std::cerr << "[DIAG] ImGui inicializado para splashWindow OK\n";
 
     std::string stateFile = GetAppDataFilePath("splash_state.txt");
     int bgIndex = 0;
@@ -467,13 +511,27 @@ int main()
             mainWindow = glfwCreateWindow(MAIN_W, MAIN_H, "ProyecThor", nullptr, splashWindow);
             if (!mainWindow)
             {
+                const char* desc = nullptr;
+                int code = glfwGetError(&desc);
+                std::cerr << "[DIAG] glfwCreateWindow(main, GL 3.3) fallo. "
+                          << "Codigo GLFW: " << code << " Descripcion: "
+                          << (desc ? desc : "N/A") << ". Reintentando con GL 3.0...\n";
+
                 glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
                 glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
                 glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
                 mainWindow = glfwCreateWindow(MAIN_W, MAIN_H, "ProyecThor", nullptr, splashWindow);
             }
             if (!mainWindow)
+            {
+                const char* desc = nullptr;
+                int code = glfwGetError(&desc);
+                std::cerr << "[DIAG] FALLO DEFINITIVO: glfwCreateWindow(main) devolvio nullptr. "
+                          << "Codigo GLFW: " << code << " Descripcion: "
+                          << (desc ? desc : "N/A") << "\n";
                 return;
+            }
+            std::cerr << "[DIAG] mainWindow creado OK\n";
 
 #ifdef _WIN32
             {
@@ -491,12 +549,22 @@ int main()
                     glfwSetWindowIcon(mainWindow, 1, images);
                     stbi_image_free(images[0].pixels);
                 }
+                else
+                {
+                    std::cerr << "[DIAG] ADVERTENCIA: no se pudo cargar 'proyecthor.png' "
+                              << "para el icono de ventana.\n";
+                }
             }
 
             glfwMakeContextCurrent(mainWindow);
             glfwSwapInterval(1);
             glewExperimental = GL_TRUE;
-            glewInit();
+            GLenum status = glewInit();
+            if (status != GLEW_OK)
+            {
+                std::cerr << "[DIAG] ADVERTENCIA: glewInit() para mainWindow devolvio error: "
+                          << glewGetErrorString(status) << "\n";
+            }
         }},
 
         { "Cargando iconos y recursos graficos...", 0.50f, [&](){
@@ -543,6 +611,9 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
 
     if (!mainWindow)
     {
+        std::cerr << "[DIAG] FALLO: mainWindow sigue siendo nullptr despues del loop de carga. "
+                  << "Revisa los mensajes [DIAG] anteriores para ver donde fallo la creacion "
+                  << "de la ventana principal.\n";
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -609,9 +680,11 @@ ImGui::StyleColorsDark();
             settings.projection.targetMonitor = (monitorCount > 1) ? 1 : 0;
     }
 
+    std::cerr << "[DIAG] Antes de uiManager.Initialize()\n";
     ProyecThor::UI::UIManager uiManager;
     if (!uiManager.Initialize(mainWindow))
     {
+        std::cerr << "[DIAG] FALLO: uiManager.Initialize(mainWindow) devolvio false\n";
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -620,6 +693,7 @@ ImGui::StyleColorsDark();
         glfwTerminate();
         return -1;
     }
+    std::cerr << "[DIAG] uiManager.Initialize() OK\n";
 
     auto previewPanel = std::make_shared<ProyecThor::UI::PreviewPanel>();
     auto libraryPanel = std::make_shared<ProyecThor::UI::LibraryPanel>();
@@ -636,6 +710,7 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::CanvasStylesPanel>());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::StreamingPanel>());
     uiManager.AddPanel(uiManager.GetTransitionPanelOwned());
+    std::cerr << "[DIAG] Todos los paneles agregados OK\n";
 
     {
         int fw, fh;
@@ -674,6 +749,8 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
 
     glfwShowWindow(mainWindow);
     glfwFocusWindow(mainWindow);
+
+    std::cerr << "[DIAG] Entrando al loop principal\n";
 
     while (!glfwWindowShouldClose(mainWindow))
     {
@@ -740,6 +817,8 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         FrameProfiler::Add(FrameProfiler::s_FrameTotal, FrameProfiler::ElapsedMs(frameStart));
         FrameProfiler::ReportIfReady();
     }
+
+    std::cerr << "[DIAG] Saliendo del loop principal, cerrando limpio\n";
 
     uiManager.Shutdown();
 
