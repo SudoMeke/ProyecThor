@@ -676,8 +676,8 @@ void UIManager::RenderMainMenuBar()
     m_DatabasePanel.Open();
 
 if (ImGui::MenuItem("Wiki"))
-    m_WikiPanel.Open();
-
+    ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/wiki");
+    
 ImGui::Spacing();
 ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
 ImGui::Separator();

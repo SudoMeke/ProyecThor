@@ -360,6 +360,19 @@ else()
     message(WARNING "extrabuild/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
 endif()
 
+# ── 7c. COPIA DE libpdfium.so AL DIRECTORIO DE BUILD (Linux, para dev) ───────
+# Sin esto, el ejecutable de build-linux/ no encuentra libpdfium.so hasta
+# que se hace "install" (que sí lo copia a /usr/lib/proyecthor).
+if(NOT WIN32)
+    add_custom_command(TARGET ProyecThor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
+            "$<TARGET_FILE_DIR:ProyecThor>"
+        COMMENT "Copiando libpdfium.so al directorio de build"
+    )
+endif()
+
+
 if(NOT WIN32)
     include(GNUInstallDirs)
  
