@@ -5,7 +5,6 @@ sdk: org.freedesktop.Sdk
 command: proyecthor
 
 finish-args:
-
   - --socket=x11
   - --socket=fallback-x11
   - --socket=wayland
@@ -37,32 +36,41 @@ modules:
         url: https://github.com/g-truc/glm.git
         tag: 0.9.9.8
 
-- name: libvlc
-  buildsystem: simple
-  build-commands:
-    - mkdir -p /app/lib/vlc/plugins /app/include/vlc
-    - cp -P lib/*.so* /app/lib/
-    - cp -r plugins/* /app/lib/vlc/plugins/
-    - cp -r include/* /app/include/vlc/
-  sources:
-    - type: git
-      url: https://github.com/TheVixcho/ProyecThor.git
-      branch: beta
-      dest: vlc-linux-src
-
-
-
-  - name: pdfium
+  - name: libvlc
     buildsystem: simple
     build-commands:
-      - install -Dm755 lib/libpdfium.so /app/lib/proyecthor/libpdfium.so
-      - mkdir -p /app/include/pdfium
-      - cp -r include/* /app/include/pdfium/
+      - mkdir -p /app/lib/proyecthor /app/lib/proyecthor/plugins /app/include/vlc
+      - cp -P src/backend/sdk/vlc-linux/lib/*.so* /app/lib/proyecthor/
+      - cp -r src/backend/sdk/vlc-linux/plugins/* /app/lib/proyecthor/plugins/
+      - cp -r src/backend/sdk/vlc-linux/include/* /app/include/vlc/
     sources:
       - type: git
         url: https://github.com/TheVixcho/ProyecThor.git
         branch: beta
-        dest: pdfium-src
+
+  - name: pdfium
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 src/backend/sdk/pdfium-linux/lib/libpdfium.so /app/lib/proyecthor/libpdfium.so
+      - mkdir -p /app/include/pdfium
+      - cp -r src/backend/sdk/pdfium-linux/include/* /app/include/pdfium/
+    sources:
+      - type: git
+        url: https://github.com/TheVixcho/ProyecThor.git
+        branch: beta
+
+  - name: glfw
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DGLFW_BUILD_EXAMPLES=OFF
+      - -DGLFW_BUILD_TESTS=OFF
+      - -DGLFW_BUILD_DOCS=OFF
+    sources:
+      - type: git
+        url: https://github.com/glfw/glfw.git
+        tag: "3.4"
 
   - name: proyecthor
     buildsystem: cmake-ninja

@@ -41,6 +41,7 @@ set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
 set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glfw")
 set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glew")
 set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc")
+set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc-linux")
 set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium")
 set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium-linux")
 set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk")
@@ -222,11 +223,14 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/ui/bin"
 )
 
-# El include de PDFium cambia segun la plataforma
+# El include de PDFium y VLC cambia segun la plataforma
 if(WIN32)
     target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include")
 else()
-    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK_LINUX}/include")
+    target_include_directories(ProyecThor PRIVATE
+        "${PDFIUM_SDK_LINUX}/include"
+        "${VLC_SDK_LINUX}/include"
+    )
 endif()
 
 # ── 6. LINKEO DE LIBRERIAS ───────────────────────────────────────────────────
@@ -272,7 +276,6 @@ if(WIN32)
 else()
     # ── Rutas y librerias exclusivas de Linux ────────────────────────────────
 
-    # GLFW: se busca en el sistema (paquete de desarrollo instalado)
     find_package(glfw3 QUIET)
     if(NOT glfw3_FOUND)
         message(FATAL_ERROR
@@ -283,12 +286,23 @@ else()
         )
     endif()
 
-    # OpenGL
     find_package(OpenGL REQUIRED)
 
-    # VLC: se busca via pkg-config
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(VLC REQUIRED libvlc)
+    # VLC para Linux: build .so vendorizado, igual que PDFium (no se
+    # compila VLC desde cero, se linkea contra binarios ya generados en
+    # src/backend/sdk/vlc-linux/lib/ y src/backend/sdk/vlc-linux/include/)
+    set(VLC_LIB_LINUX "${VLC_SDK_LINUX}/lib/libvlc.so")
+
+    if(NOT EXISTS "${VLC_LIB_LINUX}")
+        message(FATAL_ERROR
+            "No se encontro libvlc.so en ${VLC_SDK_LINUX}/lib\n"
+            "Coloca ahi los .so de VLC (libvlc.so, libvlccore.so),\n"
+            "la carpeta plugins/ y sus headers en:\n"
+            "${VLC_SDK_LINUX}/include"
+        )
+    endif()
+
+    message(STATUS "libVLC encontrado (Linux): ${VLC_LIB_LINUX}")
 
     # PDFium para Linux: debe existir un build .so colocado manualmente
     set(PDFIUM_LIB_LINUX "${PDFIUM_SDK_LINUX}/lib/libpdfium.so")
@@ -305,12 +319,10 @@ else()
 
     message(STATUS "PDFium encontrado (Linux): ${PDFIUM_LIB_LINUX}")
 
-    target_include_directories(ProyecThor PRIVATE ${VLC_INCLUDE_DIRS})
-
     target_link_libraries(ProyecThor PRIVATE
         glfw
         OpenGL::GL
-        ${VLC_LIBRARIES}
+        "${VLC_LIB_LINUX}"
         "${PDFIUM_LIB_LINUX}"
         pthread
         dl
@@ -360,80 +372,106 @@ else()
     message(WARNING "extrabuild/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
 endif()
 
-# ── 7c. COPIA DE libpdfium.so AL DIRECTORIO DE BUILD (Linux, para dev) ───────
-# Sin esto, el ejecutable de build-linux/ no encuentra libpdfium.so hasta
-# que se hace "install" (que sí lo copia a /usr/lib/proyecthor).
+# ── 7c. COPIA DE libpdfium.so Y libvlc.so AL DIRECTORIO DE BUILD (Linux) ─────
+# Sin esto, el ejecutable de build-linux/ no encuentra las librerias hasta
+# que se hace "install" (que si las copia a /usr/lib/proyecthor).
 if(NOT WIN32)
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
             "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMENT "Copiando libpdfium.so al directorio de build"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VLC_SDK_LINUX}/lib/libvlc.so"
+            "$<TARGET_FILE_DIR:ProyecThor>"
+        COMMENT "Copiando libpdfium.so y libvlc.so al directorio de build"
     )
+
+    if(EXISTS "${VLC_SDK_LINUX}/plugins")
+        add_custom_command(TARGET ProyecThor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${VLC_SDK_LINUX}/plugins"
+                "$<TARGET_FILE_DIR:ProyecThor>/plugins"
+            COMMENT "Copiando plugins de VLC (Linux) al directorio de build"
+        )
+    endif()
 endif()
 
 
 if(NOT WIN32)
     include(GNUInstallDirs)
- 
+
     set(PROYECTHOR_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/proyecthor")
- 
-    # RPATH relativo al propio ejecutable: encuentra libpdfium.so en la
-    # misma carpeta sin necesidad de LD_LIBRARY_PATH.
+
+    # RPATH relativo al propio ejecutable: encuentra libpdfium.so/libvlc.so
+    # en la misma carpeta sin necesidad de LD_LIBRARY_PATH.
     set_target_properties(ProyecThor PROPERTIES
         INSTALL_RPATH "$ORIGIN"
         BUILD_WITH_INSTALL_RPATH TRUE
         SKIP_BUILD_RPATH FALSE
     )
- 
+
     # Binario real (no directamente en PATH, lo llama el wrapper de abajo)
     install(TARGETS ProyecThor
         RUNTIME DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
- 
+
     # libpdfium.so vive al lado del binario
     install(FILES "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
- 
+
+    # libvlc.so vive al lado del binario
+    install(FILES "${VLC_SDK_LINUX}/lib/libvlc.so"
+        DESTINATION ${PROYECTHOR_INSTALL_DIR}
+    )
+
+    # Plugins de VLC (necesarios en runtime via VLC_PLUGIN_PATH)
+    if(EXISTS "${VLC_SDK_LINUX}/plugins")
+        install(DIRECTORY "${VLC_SDK_LINUX}/plugins"
+            DESTINATION ${PROYECTHOR_INSTALL_DIR}
+        )
+    endif()
+
     # Shaders (misma carpeta que ya se copia al lado del binario en build/)
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders"
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
- 
-    # Wrapper ejecutable en /usr/bin: hace cd a la carpeta real y ejecuta el
+
+    # Wrapper ejecutable en /usr/bin: hace cd a la carpeta real, exporta
+    # VLC_PLUGIN_PATH (para que libvlc encuentre sus plugins) y ejecuta el
     # binario desde ahi, para que las rutas relativas (shaders/, etc) sigan
     # resolviendo igual que en desarrollo, sin importar el cwd del usuario.
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
 "#!/bin/sh
 cd \"/usr/${PROYECTHOR_INSTALL_DIR}\" || exit 1
+export VLC_PLUGIN_PATH=\"/usr/${PROYECTHOR_INSTALL_DIR}/plugins\"
 exec ./ProyecThor \"\$@\"
 ")
     install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         RENAME proyecthor
     )
- 
+
     # Icono y entrada de menu (.desktop) — opcionales, solo si existen los
     # archivos en packaging/. Si todavia no tenes un icono, comenta estas
     # dos lineas de install() de abajo.
-   # Recursos de extrabuild/ (splash screens, iconos, config, lua/, bin/)
+    # Recursos de extrabuild/ (splash screens, iconos, config, lua/, bin/)
     # excluyendo binarios exclusivos de Windows.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
-    message(STATUS "extrabuild/ encontrado, se incluira en el paquete")
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild/"
-        DESTINATION ${PROYECTHOR_INSTALL_DIR}
-        PATTERN "*.dll" EXCLUDE
-        PATTERN "*.exe" EXCLUDE
-        PATTERN "pasteinbuild.txt" EXCLUDE
-    )
-else()
-    message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
-endif()
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+        message(STATUS "extrabuild/ encontrado, se incluira en el paquete")
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild/"
+            DESTINATION ${PROYECTHOR_INSTALL_DIR}
+            PATTERN "*.dll" EXCLUDE
+            PATTERN "*.exe" EXCLUDE
+            PATTERN "pasteinbuild.txt" EXCLUDE
+        )
+    else()
+        message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
+    endif()
+
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
         )
     endif()
 endif()
- 
