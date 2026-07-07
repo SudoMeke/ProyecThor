@@ -1,13 +1,41 @@
+# ── Carpetas de build (CMake, Ninja, makepkg, MSVC) ──────────────────────────
 build/
+build*/
+pkg/
 CMakeFiles/
 _deps/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+generated/
+
+# ── Instaladores / paquetes generados ────────────────────────────────────────
+iss/installer_output/
 *.exe
 *.obj
-CMakeCache.txt
-iss/installer_output/
+*.pkg.tar.zst
+*.pkg.tar.xz
+*.deb
+*.rpm
+*.log
+
+# ── Carpetas de distribución alternativa (si no van en el repo principal) ───
 web/
 lite/
-build-linux/
-build-win/
-src/notes.txt
+
+# ── Copia suelta de shaders en la raiz (leftover de builds viejos; el
+# codigo real vive en src/backend/shaders/, este NO) ─────────────────────────
+/shaders/
+
+# ── Recursos pesados que se distribuyen aparte, no en git ────────────────────
 extrabuild/
+
+# ── Notas personales ──────────────────────────────────────────────────────────
+src/notes.txt
+text.txt
+
+# ── IDEs / editores ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.user

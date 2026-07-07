@@ -343,3 +343,84 @@ if(WIN32)
         )
     endif()
 endif()
+
+# ── 7b. COPIA DE extrabuild/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
+# Contiene binarios/recursos que hoy pegás a mano (bin/, lua/, plugins/,
+# libvlc.dll, pdfium.dll, iconos, splash screens, yt-dlp.exe, etc). Se copia
+# entero al lado del ejecutable cada vez que se compila.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+    message(STATUS "extrabuild/ encontrado, se copiara al build")
+    add_custom_command(TARGET ProyecThor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild"
+            "$<TARGET_FILE_DIR:ProyecThor>"
+        COMMENT "Copiando extrabuild/ al directorio de salida"
+    )
+else()
+    message(WARNING "extrabuild/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+endif()
+
+if(NOT WIN32)
+    include(GNUInstallDirs)
+ 
+    set(PROYECTHOR_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/proyecthor")
+ 
+    # RPATH relativo al propio ejecutable: encuentra libpdfium.so en la
+    # misma carpeta sin necesidad de LD_LIBRARY_PATH.
+    set_target_properties(ProyecThor PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        SKIP_BUILD_RPATH FALSE
+    )
+ 
+    # Binario real (no directamente en PATH, lo llama el wrapper de abajo)
+    install(TARGETS ProyecThor
+        RUNTIME DESTINATION ${PROYECTHOR_INSTALL_DIR}
+    )
+ 
+    # libpdfium.so vive al lado del binario
+    install(FILES "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
+        DESTINATION ${PROYECTHOR_INSTALL_DIR}
+    )
+ 
+    # Shaders (misma carpeta que ya se copia al lado del binario en build/)
+    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders"
+        DESTINATION ${PROYECTHOR_INSTALL_DIR}
+    )
+ 
+    # Wrapper ejecutable en /usr/bin: hace cd a la carpeta real y ejecuta el
+    # binario desde ahi, para que las rutas relativas (shaders/, etc) sigan
+    # resolviendo igual que en desarrollo, sin importar el cwd del usuario.
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
+"#!/bin/sh
+cd \"/usr/${PROYECTHOR_INSTALL_DIR}\" || exit 1
+exec ./ProyecThor \"\$@\"
+")
+    install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RENAME proyecthor
+    )
+ 
+    # Icono y entrada de menu (.desktop) — opcionales, solo si existen los
+    # archivos en packaging/. Si todavia no tenes un icono, comenta estas
+    # dos lineas de install() de abajo.
+   # Recursos de extrabuild/ (splash screens, iconos, config, lua/, bin/)
+    # excluyendo binarios exclusivos de Windows.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+    message(STATUS "extrabuild/ encontrado, se incluira en el paquete")
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild/"
+        DESTINATION ${PROYECTHOR_INSTALL_DIR}
+        PATTERN "*.dll" EXCLUDE
+        PATTERN "*.exe" EXCLUDE
+        PATTERN "pasteinbuild.txt" EXCLUDE
+    )
+else()
+    message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
+endif()
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+        )
+    endif()
+endif()
+ 

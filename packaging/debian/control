@@ -1,0 +1,22 @@
+Source: proyecthor
+Section: video
+Priority: optional
+Maintainer: Tu Nombre <tu@email.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake,
+               ninja-build,
+               pkg-config,
+               git,
+               libvlc-dev,
+               libglfw3-dev,
+               libgl1-mesa-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/tuusuario/proyecthor
+
+Package: proyecthor
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libvlc5, libglfw3, libgl1
+Recommends: yt-dlp
+Description: Reproductor multimedia con VLC + OpenGL + ImGui
+ ProyecThor es un reproductor multimedia basado en libVLC para el
+ video/audio, OpenGL para el render y Dear ImGui para la interfaz.
