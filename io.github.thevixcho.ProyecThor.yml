@@ -37,15 +37,20 @@ modules:
         url: https://github.com/g-truc/glm.git
         tag: 0.9.9.8
 
-  - name: libvlc
-    buildsystem: meson
-    config-opts:
-      - -Dqt=disabled
-      - -Dncurses=disabled
-    sources:
-      - type: git
-        url: https://code.videolan.org/videolan/vlc.git
-        tag: 3.0.20
+- name: libvlc
+  buildsystem: simple
+  build-commands:
+    - mkdir -p /app/lib/vlc/plugins /app/include/vlc
+    - cp -P lib/*.so* /app/lib/
+    - cp -r plugins/* /app/lib/vlc/plugins/
+    - cp -r include/* /app/include/vlc/
+  sources:
+    - type: git
+      url: https://github.com/TheVixcho/ProyecThor.git
+      branch: beta
+      dest: vlc-linux-src
+
+
 
   - name: pdfium
     buildsystem: simple
