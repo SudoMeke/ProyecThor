@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.3.3
+    VERSION 0.3.2
     LANGUAGES C CXX
 )
 
@@ -444,8 +444,8 @@ if(NOT WIN32)
     # resolviendo igual que en desarrollo, sin importar el cwd del usuario.
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
 "#!/bin/sh
-cd \"/usr/${PROYECTHOR_INSTALL_DIR}\" || exit 1
-export VLC_PLUGIN_PATH=\"/usr/${PROYECTHOR_INSTALL_DIR}/plugins\"
+cd \"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}\" || exit 1
+export VLC_PLUGIN_PATH=\"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}/plugins\"
 exec ./ProyecThor \"\$@\"
 ")
     install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
