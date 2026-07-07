@@ -20,9 +20,10 @@ namespace ProyecThor::Core {
         };
 
         // useHardwareDecode controla si esta instancia usa el decodificador
-        // de hardware de la GPU (d3d11va) o decode por software. Se expone
-        // como parametro de construccion para poder diagnosticar contencion
-        // de sesiones de decode de hardware.
+        // de hardware de la GPU (D3D11VA/DXVA2 en Windows, VAAPI/VDPAU en
+        // Linux, autodetectado via "--avcodec-hw=any") o decode por
+        // software. Se expone como parametro de construccion para poder
+        // diagnosticar contencion de sesiones de decode de hardware.
         VLCBasePlayer(int decodeThreads = 0, bool useHardwareDecode = true);
         ~VLCBasePlayer();
 
@@ -40,7 +41,12 @@ namespace ProyecThor::Core {
         void BlockPath(const std::string& path);
         void UnblockPath();
 
+        // En Windows devuelve los picos calculados a partir de los samples
+        // interceptados manualmente (WinMM). En Linux, donde el audio lo
+        // maneja la salida nativa de libVLC (Pulse/ALSA autodetectado),
+        // no hay acceso a los samples crudos, asi que devuelve 0.0f/0.0f.
         void GetAudioLevels(float& left, float& right);
+
         void SetPause(bool paused);
         bool IsPaused() const { return m_Paused.load(std::memory_order_relaxed); }
 
@@ -48,9 +54,11 @@ namespace ProyecThor::Core {
         void SetVolume(int volume);   // 0-200
         void SetSoftwareVolume(float percent);
 
-        // Corta la salida de audio real (HWAVEOUT) de raiz: el callback de
-        // audio de VLC retorna de inmediato sin tocar el dispositivo ni
-        // hacer busy-wait sobre los buffers.
+        // En Windows corta la salida de audio real (HWAVEOUT) de raiz: el
+        // callback de audio de VLC retorna de inmediato sin tocar el
+        // dispositivo ni hacer busy-wait sobre los buffers. En Linux, sin
+        // callback custom de audio, esto se traduce a mute/volumen 0 via
+        // libVLC nativo (ver .cpp).
         void SetAudioActive(bool active);
 
         void SetPosition(float pos);

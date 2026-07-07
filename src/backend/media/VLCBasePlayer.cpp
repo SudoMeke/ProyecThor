@@ -30,13 +30,27 @@
 
 // =============================================================================
 //  Version SIN hilo de trabajo propio. Play()/Stop() son sincronicos y se
-//  ejecutan en el hilo que los llama. Esta es la version que va fluida: el
-//  WorkerLoop con debounce de 90ms que se agrego despues generaba contencion
-//  de CPU/GPU entre el hilo de trabajo y el hilo de render, y quedo mezclado
-//  con codigo duplicado fuera del namespace (no compilaba de forma
-//  consistente contra el header actual, que ya no declara m_WorkerThread,
-//  m_WorkMutex, etc). Se revierte a este diseño sincrono + doble buffer de
-//  video, que es el que coincide con VLCBasePlayer.h.
+//  ejecutan en el hilo que los llama.
+//
+//  FIX DE AUDIO EN LINUX
+//  ---------------------
+//  El problema original: se registraban callbacks de audio custom
+//  (libvlc_audio_set_callbacks) con una implementacion que SOLO escribia a
+//  un dispositivo real en la rama _WIN32 (via WinMM/HWAVEOUT). En Linux esa
+//  rama no existia: el callback interceptaba los samples y no los mandaba a
+//  ningun lado, asi que nunca sonaba nada. No era un problema de VLC ni de
+//  configuracion del sistema: al registrar callbacks de audio le decis a
+//  libVLC "yo manejo la salida", entonces VLC deja de usar su aout nativo
+//  (PulseAudio/ALSA), y el reemplazo custom no hacia nada en Linux.
+//
+//  Solucion: los callbacks de audio (libvlc_audio_set_callbacks /
+//  libvlc_audio_set_format_callbacks) se registran UNICAMENTE en Windows,
+//  donde de verdad hay una implementacion (WinMM). En Linux NO se registra
+//  ningun callback de audio: se deja que libVLC use su salida de audio
+//  nativa, que autodetecta Pulse/ALSA igual que autodetecta VAAPI/VDPAU
+//  para el hardware decode. Volumen y mute pasan a controlarse tambien via
+//  libvlc_audio_set_volume()/libvlc_audio_set_mute() para que apliquen
+//  correctamente en ambas plataformas.
 // =============================================================================
 
 namespace {
@@ -81,8 +95,11 @@ std::string NormalizePathForCompare(const std::string& path)
     return result;
 }
 
+#ifdef _WIN32
 // Actualiza un maximo atomico sin locks. Se usa para los picos de audio,
 // leidos cada frame por el VU meter sin competir con el hilo de audio real.
+// Solo se usa en Windows: es la unica plataforma donde interceptamos los
+// samples crudos.
 static inline void AtomicUpdateMax(std::atomic<float>& target, float value)
 {
     float current = target.load(std::memory_order_relaxed);
@@ -91,6 +108,7 @@ static inline void AtomicUpdateMax(std::atomic<float>& target, float value)
     {
     }
 }
+#endif
 
 struct VLCAudioCtx {
     std::atomic<float> peakL{0.0f};
@@ -126,6 +144,13 @@ struct VLCVideoCtx {
     bool     dirty  = false;
 };
 
+#ifdef _WIN32
+// -----------------------------------------------------------------------
+// Callbacks de audio: SOLO se registran/usan en Windows (ver
+// CreatePersistentPlayer). En Linux libVLC usa su salida nativa y estos
+// callbacks ni siquiera se compilan como parte del flujo activo.
+// -----------------------------------------------------------------------
+
 static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned* channels)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(*opaque);
@@ -133,7 +158,6 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
     *rate     = 44100;
     *channels = 2;
 
-#ifdef _WIN32
     // El formato de salida es siempre el mismo, asi que si el dispositivo
     // ya fue abierto no hay nada que reconfigurar. libVLC llama a este
     // callback en cada cambio de clip: reabrir aqui el HWAVEOUT era una
@@ -163,27 +187,23 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
     {
         std::cerr << "[Audio] Error al abrir la salida nativa de Windows.\n";
     }
-#endif
     return 0;
 }
 
 static void vlc_audio_cleanup(void* opaque)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-#ifdef _WIN32
     // NO se cierra el dispositivo aqui, solo se vacia la cola pendiente.
     // El cierre real ocurre unicamente en vlc_audio_destroy_device(), al
     // destruir el reproductor completo.
     if (ctx->hWaveOut)
         waveOutReset(ctx->hWaveOut);
-#endif
 }
 
 // Libera de verdad el dispositivo de audio nativo. Solo se llama desde
 // VLCBasePlayer::DestroyVLC().
 static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
 {
-#ifdef _WIN32
     if (ctx->hWaveOut)
     {
         waveOutReset(ctx->hWaveOut);
@@ -197,7 +217,6 @@ static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
         ctx->hWaveOut = nullptr;
     }
     ctx->deviceInitialized = false;
-#endif
 }
 
 static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t /*pts*/)
@@ -208,6 +227,7 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
         return;
 
     if (!ctx->volumeMultiplier || !ctx->muted) return;
+    if (!ctx->hWaveOut) return;
 
     bool  isMuted = ctx->muted->load(std::memory_order_relaxed);
     float vol     = isMuted ? 0.0f : ctx->volumeMultiplier->load(std::memory_order_relaxed);
@@ -215,9 +235,6 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
     const int16_t* pIn = static_cast<const int16_t*>(samples);
     float maxL = 0.0f;
     float maxR = 0.0f;
-
-#ifdef _WIN32
-    if (!ctx->hWaveOut) return;
 
     WAVEHDR& hdr = ctx->waveHeaders[ctx->currentHeader];
     while (hdr.dwFlags & WHDR_INQUEUE)
@@ -250,19 +267,8 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
     hdr.dwBufferLength = count * 2 * sizeof(int16_t);
     waveOutWrite(ctx->hWaveOut, &hdr, sizeof(WAVEHDR));
     ctx->currentHeader = (ctx->currentHeader + 1) % VLCAudioCtx::NUM_BUFFERS;
-#else
-    // NOTA DE PORTABILIDAD: en Linux este callback todavia no escribe a
-    // ningun dispositivo de audio real (no hay equivalente a WinMM aqui).
-    // El video se reproduce y se ve correctamente, pero el audio del clip
-    // no suena todavia en Linux. Esto no causa bloqueos ni cuelgues: el
-    // callback simplemente retorna sin hacer nada. Implementar salida de
-    // audio real en Linux requeriria integrar PulseAudio o ALSA de forma
-    // equivalente al bloque WinMM de arriba.
-    (void)pIn;
-    (void)maxL;
-    (void)maxR;
-#endif
 }
+#endif // _WIN32
 
 static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigned* height,
                             unsigned* pitches, unsigned* lines)
@@ -332,17 +338,10 @@ void VLCBasePlayer::InitVLC()
 {
     std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
 
-    // IMPORTANTE (fix multiplataforma): antes este valor estaba fijo a
-    // "d3d11va", que es la API de aceleracion de hardware de Direct3D 11,
-    // exclusiva de Windows. En Linux, "d3d11va" no existe: libVLC intentaba
-    // negociar un modulo de decodificacion por hardware inexistente, y esa
-    // negociacion fallida es la causa del congelamiento al reproducir
-    // video/fondo en Linux.
-    //
-    // La solucion es usar "any": libVLC autodetecta el mejor metodo de
-    // aceleracion de hardware disponible segun la plataforma real en la que
-    // esta corriendo (D3D11VA/DXVA2 en Windows, VAAPI/VDPAU en Linux), sin
-    // necesidad de codificar el valor a mano para cada sistema operativo.
+    // "any": libVLC autodetecta el mejor metodo de aceleracion de hardware
+    // disponible segun la plataforma real en la que esta corriendo
+    // (D3D11VA/DXVA2 en Windows, VAAPI/VDPAU en Linux), sin necesidad de
+    // codificar el valor a mano para cada sistema operativo.
     std::string hwDecodeArg = m_UseHardwareDecode
         ? "--avcodec-hw=any"
         : "--avcodec-hw=none";
@@ -395,9 +394,23 @@ void VLCBasePlayer::CreatePersistentPlayer()
     aCtx->muted            = &m_Muted;
     aCtx->audioActive      = &m_AudioActive;
     m_AudioCtx = aCtx;
+
+#ifdef _WIN32
+    // Solo en Windows interceptamos los samples crudos para mandarlos a
+    // WinMM manualmente (necesario para el VU meter con picos reales).
     libvlc_audio_set_format_callbacks(m_MediaPlayer, vlc_audio_setup, vlc_audio_cleanup);
     libvlc_audio_set_callbacks(m_MediaPlayer, vlc_audio_play,
                                nullptr, nullptr, nullptr, nullptr, aCtx);
+#else
+    // En Linux NO registramos callbacks de audio: dejamos que libVLC use
+    // su salida nativa (PulseAudio/ALSA autodetectado), que es la unica
+    // que realmente reproduce sonido en esta plataforma. Volumen/mute se
+    // controlan via libvlc_audio_set_volume()/libvlc_audio_set_mute()
+    // (ver SetVolume/SetMute mas abajo).
+    libvlc_audio_set_mute(m_MediaPlayer, m_Muted.load(std::memory_order_relaxed) ? 1 : 0);
+    libvlc_audio_set_volume(m_MediaPlayer,
+        static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f));
+#endif
 
     libvlc_event_manager_t* em = libvlc_media_player_event_manager(m_MediaPlayer);
     libvlc_event_attach(em, libvlc_MediaPlayerEndReached,       &VLCBasePlayer::OnVlcEvent, this);
@@ -428,7 +441,9 @@ void VLCBasePlayer::DestroyVLC()
     if (m_AudioCtx)
     {
         auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+#ifdef _WIN32
         vlc_audio_destroy_device(ctx);
+#endif
         delete ctx;
         m_AudioCtx = nullptr;
     }
@@ -470,7 +485,7 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
     uint64_t myGen = ++m_LoadGeneration;
 
     if (startMuted)
-        m_Muted.store(true, std::memory_order_relaxed);
+        SetMute(true);
 
     // Sincronico: se ejecuta ya mismo, en el hilo que llamo a Play(). No hay
     // hilo de trabajo ni debounce: eso es justamente lo que introducia el
@@ -562,11 +577,24 @@ bool VLCBasePlayer::ConsumeEndReached()
 void VLCBasePlayer::SetMute(bool mute)
 {
     m_Muted.store(mute, std::memory_order_relaxed);
+#ifndef _WIN32
+    // En Linux el mute real lo aplica libVLC sobre su salida nativa.
+    if (m_MediaPlayer)
+        libvlc_audio_set_mute(m_MediaPlayer, mute ? 1 : 0);
+#endif
+    // En Windows el mute lo aplica vlc_audio_play() multiplicando por
+    // m_VolumeMultiplier/m_Muted antes de escribir a WinMM.
 }
 
 void VLCBasePlayer::SetAudioActive(bool active)
 {
     m_AudioActive.store(active, std::memory_order_relaxed);
+#ifndef _WIN32
+    // Sin callback custom en Linux, el equivalente de "cortar audio de
+    // raiz" es mutear via libVLC nativo.
+    if (m_MediaPlayer)
+        libvlc_audio_set_mute(m_MediaPlayer, active ? (m_Muted.load(std::memory_order_relaxed) ? 1 : 0) : 1);
+#endif
 }
 
 void VLCBasePlayer::SetVolume(int volume)
@@ -574,6 +602,12 @@ void VLCBasePlayer::SetVolume(int volume)
     float multiplier = static_cast<float>(volume) / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
+#ifndef _WIN32
+    // En Linux el volumen real lo aplica libVLC sobre su salida nativa.
+    if (m_MediaPlayer)
+        libvlc_audio_set_volume(m_MediaPlayer, volume);
+#endif
+    // En Windows lo aplica vlc_audio_play() multiplicando los samples.
 }
 
 void VLCBasePlayer::SetSoftwareVolume(float percent)
@@ -581,6 +615,10 @@ void VLCBasePlayer::SetSoftwareVolume(float percent)
     float multiplier = percent / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
+#ifndef _WIN32
+    if (m_MediaPlayer)
+        libvlc_audio_set_volume(m_MediaPlayer, static_cast<int>(percent));
+#endif
 }
 
 void VLCBasePlayer::SetPause(bool paused)
@@ -683,6 +721,7 @@ void VLCBasePlayer::SetAudioDevice(const std::string& deviceId)
 
 void VLCBasePlayer::GetAudioLevels(float& left, float& right)
 {
+#ifdef _WIN32
     if (!m_AudioCtx)
     {
         left = right = 0.0f;
@@ -693,6 +732,12 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
     // operacion atomica, sin bloquear ni competir con el hilo de audio.
     left  = ctx->peakL.exchange(0.0f, std::memory_order_relaxed);
     right = ctx->peakR.exchange(0.0f, std::memory_order_relaxed);
+#else
+    // En Linux no interceptamos los samples crudos (libVLC usa su salida
+    // nativa), asi que no hay picos reales que reportar. Se devuelve 0.0f
+    // para no romper a quien consuma el VU meter.
+    left = right = 0.0f;
+#endif
 }
 
 } // namespace ProyecThor::Core
