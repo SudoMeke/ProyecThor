@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.3.2
+    VERSION 0.3.3
     LANGUAGES C CXX
 )
 
@@ -166,6 +166,7 @@ endif()
 # ── 5. DEFINICIONES Y DIRECTORIOS DE INCLUDE ─────────────────────────────────
 target_compile_definitions(ProyecThor PRIVATE
     GLEW_STATIC
+    GLEW_NO_GLU
     GLFW_INCLUDE_NONE
     CPPHTTPLIB_NO_EXCEPTIONS
 )
