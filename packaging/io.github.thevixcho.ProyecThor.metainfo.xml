@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.thevixcho.ProyecThor</id>
+  <name>ProyecThor</name>
+  <summary>Software de proyeccion de letras y presentaciones</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      ProyecThor es un software para proyectar letras de canciones,
+      anuncios y presentaciones en pantallas externas.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.thevixcho.ProyecThor.desktop</launchable>
+  <url type="homepage">https://github.com/TheVixcho/ProyecThor</url>
+  <url type="bugtracker">https://github.com/TheVixcho/ProyecThor/issues</url>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.3.2" date="2026-01-01" />
+  </releases>
+</component>

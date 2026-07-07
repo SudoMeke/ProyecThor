@@ -1,0 +1,78 @@
+app-id: io.github.thevixcho.ProyecThor
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+command: proyecthor
+
+finish-args:
+
+  - --socket=x11
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --socket=pulseaudio
+  - --share=network
+  - --filesystem=home
+  - --talk-name=org.freedesktop.portal.OpenURI
+
+modules:
+
+  - name: nlohmann_json-src
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /var/tmp/proyecthor-deps/json
+      - cp -r . /var/tmp/proyecthor-deps/json
+    sources:
+      - type: git
+        url: https://github.com/nlohmann/json.git
+        tag: v3.11.3
+
+  - name: glm-src
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /var/tmp/proyecthor-deps/glm
+      - cp -r . /var/tmp/proyecthor-deps/glm
+    sources:
+      - type: git
+        url: https://github.com/g-truc/glm.git
+        tag: 0.9.9.8
+
+  - name: libvlc
+    buildsystem: meson
+    config-opts:
+      - -Dqt=disabled
+      - -Dncurses=disabled
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/vlc.git
+        tag: 3.0.20
+
+  - name: pdfium
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 lib/libpdfium.so /app/lib/proyecthor/libpdfium.so
+      - mkdir -p /app/include/pdfium
+      - cp -r include/* /app/include/pdfium/
+    sources:
+      - type: git
+        url: https://github.com/TheVixcho/ProyecThor.git
+        branch: beta
+        dest: pdfium-src
+
+  - name: proyecthor
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+      - -DFETCHCONTENT_SOURCE_DIR_JSON=/var/tmp/proyecthor-deps/json
+      - -DFETCHCONTENT_SOURCE_DIR_GLM=/var/tmp/proyecthor-deps/glm
+    sources:
+      - type: git
+        url: https://github.com/TheVixcho/ProyecThor.git
+        branch: beta
+      - type: file
+        path: packaging/proyecthor.png
+    post-install:
+      - install -Dm644 packaging/proyecthor.png /app/share/icons/hicolor/256x256/apps/io.github.thevixcho.ProyecThor.png
+      - install -Dm644 packaging/io.github.thevixcho.ProyecThor.desktop /app/share/applications/io.github.thevixcho.ProyecThor.desktop
+      - install -Dm644 packaging/io.github.thevixcho.ProyecThor.metainfo.xml /app/share/metainfo/io.github.thevixcho.ProyecThor.metainfo.xml
