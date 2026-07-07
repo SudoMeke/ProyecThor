@@ -561,9 +561,9 @@ ImGui::Begin("ProjectorLive", nullptr, flags);
         ImGui::PopStyleColor();
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.500f, 0.500f, 0.490f, 1.0f));
-        ImGui::Text("Creado por TheVixcho");
+        ImGui::Text("Creado por TheVixcho y la comunidad de ProyecThor");
         ImGui::Spacing();
-        ImGui::TextDisabled("2026  Todos los derechos reservados.");
+        ImGui::TextDisabled("2026");
         ImGui::PopStyleColor();
 
         ImGui::Spacing();
