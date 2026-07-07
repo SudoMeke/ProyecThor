@@ -1,5 +1,5 @@
 # ninja log v7
-1	8	1783388144664189126	/home/vixcho/Documentos/ProyecThor/build-linux/CMakeFiles/cmake.verify_globs	420da6e44a253bdd
+1	9	1783388348947613187	/home/vixcho/Documentos/ProyecThor/build-linux/CMakeFiles/cmake.verify_globs	420da6e44a253bdd
 11	318	1783387002023541309	CMakeFiles/ProyecThor.dir/src/frontend/views/audio/AudioWaveform.cpp.o	113d2e37750c9ed0
 12	584	1783387002024426334	CMakeFiles/ProyecThor.dir/src/frontend/ui/bin/StyleGeneralApp.cpp.o	5d29008586e6c11b
 12	363	1783387002024530952	CMakeFiles/ProyecThor.dir/src/backend/core/BackgroundLayer.cpp.o	5a63f0c6a37fc37f
@@ -79,4 +79,24 @@
 3826	5779	1783387005838649681	CMakeFiles/ProyecThor.dir/src/frontend/views/Audio.cpp.o	7000728d5c7e8446
 5355	6748	1783387007367097370	CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.o	46dc988064b43742
 340	636	1783388088755208709	ProyecThor	296ef73942de5a5d
-1	9	1783388348947613187	/home/vixcho/Documentos/ProyecThor/build-linux/CMakeFiles/cmake.verify_globs	420da6e44a253bdd
+1	9	1783388425716269371	/home/vixcho/Documentos/ProyecThor/build-linux/CMakeFiles/cmake.verify_globs	420da6e44a253bdd
+14	339	1783388425730749246	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorQueueActions.cpp.o	5396ba2c60f2cd41
+11	526	1783388425727661338	CMakeFiles/ProyecThor.dir/src/backend/settings/CategoryAudio.cpp.o	7e6a6fc3c4a745fa
+11	630	1783388425727243925	CMakeFiles/ProyecThor.dir/src/backend/core/BackgroundLayer.cpp.o	5a63f0c6a37fc37f
+12	760	1783388425728199109	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorCenterColumn.cpp.o	26019f579ba195da
+13	817	1783388425729394369	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorPreviewControls.cpp.o	8ae337b1c05270f4
+11	856	1783388425727803555	CMakeFiles/ProyecThor.dir/src/backend/monitors/AudioMeters.cpp.o	ed0352e32f6cf4e9
+11	919	1783388425727505811	CMakeFiles/ProyecThor.dir/src/backend/media/VLCBasePlayer.cpp.o	eac5c3f32888d68c
+13	941	1783388425728269160	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorLiveControls.cpp.o	2fd6aa2abfcf6a9c
+11	953	1783388425728063421	CMakeFiles/ProyecThor.dir/src/frontend/panels/PreviewPanel.cpp.o	c7c660cc2e2f204c
+11	1327	1783388425727933183	CMakeFiles/ProyecThor.dir/src/backend/monitors/MonitorUIHelpers.cpp.o	48c64260331b2940
+339	1333	1783388426054988114	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorQueueEngine.cpp.o	33f68216b2c8df16
+11	1373	1783388425727366633	CMakeFiles/ProyecThor.dir/src/backend/core/PresentationCore.cpp.o	3ade34894f8b3c8d
+760	1470	1783388426475256085	CMakeFiles/ProyecThor.dir/src/frontend/views/MediaView.cpp.o	1a6f88b9f28b822a
+630	1500	1783388426345258360	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorView.cpp.o	7bf532dd91a1b679
+13	1519	1783388425729859091	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorQueue.cpp.o	fbfd3507422f5714
+10	1540	1783388425725269213	CMakeFiles/ProyecThor.dir/src/frontend/panels/biblio/LibraryVideos.cpp.o	ea0ebd8c68c97dc2
+10	1596	1783388425726269196	CMakeFiles/ProyecThor.dir/src/main.cpp.o	20c2b93057d4a06e
+526	1606	1783388426241260181	CMakeFiles/ProyecThor.dir/src/frontend/panels/monitor/MonitorVideoPanels.cpp.o	376a044797eaa704
+817	1928	1783388426533255069	CMakeFiles/ProyecThor.dir/src/frontend/ui/UIManager.cpp.o	30a96581a49facbf
+1928	2216	1783388427643624310	ProyecThor	296ef73942de5a5d

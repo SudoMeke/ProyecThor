@@ -7,5 +7,7 @@ CMakeCache.txt
 iss/installer_output/
 web/
 lite/
-
+build-linux/
+build-win/
 src/notes.txt
+extrabuild/
