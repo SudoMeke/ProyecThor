@@ -16,7 +16,7 @@ namespace ProyecThor::Core {
         double m_PendingSwapStart = 0.0;
 
         int  m_TargetVolume = 100;
-        bool m_TargetMuted  = false;
+        bool m_TargetMuted  = true;
 
         // Gate real de audio al publico. Solo cuando esta en true el
         // player activo puede sonar de verdad (ver SetPubliclyLive). Sin

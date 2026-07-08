@@ -28,48 +28,11 @@
 #pragma comment(lib, "winmm.lib")
 #endif
 
-// =============================================================================
-//  Version SIN hilo de trabajo propio. Play()/Stop() son sincronicos y se
-//  ejecutan en el hilo que los llama.
-//
-//  FIX DE AUDIO EN LINUX
-//  ---------------------
-//  El problema original: se registraban callbacks de audio custom
-//  (libvlc_audio_set_callbacks) con una implementacion que SOLO escribia a
-//  un dispositivo real en la rama _WIN32 (via WinMM/HWAVEOUT). En Linux esa
-//  rama no existia: el callback interceptaba los samples y no los mandaba a
-//  ningun lado, asi que nunca sonaba nada. No era un problema de VLC ni de
-//  configuracion del sistema: al registrar callbacks de audio le decis a
-//  libVLC "yo manejo la salida", entonces VLC deja de usar su aout nativo
-//  (PulseAudio/ALSA), y el reemplazo custom no hacia nada en Linux.
-//
-//  Solucion: los callbacks de audio (libvlc_audio_set_callbacks /
-//  libvlc_audio_set_format_callbacks) se registran UNICAMENTE en Windows,
-//  donde de verdad hay una implementacion (WinMM). En Linux NO se registra
-//  ningun callback de audio: se deja que libVLC use su salida de audio
-//  nativa, que autodetecta Pulse/ALSA igual que autodetecta VAAPI/VDPAU
-//  para el hardware decode. Volumen y mute pasan a controlarse tambien via
-//  libvlc_audio_set_volume()/libvlc_audio_set_mute() para que apliquen
-//  correctamente en ambas plataformas.
-//
-//  GARANTIA DE SILENCIO ESTRUCTURAL (m_ForceSilent)
-//  --------------------------------------------------
-//  Independiente de lo anterior: un player construido con forceSilent=true
-//  jamas puede sonar, sin importar que boton o flujo llame a SetMute(false)
-//  o SetVolume(>0). Esto es lo que garantiza que el preview de biblioteca
-//  nunca tenga audio, y que el fondo (background) solo suene cuando
-//  BackgroundLayer confirma que esta realmente proyectando al publico
-//  (ver BackgroundLayer::SetPubliclyLive).
-// =============================================================================
-
 namespace {
-
+std::atomic<int> g_NextVlcInstanceId{0};
 std::string GetDirectYoutubeURL(const std::string& youtubeURL)
 {
-    // El nombre del binario de yt-dlp difiere entre plataformas: en Windows
-    // se distribuye como "yt-dlp.exe", mientras que en Linux (instalado via
-    // pip, pacman, o el gestor de paquetes de la distro) el ejecutable se
-    // llama simplemente "yt-dlp", sin extension.
+
 #ifdef _WIN32
     std::string command = "yt-dlp.exe -f \"best[ext=mp4]/best\" -g --no-playlist \""
                         + youtubeURL + "\"";
@@ -141,10 +104,6 @@ struct VLCAudioCtx {
 #endif
 };
 
-// Doble buffer para el video: el decoder de VLC escribe en backBuf
-// (vlc_lock/vlc_unlock) mientras el hilo de render sube frontBuf a GL
-// (UpdateTexture). Se intercambian punteros en vlc_unlock, asi que el lock
-// que protege el intercambio se mantiene por un tiempo minimo.
 struct VLCVideoCtx {
     std::mutex mutex;
     void*    frontBuf = nullptr; // listo para subir a GL
@@ -155,11 +114,6 @@ struct VLCVideoCtx {
 };
 
 #ifdef _WIN32
-// -----------------------------------------------------------------------
-// Callbacks de audio: SOLO se registran/usan en Windows (ver
-// CreatePersistentPlayer). En Linux libVLC usa su salida nativa y estos
-// callbacks ni siquiera se compilan como parte del flujo activo.
-// -----------------------------------------------------------------------
 
 static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned* channels)
 {
@@ -168,10 +122,6 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
     *rate     = 44100;
     *channels = 2;
 
-    // El formato de salida es siempre el mismo, asi que si el dispositivo
-    // ya fue abierto no hay nada que reconfigurar. libVLC llama a este
-    // callback en cada cambio de clip: reabrir aqui el HWAVEOUT era una
-    // causa de microcortes de audio.
     if (ctx->deviceInitialized)
         return 0;
 
@@ -203,15 +153,10 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
 static void vlc_audio_cleanup(void* opaque)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-    // NO se cierra el dispositivo aqui, solo se vacia la cola pendiente.
-    // El cierre real ocurre unicamente en vlc_audio_destroy_device(), al
-    // destruir el reproductor completo.
     if (ctx->hWaveOut)
         waveOutReset(ctx->hWaveOut);
 }
 
-// Libera de verdad el dispositivo de audio nativo. Solo se llama desde
-// VLCBasePlayer::DestroyVLC().
 static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
 {
     if (ctx->hWaveOut)
@@ -334,7 +279,12 @@ VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool for
     : m_DecodeThreads(decodeThreads)
     , m_UseHardwareDecode(useHardwareDecode)
 {
+    m_InstanceId = g_NextVlcInstanceId.fetch_add(1, std::memory_order_relaxed);
     m_ForceSilent.store(forceSilent, std::memory_order_relaxed);
+
+    std::cerr << "[VLC#" << m_InstanceId << "] Construido. forceSilent="
+              << (forceSilent ? "true" : "false") << "\n";
+
     InitVLC();
     CreatePersistentPlayer();
 }
@@ -504,14 +454,17 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
         return;
     }
 
+    std::cerr << "[VLC#" << m_InstanceId << "] Play() path=" << path
+              << " startMuted=" << (startMuted ? "true" : "false")
+              << " forceSilent=" << (m_ForceSilent.load(std::memory_order_relaxed) ? "true" : "false")
+              << " audioActive=" << (m_AudioActive.load(std::memory_order_relaxed) ? "true" : "false")
+              << "\n";
+
     uint64_t myGen = ++m_LoadGeneration;
 
     if (startMuted)
         SetMute(true);
 
-    // Sincronico: se ejecuta ya mismo, en el hilo que llamo a Play(). No hay
-    // hilo de trabajo ni debounce: eso es justamente lo que introducia el
-    // retardo/entrecortado al cambiar de clip.
     LoadAndPlay(path, loop, startMuted, myGen);
 }
 
@@ -598,30 +551,46 @@ bool VLCBasePlayer::ConsumeEndReached()
 
 void VLCBasePlayer::SetMute(bool mute)
 {
-    // forceSilent manda: un player silenciado por construccion no puede
-    // desmutearse nunca, sin importar quien llame a esta funcion.
     bool effectiveMute = mute || m_ForceSilent.load(std::memory_order_relaxed);
+
+    std::cerr << "[VLC#" << m_InstanceId << "] SetMute(" << (mute ? "true" : "false")
+              << ") -> effectiveMute=" << (effectiveMute ? "true" : "false") << "\n";
+
     m_Muted.store(effectiveMute, std::memory_order_relaxed);
 #ifndef _WIN32
-    // En Linux el mute real lo aplica libVLC sobre su salida nativa.
     if (m_MediaPlayer)
+    {
         libvlc_audio_set_mute(m_MediaPlayer, effectiveMute ? 1 : 0);
+
+        if (effectiveMute)
+            libvlc_audio_set_volume(m_MediaPlayer, 0);
+        else if (m_AudioActive.load(std::memory_order_relaxed))
+            libvlc_audio_set_volume(m_MediaPlayer,
+                static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f));
+    }
 #endif
-    // En Windows el mute lo aplica vlc_audio_play() multiplicando por
-    // m_VolumeMultiplier/m_Muted antes de escribir a WinMM (y ademas
-    // vuelve a chequear forceSilent alli mismo, ver vlc_audio_play).
 }
 
 void VLCBasePlayer::SetAudioActive(bool active)
 {
     bool effectiveActive = active && !m_ForceSilent.load(std::memory_order_relaxed);
+
+    std::cerr << "[VLC#" << m_InstanceId << "] SetAudioActive(" << (active ? "true" : "false")
+              << ") -> effectiveActive=" << (effectiveActive ? "true" : "false") << "\n";
+
     m_AudioActive.store(effectiveActive, std::memory_order_relaxed);
 #ifndef _WIN32
-    // Sin callback custom en Linux, el equivalente de "cortar audio de
-    // raiz" es mutear via libVLC nativo.
     if (m_MediaPlayer)
-        libvlc_audio_set_mute(m_MediaPlayer,
-            effectiveActive ? (m_Muted.load(std::memory_order_relaxed) ? 1 : 0) : 1);
+    {
+        bool shouldMute = !effectiveActive || m_Muted.load(std::memory_order_relaxed);
+        libvlc_audio_set_mute(m_MediaPlayer, shouldMute ? 1 : 0);
+
+        if (!effectiveActive)
+            libvlc_audio_set_volume(m_MediaPlayer, 0);
+        else if (!m_Muted.load(std::memory_order_relaxed))
+            libvlc_audio_set_volume(m_MediaPlayer,
+                static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f));
+    }
 #endif
 }
 
@@ -652,6 +621,19 @@ void VLCBasePlayer::SetSoftwareVolume(float percent)
 #ifndef _WIN32
     if (m_MediaPlayer)
         libvlc_audio_set_volume(m_MediaPlayer, static_cast<int>(percent));
+#endif
+}
+
+void VLCBasePlayer::EnforceSilenceIfNeeded()
+{
+#ifndef _WIN32
+    bool shouldBeSilent = m_ForceSilent.load(std::memory_order_relaxed) ||
+                           !m_AudioActive.load(std::memory_order_relaxed);
+    if (!shouldBeSilent || !m_MediaPlayer)
+        return;
+
+    libvlc_audio_set_mute(m_MediaPlayer, 1);
+    libvlc_audio_set_volume(m_MediaPlayer, 0);
 #endif
 }
 

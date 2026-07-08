@@ -119,9 +119,6 @@ void main() {
         m_ActiveIsA = !m_ActiveIsA;
         VLCBasePlayer& newActive = Active();
 
-        // El nuevo activo solo puede sonar si de verdad estamos
-        // proyectando al publico. Si todavia no se fue al aire, el swap
-        // (ej. precarga de siguiente clip de cola) queda mudo.
         if (m_IsLiveToPublic)
         {
             newActive.SetAudioActive(true);
@@ -141,21 +138,23 @@ void main() {
         m_SwapPending = false;
     }
 
-    void BackgroundLayer::Update()
+void BackgroundLayer::Update()
+{
+    Active().UpdateTexture();
+    Active().EnforceSilenceIfNeeded();
+    Standby().EnforceSilenceIfNeeded();
+
+    if (m_SwapPending)
     {
-        Active().UpdateTexture();
+        VLCBasePlayer& standby = Standby();
 
-        if (m_SwapPending)
-        {
-            VLCBasePlayer& standby = Standby();
+        bool ready    = standby.HasVideoFrame() && !standby.IsLoading();
+        bool timedOut = (NowSeconds() - m_PendingSwapStart) > 3.0;
 
-            bool ready    = standby.HasVideoFrame() && !standby.IsLoading();
-            bool timedOut = (NowSeconds() - m_PendingSwapStart) > 3.0;
-
-            if (ready || timedOut)
-                PerformSwap();
-        }
+        if (ready || timedOut)
+            PerformSwap();
     }
+}
 
     void BackgroundLayer::Render(int outputW, int outputH)
     {
@@ -271,32 +270,23 @@ void main() {
     }
 
     void BackgroundLayer::SetVideo(const std::string& path)
+{
+    m_IsVideo = true;
+
+    if (m_SwapPending || GetTextureID() != nullptr)
     {
-        m_IsVideo = true;
-
-        if (m_SwapPending || GetTextureID() != nullptr)
-        {
-            // Ya hay algo visible (o un swap en curso): precargar en
-            // standby y esperar a que tenga un frame real. El clip que ve
-            // el publico sigue reproduciendose sin interrupcion mientras
-            // tanto — cero congelamiento, cero corte de audio.
-            Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
-            m_SwapPending      = true;
-            m_PendingSwapStart = NowSeconds();
-        }
-        else
-        {
-            // No hay nada visible todavia: reproducir directo, no hay
-            // nada que proteger de un corte.
-            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
-
-            // Si todavia no estamos al aire, el clip queda mudo aunque se
-            // haya cargado como fondo. Solo SetPubliclyLive(true) puede
-            // habilitar audio real.
-            if (!m_IsLiveToPublic)
-                Active().SetAudioActive(false);
-        }
+        Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
+        Standby().SetAudioActive(false);
+        m_SwapPending      = true;
+        m_PendingSwapStart = NowSeconds();
     }
+    else
+    {
+        Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+        if (!m_IsLiveToPublic)
+            Active().SetAudioActive(false);
+    }
+}
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)
     {

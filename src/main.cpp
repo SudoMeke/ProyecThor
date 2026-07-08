@@ -420,25 +420,32 @@ int main()
     glfwWindowHint(GLFW_VISIBLE,               GLFW_TRUE);
 
     GLFWwindow* splashWindow = glfwCreateWindow(SPLASH_W, SPLASH_H, "ProyecThor", nullptr, nullptr);
-    if (!splashWindow)
-    {
-        const char* desc = nullptr;
-        int code = glfwGetError(&desc);
-        std::cerr << "[DIAG] FALLO: glfwCreateWindow(splash) devolvio nullptr. "
-                  << "Codigo GLFW: " << code << " Descripcion: "
-                  << (desc ? desc : "N/A") << "\n";
-        glfwTerminate();
-        return -1;
-    }
-    std::cerr << "[DIAG] splashWindow creado OK\n";
+if (!splashWindow)
+{
+    const char* desc = nullptr;
+    int code = glfwGetError(&desc);
+    std::cerr << "[DIAG] FALLO: glfwCreateWindow(splash) devolvio nullptr. "
+              << "Codigo GLFW: " << code << " Descripcion: "
+              << (desc ? desc : "N/A") << "\n";
+    glfwTerminate();
+    return -1;
+}
+std::cerr << "[DIAG] splashWindow creado OK\n";
 
+{
+    GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* vm = glfwGetVideoMode(primaryMonitor);
+    if (vm)
     {
-        const GLFWvidmode* vm = glfwGetVideoMode(glfwGetPrimaryMonitor());
-        if (vm)
-            glfwSetWindowPos(splashWindow,
-                (vm->width  - SPLASH_W) / 2,
-                (vm->height - SPLASH_H) / 2);
+        int monitorX = 0;
+        int monitorY = 0;
+        glfwGetMonitorPos(primaryMonitor, &monitorX, &monitorY);
+
+        glfwSetWindowPos(splashWindow,
+            monitorX + (vm->width  - SPLASH_W) / 2,
+            monitorY + (vm->height - SPLASH_H) / 2);
     }
+}
 
     glfwMakeContextCurrent(splashWindow);
     glewExperimental = GL_TRUE;

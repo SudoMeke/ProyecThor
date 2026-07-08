@@ -73,7 +73,7 @@ namespace ProyecThor::Core {
         // callback custom de audio, esto se traduce a mute/volumen 0 via
         // libVLC nativo (ver .cpp).
         void SetAudioActive(bool active);
-
+        void EnforceSilenceIfNeeded();
         bool IsForceSilent() const { return m_ForceSilent.load(std::memory_order_relaxed); }
 
         void SetPosition(float pos);
@@ -124,7 +124,7 @@ namespace ProyecThor::Core {
         std::string             m_BlockedPath;
 
         std::atomic<uint64_t> m_LoadGeneration{0};
-
+ int m_InstanceId = -1;
         void InitVLC();
         void DestroyVLC();
         void EnsureTexture(int w, int h);
