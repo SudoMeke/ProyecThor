@@ -48,8 +48,10 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         3, "0.3.2",
         " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
-        "splash_bg1.png", // TODO: reemplazar por una portada propia de la 0.3.2; se reutiliza esta mientras tanto
-        "Cambios de logica en el motor VLC y limpieza general de codigo."
+        "splash_bg4.png",
+        "Soporte oficial para Linux, mejoras de rendimiento en video, cola de "
+        "reproduccion mas estable, nuevos estilos de la app y correccion en "
+        "guardado/carga de ajustes."
     },
     {
         1, "0.3.1",
@@ -770,17 +772,45 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
             // ── Bloque de contenido condicional por versión ──────────────────
-            if (selectedUpdateVer == 3) { // v0.3.2
-                Cat("Motor de Video (VLC)");
-                Bul("Cambios en la logica interna de manejo del motor VLC para mejorar la estabilidad de la reproduccion.");
-                Bul("Ajustes en la forma en que se inicializan y liberan los recursos del reproductor.");
-                Bul("Correcciones menores relacionadas con la sincronizacion del motor multimedia.");
-                ImGui::Dummy(ImVec2(0,12));
+           if (selectedUpdateVer == 3) { // v0.3.2
+    Cat("Soporte para Linux");
+    Bul("ProyecThor ahora corre de forma nativa en Linux, con build propio via CMake.");
+    Bul("Pruebas realizadas en Arch Linux (y derivados como CachyOS), incluyendo el flujo completo de instalacion via paquete.");
+    Bul("Deteccion y manejo del backend X11/XWayland para compatibilidad con GLEW en sesiones Wayland.");
+    Bul("Rutas de configuracion y assets ahora siguen la convencion XDG en Linux ($XDG_CONFIG_HOME o ~/.config), en vez de asumir rutas de Windows.");
+    ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Limpieza de Codigo");
-                Bul("Refactorizacion y limpieza general del codigo base, sin cambios visibles para el usuario.");
-                Bul("Eliminacion de codigo obsoleto y simplificacion de varias rutinas internas.");
-                Bul("Mejoras de mantenibilidad para facilitar el desarrollo de futuras versiones.");
+    Cat("Motor de Video (VLC) y Rendimiento");
+    Bul("Correccion de un problema de rendimiento que afectaba la reproduccion fluida de video en ciertos escenarios.");
+    Bul("Cambios en la logica interna de manejo del motor VLC para mejorar la estabilidad de la reproduccion.");
+    Bul("Ajustes en la forma en que se inicializan y liberan los recursos del reproductor.");
+    Bul("Correcciones relacionadas con la sincronizacion del motor multimedia y el bloqueo/desbloqueo de rutas al eliminar archivos en uso.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Cola de Reproduccion");
+    Bul("Mejoras de estabilidad en la cola: avance mas confiable entre clips y manejo correcto de entradas invalidas o eliminadas.");
+    Bul("Correccion de condiciones donde la cola podia quedar desincronizada con lo que realmente se estaba proyectando.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Ajustes y Configuracion");
+    Bul("Corregido un problema donde los ajustes de la aplicacion no se guardaban o cargaban correctamente entre sesiones.");
+    Bul("Mayor consistencia al persistir preferencias del usuario, incluyendo configuracion de proyeccion y monitor.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Estilos y Personalizacion");
+    Bul("Nuevos estilos visuales disponibles para personalizar la apariencia de la aplicacion.");
+    Bul("Ajustes de consistencia visual entre paneles.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Red y Transmision LAN");
+    Bul("Mejoras de estabilidad en la transmision por red local, reduciendo cortes y desconexiones.");
+    Bul("Correcciones en la sincronizacion entre el estado de la aplicacion y los clientes conectados por LAN.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Limpieza de Codigo");
+    Bul("Refactorizacion y limpieza general del codigo base, sin cambios visibles para el usuario.");
+    Bul("Eliminacion de codigo obsoleto y simplificacion de varias rutinas internas.");
+    Bul("Mejoras de mantenibilidad para facilitar el desarrollo de futuras versiones.");
             } else if (selectedUpdateVer == 1) { // v0.3.1
                 Cat("Audio Rework");
                 Bul("Nueva interfaz para la seccion de audio, con animaciones renovadas y un sistema de portadas (covers) para cada pista.");
