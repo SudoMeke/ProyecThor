@@ -19,12 +19,16 @@
 
 namespace ProyecThor::Core {
 
-    class PresentationCoreImpl {
+   class PresentationCoreImpl {
     public:
-        // background: unico layer cuyo audio puede llegar realmente al
-        // publico, y solo cuando PresentationCore::SetProjecting(true) lo
-        // habilita (ver BackgroundLayer::SetPubliclyLive).
-        BackgroundLayer background;
+        // background: layer de fondo/decorativo. Por requisito de
+        // producto NUNCA debe emitir audio real, sin importar el estado
+        // de m_IsLiveToPublic, m_TargetMuted, ni ninguna llamada a
+        // SetLiveVolume/SetLiveMute. Se construye forceSilent=true por la
+        // misma razon que preview: es una garantia estructural dentro de
+        // VLCBasePlayer (ver m_ForceSilent), no una convencion que
+        // dependa de que el resto del codigo se comporte bien.
+        BackgroundLayer background{ false };
         OverlayLayer    overlay;
 
         // preview: instancia separada usada por los paneles de biblioteca
@@ -184,16 +188,17 @@ namespace ProyecThor::Core {
         return nullptr;
     }
 
-    void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/) {
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_State.bgPath = path;
-            m_State.bgType = PresentationState::BackgroundType::Video;
-            ++m_StreamVersion;
-        }
-        if (m_Impl)
-            m_Impl->background.SetVideo(path);
+  // .cpp
+void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.bgPath = path;
+        m_State.bgType = PresentationState::BackgroundType::Video;
+        ++m_StreamVersion;
     }
+    if (m_Impl)
+        m_Impl->background.SetVideo(path, allowAudio);
+}
 
     void PresentationCore::StopBackgroundMedia() {
         {

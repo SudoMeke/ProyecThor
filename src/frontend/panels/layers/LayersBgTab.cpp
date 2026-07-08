@@ -739,9 +739,10 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
     }
 
     // Click limpio → proyectar (nunca si acabamos de entrar en carpeta)
-    if (!wasDragged && !m_JustEnteredFolder
-        && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-        Core::PresentationCore::Get().SetBackgroundMedia(e.fullPath, !e.isImage);
+    // RenderBgCard
+if (!wasDragged && !m_JustEnteredFolder
+    && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    Core::PresentationCore::Get().SetBackgroundMedia(e.fullPath, !e.isImage, /*allowAudio=*/false);
 
     if (ImGui::BeginPopupContextItem(("BgCtx_"+e.fullPath).c_str())) {
         BgContextMenu(e); ImGui::EndPopup();
@@ -806,9 +807,10 @@ void LayersBgTab::RenderBgRow(const BgEntry& e, float W, float rowH) {
         ImGui::EndDragDropSource();
     }
 
-    if (!wasDragged && !m_JustEnteredFolder
-        && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-        Core::PresentationCore::Get().SetBackgroundMedia(e.fullPath, !e.isImage);
+    // RenderBgRow
+if (!wasDragged && !m_JustEnteredFolder
+    && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    Core::PresentationCore::Get().SetBackgroundMedia(e.fullPath, !e.isImage, /*allowAudio=*/false);
 
     if (ImGui::BeginPopupContextItem(("BgRowCtx_"+e.fullPath).c_str())) {
         BgContextMenu(e); ImGui::EndPopup();

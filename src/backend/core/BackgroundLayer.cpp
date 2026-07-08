@@ -113,31 +113,6 @@ void main() {
     VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
     VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
 
-    void BackgroundLayer::PerformSwap()
-    {
-        VLCBasePlayer& oldActive = Active();
-        m_ActiveIsA = !m_ActiveIsA;
-        VLCBasePlayer& newActive = Active();
-
-        if (m_IsLiveToPublic)
-        {
-            newActive.SetAudioActive(true);
-            newActive.SetMute(m_TargetMuted);
-            newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
-        }
-        else
-        {
-            newActive.SetAudioActive(false);
-        }
-        newActive.SetPause(false);
-
-        oldActive.SetAudioActive(false);
-        oldActive.SetMute(true);
-        oldActive.Stop();
-
-        m_SwapPending = false;
-    }
-
 void BackgroundLayer::Update()
 {
     Active().UpdateTexture();
@@ -269,9 +244,10 @@ void BackgroundLayer::Update()
         return &Active();
     }
 
-    void BackgroundLayer::SetVideo(const std::string& path)
+   void BackgroundLayer::SetVideo(const std::string& path, bool allowAudio)
 {
     m_IsVideo = true;
+    m_ContentAllowsAudio = allowAudio;   // <-- se fija ANTES de reproducir
 
     if (m_SwapPending || GetTextureID() != nullptr)
     {
@@ -283,9 +259,36 @@ void BackgroundLayer::Update()
     else
     {
         Active().Play(path, /*loop=*/false, /*startMuted=*/true);
-        if (!m_IsLiveToPublic)
+        if (!m_IsLiveToPublic || !allowAudio)
             Active().SetAudioActive(false);
     }
+}
+
+void BackgroundLayer::PerformSwap()
+{
+    VLCBasePlayer& oldActive = Active();
+    m_ActiveIsA = !m_ActiveIsA;
+    VLCBasePlayer& newActive = Active();
+
+    // Ahora el swap respeta el permiso asociado al contenido que se esta
+    // por mostrar, no solo el estado global "al aire".
+    if (m_IsLiveToPublic && m_ContentAllowsAudio)
+    {
+        newActive.SetAudioActive(true);
+        newActive.SetMute(m_TargetMuted);
+        newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+    }
+    else
+    {
+        newActive.SetAudioActive(false);
+    }
+    newActive.SetPause(false);
+
+    oldActive.SetAudioActive(false);
+    oldActive.SetMute(true);
+    oldActive.Stop();
+
+    m_SwapPending = false;
 }
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)

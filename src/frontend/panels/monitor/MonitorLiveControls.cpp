@@ -20,10 +20,6 @@ using namespace Components;
 void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
 {
     Core::VLCBasePlayer* bg = Core::PresentationCore::Get().GetBackgroundPlayer();
-
-    // Unica fuente de verdad de "esta reproduciendo": el estado real de
-    // pausa de VLC. Sin esto, cualquier otro panel que toque m_LivePlaying
-    // puede pisar el resultado del click de este mismo frame.
     m_LivePlaying = bg && !bg->IsPaused();
 
     int64_t liveLenMs = bg ? bg->GetLength() : 0;
@@ -97,7 +93,6 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
     DrawTimeRow(innerW, MT::k_PadLg, liveCurMs, liveLen);
     ImGui::Spacing();
 
-    // ── Transporte (Layout en 2 Filas Responsivas) ────────────────────────────
     float gap = MT::k_Gap;
     float btnH = MT::k_TransportH;
     float navBtnW = (innerW - (gap * 2.0f)) / 3.0f;
@@ -126,9 +121,7 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
     if (DrawIconButton("stop", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         Core::PresentationCore::Get().SetLivePosition(0.0f);
         if (bg) { bg->SetPosition(0.0f); bg->SetPause(true); }
-        // Ya no se escribe m_LivePlaying aqui a mano: se recalcula solo,
-        // desde bg->IsPaused(), al principio de esta misma funcion en el
-        // siguiente frame.
+
     }
     ImGui::PopID();
 

@@ -1,18 +1,3 @@
-// OClock.cpp
-//
-// El modo de transmisión "Solo LAN" usa dos métodos nuevos de
-// PresentationCore (implementados en PresentationCore.h/.cpp):
-//
-//   core.SetLiveQuickNoteLAN(const std::string& text);
-//   core.ClearQuickNoteLAN();
-//
-// Estos escriben en PresentationState::lanQuickNoteText, un campo aparte de
-// currentText que el SnapshotProvider de ToggleNetworkStream prioriza SOLO
-// para el JSON que reciben los clientes de red — nunca se dibuja en la
-// pantalla principal/proyector, que sigue leyendo currentText/showText como
-// siempre.
-// ─────────────────────────────────────────────────────────────────────────
-
 #include "OClock.h"
 #include "GlassRenderer.h"
 #include "DesignSystem.h"

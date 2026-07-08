@@ -37,8 +37,8 @@ void SetAudioPanel(AudioPanel* ap) { m_AudioPanelRef = ap; }
     UIManager*  m_UIManagerRef  = nullptr;
 
 private:
-    std::unique_ptr<Core::VLCBasePlayer> m_PreviewPlayer;
-AudioPanel* m_AudioPanelRef = nullptr;
+
+    AudioPanel* m_AudioPanelRef = nullptr;
     MonitorView  m_MonitorView;
     MediaView    m_MediaView;
     BibleView    m_BibleView;
@@ -47,11 +47,6 @@ AudioPanel* m_AudioPanelRef = nullptr;
     OClock       m_OClock;
     QuickNotes   m_QuickNotes;
 
-    // ── GlassRenderer para el panel OClock (estilo "liquid glass") ────────
-    // NOTA: si m_UIManagerRef ya expone un GlassRenderer compartido en tu
-    // proyecto, es preferible reusar ese en vez de éste (evita capturar y
-    // difuminar el framebuffer por duplicado en cada frame). Este miembro
-    // es la solución mínima autocontenida mientras tanto.
     GlassRenderer m_GlassRenderer;
     bool          m_GlassInitialized = false;
 };

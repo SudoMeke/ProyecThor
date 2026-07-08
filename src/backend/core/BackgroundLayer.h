@@ -25,6 +25,14 @@ namespace ProyecThor::Core {
         // operador hubiese puesto nada al aire todavia.
         bool m_IsLiveToPublic = false;
 
+        // Indica si el contenido actualmente cargado (o pendiente de swap)
+        // tiene PERMITIDO sonar cuando m_IsLiveToPublic sea true. Se fija
+        // en cada llamada a SetVideo() segun quien la invoque:
+        // true  -> viene de "Videos"/cola (audio permitido)
+        // false -> viene de "Fondos" (BackgroundsPanel/LayersBgTab), NUNCA
+        //          suena sin importar el estado de m_IsLiveToPublic.
+        bool m_ContentAllowsAudio = true;
+
         bool  m_IsVideo = false;
         float m_BgColor[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -62,7 +70,10 @@ namespace ProyecThor::Core {
 
         VLCBasePlayer* GetPlayer();
 
-        void SetVideo(const std::string& path);
+        // allowAudio=false para fondos decorativos (BackgroundsPanel):
+        // estructuralmente no podran sonar aunque se este "al aire".
+        void SetVideo(const std::string& path, bool allowAudio = true);
+
         void SetSolidColor(float r, float g, float b);
 
         // Activa/desactiva el gate de audio al publico. Llamado por

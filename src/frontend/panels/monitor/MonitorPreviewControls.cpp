@@ -9,11 +9,6 @@
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
 
-// =============================================================================
-//  MonitorPreviewControls.cpp
-//  Panel de controles de preview (PVW). (Version con Iconos Puros)
-// =============================================================================
-
 namespace ProyecThor::UI {
 
 namespace MT = MonitorTheme;
@@ -57,7 +52,6 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 
     DrawAccentLine(innerW, MT::k_PrevAccentDim, 1.0f);
 
-    // ── Sin reproductor asignado ───────────────────────────────────────────────
     if (!player) {
         ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextDim);
@@ -73,7 +67,6 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     bool                 shared = (player == bg) && m_LivePlaying;
     ImGui::BeginDisabled(shared);
 
-    // ── Barra de progreso ─────────────────────────────────────────────────────
     int64_t curMs = player->GetTime();
     int64_t lenMs = player->GetLength();
     float   pos   = (lenMs > 0)
@@ -95,11 +88,8 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     DrawTimeRow(innerW, MT::k_PadLg, curMs, lenMs);
     ImGui::Spacing();
 
-    // ── Transporte (Layout en 2 Filas Responsivas) ────────────────────────────
     float gap = MT::k_Gap;
     float btnH = MT::k_TransportH;
-
-    // Calculamos el ancho exacto para 4 botones en la primera fila, restando los 3 gaps.
     float navBtnW = (innerW - (gap * 3.0f)) / 4.0f;
     float iconSize = 16.0f;
 
@@ -144,17 +134,11 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     const char* iconToUse = m_PreviewPlaying ? "pause" : "play";
 
     ImGui::PushID("btn_main_transport_prev");
-    // Usamos innerW para que el botón abarque el 100% del ancho (respetando los márgenes)
-    // Multiplicamos btnH * 1.2f para que el botón de play sea un poco más grande e importante
     if (DrawIconButton(iconToUse, 24.0f, MT::k_PrevBtn, MT::k_PrevBtnHov, MT::k_PrevBtnAct, {innerW, btnH * 1.2f}, m_PreviewPlaying)) {
         if (m_PreviewPlaying) {
             player->SetPause(true);
             m_PreviewPlaying = false;
         } else {
-            // El player de preview es forceSilent desde su construccion
-            // (ver PresentationCoreImpl::preview), asi que jamas suena sin
-            // importar este SetMute/SetVolume. Se dejan igual, de forma
-            // explicita, como documentacion en el propio flujo de UI.
             player->SetMute(true);
             player->SetVolume(0);
             player->SetPause(false);

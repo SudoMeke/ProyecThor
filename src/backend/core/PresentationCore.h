@@ -135,7 +135,6 @@ void ApplyStyleByName(const std::string& styleName);
         LibrarySelection GetSelection();
         LibrarySelection PeekSelection();
 
-        void SetBackgroundMedia(const std::string& path, bool isVideo);
         void StopBackgroundMedia();
 
         // Bloquea/desbloquea la ruta de fondo actual contra reproduccion.
@@ -231,7 +230,7 @@ bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
             m_FrameProviderActive.store(true);
             ++m_StreamVersion;
         }
-
+void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio = true);
     private:
                void RenderDefaultStyleCombo();
         void EnsureFBO(int w, int h);

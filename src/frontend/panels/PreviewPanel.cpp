@@ -8,33 +8,31 @@
 namespace ProyecThor::UI {
 
 PreviewPanel::PreviewPanel() {
-    // 1 solo hilo de decode: el video en vivo (2 hilos, ver BackgroundLayer)
-    // siempre tiene prioridad de CPU sobre el preview de biblioteca.
-    m_PreviewPlayer = std::make_unique<Core::VLCBasePlayer>(1);
+    // Ya no se construye ningun VLCBasePlayer propio: el preview de
+    // biblioteca usa el player real de PresentationCore (forceSilent=true,
+    // ver PresentationCoreImpl::preview), que es estructuralmente mudo y
+    // se re-silencia solo cada frame via PresentationCore::Update().
 }
 
 PreviewPanel::~PreviewPanel() {
-    if (m_PreviewPlayer) m_PreviewPlayer->Stop();
+    // Nada que detener aca: el ciclo de vida del preview real lo maneja
+    // PresentationCore/PresentationCoreImpl.
 }
 
 void PreviewPanel::Render()
 {
-    if (m_PreviewPlayer)
-        m_PreviewPlayer->UpdateTexture();
-
+    // Ya no hace falta llamar UpdateTexture() manualmente: PresentationCore
+    // ::Update() ya actualiza el preview real (ver BackgroundLayer::Update()
+    // -> Active().UpdateTexture()).
     Core::PresentationCore::Get().Update();
 
     ImGui::Begin("Preview");
 
-    // PeekSelection() NO consume la seleccion — es correcto usarlo aqui.
-    // GetSelection() la consume y limpia, lo que romperia la deteccion de tipo
-    // en el siguiente frame.
     auto selection = Core::PresentationCore::Get().PeekSelection();
+    Core::VLCBasePlayer* previewPlayer = Core::PresentationCore::Get().GetPreviewPlayer();
 
     if (selection.type == Core::ItemType::Audio)
     {
-        // El AudioPanel vive en LibraryPanel; PreviewPanel solo tiene el puntero.
-        // RenderPlayerView muestra disco, progreso, controles y ecualizador.
         if (m_AudioPanelRef)
         {
             m_AudioPanelRef->Update();
@@ -55,14 +53,14 @@ void PreviewPanel::Render()
     }
     else if (selection.type == Core::ItemType::Image)
     {
-        m_MediaView.Render(m_PreviewPlayer.get());
+        m_MediaView.Render(previewPlayer);
     }
     else if (selection.type == Core::ItemType::Video)
     {
-        m_MonitorView.Render(m_PreviewPlayer.get());
+        m_MonitorView.Render(previewPlayer);
         ImGui::Separator();
         ImGui::Spacing();
-        m_MediaView.Render(m_PreviewPlayer.get());
+        m_MediaView.Render(previewPlayer);
     }
     else if (selection.type == Core::ItemType::Documents)
     {
