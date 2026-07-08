@@ -51,6 +51,15 @@
 //  para el hardware decode. Volumen y mute pasan a controlarse tambien via
 //  libvlc_audio_set_volume()/libvlc_audio_set_mute() para que apliquen
 //  correctamente en ambas plataformas.
+//
+//  GARANTIA DE SILENCIO ESTRUCTURAL (m_ForceSilent)
+//  --------------------------------------------------
+//  Independiente de lo anterior: un player construido con forceSilent=true
+//  jamas puede sonar, sin importar que boton o flujo llame a SetMute(false)
+//  o SetVolume(>0). Esto es lo que garantiza que el preview de biblioteca
+//  nunca tenga audio, y que el fondo (background) solo suene cuando
+//  BackgroundLayer confirma que esta realmente proyectando al publico
+//  (ver BackgroundLayer::SetPubliclyLive).
 // =============================================================================
 
 namespace {
@@ -117,6 +126,7 @@ struct VLCAudioCtx {
     std::atomic<float>* volumeMultiplier = nullptr;
     std::atomic<bool>*  muted            = nullptr;
     std::atomic<bool>*  audioActive      = nullptr;
+    std::atomic<bool>*  forceSilent      = nullptr;
 
 #ifdef _WIN32
     HWAVEOUT hWaveOut = nullptr;
@@ -229,8 +239,12 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
     if (!ctx->volumeMultiplier || !ctx->muted) return;
     if (!ctx->hWaveOut) return;
 
-    bool  isMuted = ctx->muted->load(std::memory_order_relaxed);
-    float vol     = isMuted ? 0.0f : ctx->volumeMultiplier->load(std::memory_order_relaxed);
+    // forceSilent manda por encima de cualquier otro estado: si este
+    // player nacio silenciado (preview), el volumen efectivo es siempre 0,
+    // sin importar lo que diga m_Muted/m_VolumeMultiplier.
+    bool isForceSilent = ctx->forceSilent && ctx->forceSilent->load(std::memory_order_relaxed);
+    bool isMuted        = isForceSilent || ctx->muted->load(std::memory_order_relaxed);
+    float vol            = isMuted ? 0.0f : ctx->volumeMultiplier->load(std::memory_order_relaxed);
 
     const int16_t* pIn = static_cast<const int16_t*>(samples);
     float maxL = 0.0f;
@@ -316,10 +330,11 @@ static void vlc_display(void* /*opaque*/, void* /*picture*/) {}
 
 namespace ProyecThor::Core {
 
-VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode)
+VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool forceSilent)
     : m_DecodeThreads(decodeThreads)
     , m_UseHardwareDecode(useHardwareDecode)
 {
+    m_ForceSilent.store(forceSilent, std::memory_order_relaxed);
     InitVLC();
     CreatePersistentPlayer();
 }
@@ -393,6 +408,7 @@ void VLCBasePlayer::CreatePersistentPlayer()
     aCtx->volumeMultiplier = &m_VolumeMultiplier;
     aCtx->muted            = &m_Muted;
     aCtx->audioActive      = &m_AudioActive;
+    aCtx->forceSilent      = &m_ForceSilent;
     m_AudioCtx = aCtx;
 
 #ifdef _WIN32
@@ -406,10 +422,16 @@ void VLCBasePlayer::CreatePersistentPlayer()
     // su salida nativa (PulseAudio/ALSA autodetectado), que es la unica
     // que realmente reproduce sonido en esta plataforma. Volumen/mute se
     // controlan via libvlc_audio_set_volume()/libvlc_audio_set_mute()
-    // (ver SetVolume/SetMute mas abajo).
-    libvlc_audio_set_mute(m_MediaPlayer, m_Muted.load(std::memory_order_relaxed) ? 1 : 0);
-    libvlc_audio_set_volume(m_MediaPlayer,
-        static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f));
+    // (ver SetVolume/SetMute mas abajo). Si el player es forceSilent, el
+    // estado inicial ya queda mudo y en volumen 0.
+    bool initialMute = m_Muted.load(std::memory_order_relaxed) ||
+                        m_ForceSilent.load(std::memory_order_relaxed);
+    libvlc_audio_set_mute(m_MediaPlayer, initialMute ? 1 : 0);
+
+    int initialVolume = m_ForceSilent.load(std::memory_order_relaxed)
+        ? 0
+        : static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f);
+    libvlc_audio_set_volume(m_MediaPlayer, initialVolume);
 #endif
 
     libvlc_event_manager_t* em = libvlc_media_player_event_manager(m_MediaPlayer);
@@ -576,29 +598,38 @@ bool VLCBasePlayer::ConsumeEndReached()
 
 void VLCBasePlayer::SetMute(bool mute)
 {
-    m_Muted.store(mute, std::memory_order_relaxed);
+    // forceSilent manda: un player silenciado por construccion no puede
+    // desmutearse nunca, sin importar quien llame a esta funcion.
+    bool effectiveMute = mute || m_ForceSilent.load(std::memory_order_relaxed);
+    m_Muted.store(effectiveMute, std::memory_order_relaxed);
 #ifndef _WIN32
     // En Linux el mute real lo aplica libVLC sobre su salida nativa.
     if (m_MediaPlayer)
-        libvlc_audio_set_mute(m_MediaPlayer, mute ? 1 : 0);
+        libvlc_audio_set_mute(m_MediaPlayer, effectiveMute ? 1 : 0);
 #endif
     // En Windows el mute lo aplica vlc_audio_play() multiplicando por
-    // m_VolumeMultiplier/m_Muted antes de escribir a WinMM.
+    // m_VolumeMultiplier/m_Muted antes de escribir a WinMM (y ademas
+    // vuelve a chequear forceSilent alli mismo, ver vlc_audio_play).
 }
 
 void VLCBasePlayer::SetAudioActive(bool active)
 {
-    m_AudioActive.store(active, std::memory_order_relaxed);
+    bool effectiveActive = active && !m_ForceSilent.load(std::memory_order_relaxed);
+    m_AudioActive.store(effectiveActive, std::memory_order_relaxed);
 #ifndef _WIN32
     // Sin callback custom en Linux, el equivalente de "cortar audio de
     // raiz" es mutear via libVLC nativo.
     if (m_MediaPlayer)
-        libvlc_audio_set_mute(m_MediaPlayer, active ? (m_Muted.load(std::memory_order_relaxed) ? 1 : 0) : 1);
+        libvlc_audio_set_mute(m_MediaPlayer,
+            effectiveActive ? (m_Muted.load(std::memory_order_relaxed) ? 1 : 0) : 1);
 #endif
 }
 
 void VLCBasePlayer::SetVolume(int volume)
 {
+    if (m_ForceSilent.load(std::memory_order_relaxed))
+        volume = 0;
+
     float multiplier = static_cast<float>(volume) / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
@@ -612,6 +643,9 @@ void VLCBasePlayer::SetVolume(int volume)
 
 void VLCBasePlayer::SetSoftwareVolume(float percent)
 {
+    if (m_ForceSilent.load(std::memory_order_relaxed))
+        percent = 0.0f;
+
     float multiplier = percent / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);

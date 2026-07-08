@@ -24,7 +24,16 @@ namespace ProyecThor::Core {
         // Linux, autodetectado via "--avcodec-hw=any") o decode por
         // software. Se expone como parametro de construccion para poder
         // diagnosticar contencion de sesiones de decode de hardware.
-        VLCBasePlayer(int decodeThreads = 0, bool useHardwareDecode = true);
+        //
+        // forceSilent: garantia estructural de silencio, fijada UNA sola
+        // vez al construir el player y valida durante toda su vida. Un
+        // player con forceSilent=true NUNCA puede emitir audio real, sin
+        // importar que SetMute/SetVolume/SetAudioActive se llamen con
+        // valores "audibles" desde cualquier parte del codigo (boton mal
+        // cableado, swap de doble buffer, etc.). Se usa para el player de
+        // preview (biblioteca), que por requisito de producto jamas debe
+        // sonar: solo el monitor a publico puede tener audio real.
+        VLCBasePlayer(int decodeThreads = 0, bool useHardwareDecode = true, bool forceSilent = false);
         ~VLCBasePlayer();
 
         VLCBasePlayer(const VLCBasePlayer&)            = delete;
@@ -50,6 +59,10 @@ namespace ProyecThor::Core {
         void SetPause(bool paused);
         bool IsPaused() const { return m_Paused.load(std::memory_order_relaxed); }
 
+        // Si el player es forceSilent, estas tres funciones siguen
+        // aceptando el valor pedido (para no romper a quien las llama,
+        // ej. sliders de UI), pero el resultado audible real queda
+        // siempre en silencio. Ver detalle en VLCBasePlayer.cpp.
         void SetMute(bool mute);
         void SetVolume(int volume);   // 0-200
         void SetSoftwareVolume(float percent);
@@ -60,6 +73,8 @@ namespace ProyecThor::Core {
         // callback custom de audio, esto se traduce a mute/volumen 0 via
         // libVLC nativo (ver .cpp).
         void SetAudioActive(bool active);
+
+        bool IsForceSilent() const { return m_ForceSilent.load(std::memory_order_relaxed); }
 
         void SetPosition(float pos);
 
@@ -100,6 +115,7 @@ namespace ProyecThor::Core {
         std::atomic<bool>  m_EndReached{false};
         std::atomic<bool>  m_Paused{false};
         std::atomic<bool>  m_AudioActive{true};
+        std::atomic<bool>  m_ForceSilent{false};
         unsigned int m_TextureID = 0;
         int          m_VideoW    = 0;
         int          m_VideoH    = 0;

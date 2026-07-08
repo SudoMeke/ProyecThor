@@ -104,26 +104,42 @@ void main() {
         }
     } // anonymous namespace
 
+    BackgroundLayer::BackgroundLayer(bool forceSilentAudio)
+        : m_PlayerA(2, true, forceSilentAudio)
+        , m_PlayerB(2, true, forceSilentAudio)
+    {
+    }
+
     VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
     VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
 
-   void BackgroundLayer::PerformSwap()
-{
-    VLCBasePlayer& oldActive = Active();
-    m_ActiveIsA = !m_ActiveIsA;
-    VLCBasePlayer& newActive = Active();
+    void BackgroundLayer::PerformSwap()
+    {
+        VLCBasePlayer& oldActive = Active();
+        m_ActiveIsA = !m_ActiveIsA;
+        VLCBasePlayer& newActive = Active();
 
-    newActive.SetAudioActive(true);
-    newActive.SetMute(m_TargetMuted);
-    newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
-    newActive.SetPause(false);
+        // El nuevo activo solo puede sonar si de verdad estamos
+        // proyectando al publico. Si todavia no se fue al aire, el swap
+        // (ej. precarga de siguiente clip de cola) queda mudo.
+        if (m_IsLiveToPublic)
+        {
+            newActive.SetAudioActive(true);
+            newActive.SetMute(m_TargetMuted);
+            newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        }
+        else
+        {
+            newActive.SetAudioActive(false);
+        }
+        newActive.SetPause(false);
 
-    oldActive.SetAudioActive(false);
-    oldActive.SetMute(true);
-    oldActive.Stop();
+        oldActive.SetAudioActive(false);
+        oldActive.SetMute(true);
+        oldActive.Stop();
 
-    m_SwapPending = false;
-}
+        m_SwapPending = false;
+    }
 
     void BackgroundLayer::Update()
     {
@@ -273,6 +289,12 @@ void main() {
             // No hay nada visible todavia: reproducir directo, no hay
             // nada que proteger de un corte.
             Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+
+            // Si todavia no estamos al aire, el clip queda mudo aunque se
+            // haya cargado como fondo. Solo SetPubliclyLive(true) puede
+            // habilitar audio real.
+            if (!m_IsLiveToPublic)
+                Active().SetAudioActive(false);
         }
     }
 
@@ -320,17 +342,45 @@ void main() {
         return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
     }
 
+    void BackgroundLayer::SetPubliclyLive(bool live)
+    {
+        m_IsLiveToPublic = live;
+
+        if (live)
+        {
+            // Al pasar a "en vivo", el player activo adopta el target de
+            // volumen/mute que el operador ya haya configurado (ver
+            // SetLiveVolume/SetLiveMute). El standby se mantiene mudo:
+            // solo el que el publico ve puede sonar.
+            Active().SetAudioActive(true);
+            Active().SetMute(m_TargetMuted);
+            Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+            Standby().SetAudioActive(false);
+        }
+        else
+        {
+            // Cortar audio de raiz en ambos players, sin importar el
+            // volumen/mute configurado.
+            m_PlayerA.SetAudioActive(false);
+            m_PlayerB.SetAudioActive(false);
+        }
+    }
+
     void BackgroundLayer::SetLiveVolume(int volume0to200)
     {
         m_TargetVolume = volume0to200;
-        Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        if (m_IsLiveToPublic)
+            Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
     }
 
     void BackgroundLayer::SetLiveMute(bool mute)
     {
         m_TargetMuted = mute;
-        Active().SetMute(mute);
-        Active().SetVolume(mute ? 0 : m_TargetVolume);
+        if (m_IsLiveToPublic)
+        {
+            Active().SetMute(mute);
+            Active().SetVolume(mute ? 0 : m_TargetVolume);
+        }
     }
 
     void BackgroundLayer::BlockPath(const std::string& path)

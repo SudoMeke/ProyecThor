@@ -4,12 +4,7 @@
 #include <string>
 #include "GlassRenderer.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  ProyecThor Design System — Paleta Cian / Pastel / Liquid Glass
-//
-//  Fondo oscuro marino (#0d1824) + acento cian (#28c8d8) + pastel suave.
-// ─────────────────────────────────────────────────────────────────────────────
-namespace ProyecThor::Settings { struct ThemeSettings; } // fwd decl
+namespace ProyecThor::Settings { struct ThemeSettings; }
 
 namespace ProyecThor::UI::DS {
 
@@ -19,8 +14,6 @@ constexpr float RadiusLarge  = 16.0f;
 constexpr float RowHeight    = 40.0f;
 constexpr float ButtonHeight = 36.0f;
 
-// Colores del sistema de diseño "glass". No son constexpr: se actualizan
-// en tiempo real desde SettingsManager::ApplyTheme() -> SyncFromTheme().
 inline ImU32 TextPrimary   = IM_COL32(228, 246, 250, 255);
 inline ImU32 TextSecondary = IM_COL32(122, 184, 208, 255);
 inline ImU32 TextHint      = IM_COL32( 58, 104, 128, 255);
@@ -53,7 +46,6 @@ inline ImU32 BtnHoverBord    = IM_COL32(100, 225, 240,  90);
 
 inline ImU32 SepColor        = IM_COL32(100, 210, 230,  35);
 
-// Recalcula todos los colores de arriba a partir del tema activo.
 void SyncFromTheme(const ProyecThor::Settings::ThemeSettings& theme);
 
 bool BeginGlassPanel(const char* name, GlassRenderer& glass, bool* open = nullptr,
@@ -64,4 +56,4 @@ bool GlassListRow(const char* label, bool selected, float indent = 14.0f, float 
 void GlassSeparator(float thickness = 1.0f);
 void GlassSectionHeader(const char* label);
 
-} // namespace ProyecThor::UI::DS
+}

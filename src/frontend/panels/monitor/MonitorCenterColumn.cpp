@@ -49,20 +49,26 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
             std::string finalPath = sel.title;
             if (finalPath.rfind("http", 0) != 0)
                 finalPath = VideosPath() + finalPath;
+
+            // El target de mute/volumen se fija ANTES de proyectar. Asi
+            // BackgroundLayer lo guarda como estado propio y lo respeta en
+            // cualquier swap futuro (doble buffer, siguiente clip de cola),
+            // en vez de perderse si se tocara el player directo.
+            Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
+            Core::PresentationCore::Get().SetLiveVolume(
+                m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+
             Core::PresentationCore::Get().SetBackgroundMedia(finalPath, true);
             Core::PresentationCore::Get().SetProjecting(true);
-            m_LivePlaying  = true;
+            m_LivePlaying = true;
 
             Core::VLCBasePlayer* newBg = Core::PresentationCore::Get().GetBackgroundPlayer();
             if (previewPlayer && previewPlayer != newBg) {
                 previewPlayer->SetPause(true);
                 m_PreviewPlaying = false;
             }
-            if (newBg) {
+            if (newBg)
                 newBg->SetPause(false);
-                newBg->SetMute(m_LiveMuted);
-                newBg->SetVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
-            }
         }
     }
     ImGui::PopID();

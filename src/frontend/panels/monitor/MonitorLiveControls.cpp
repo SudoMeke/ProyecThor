@@ -159,7 +159,7 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
     // ── Volumen ───────────────────────────────────────────────────────────────
     ImGui::SetCursorPosX(MT::k_PadLg);
     bool isDanger = (m_LiveVolume > 1.0f);
-    float volBtnW = btnH; 
+    float volBtnW = btnH;
     float sliderW = innerW - volBtnW - gap;
 
     ImGui::PushID("btn_mute");
@@ -168,10 +168,15 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
 
     if (DrawIconButton(volIcon, 16.0f, volBtnBg, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {volBtnW, btnH}, m_LiveMuted)) {
         m_LiveMuted = !m_LiveMuted;
-        if (m_LivePlaying) {
-            Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
-            Core::PresentationCore::Get().SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
-        }
+
+        // Se aplica siempre, este o no en reproduccion: BackgroundLayer
+        // guarda el target y lo aplica de inmediato si ya esta al aire
+        // (SetProjecting(true) previo), o lo deja listo para cuando lo
+        // este. Antes esto solo corria si m_LivePlaying era true, lo que
+        // dejaba el mute desincronizado si se tocaba en pausa.
+        Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
+        Core::PresentationCore::Get().SetLiveVolume(
+            m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
     }
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
@@ -180,10 +185,10 @@ void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
     ImVec4 slGrab = isDanger ? ImVec4(0.92f, 0.20f, 0.20f, 1.0f) : MT::k_LiveGrab;
     ImVec4 slAct  = isDanger ? ImVec4(1.00f, 0.30f, 0.30f, 1.0f) : ImVec4(MT::k_LiveGrab.x * 1.1f, MT::k_LiveGrab.y * 1.1f, MT::k_LiveGrab.z * 1.1f, 1.0f);
 
-   if (BMSlider("##vol_l", &m_LiveVolume, 0.0f, 2.0f, "", slBg, slGrab, slAct, sliderW)) {
-        if (m_LivePlaying) {
-            Core::PresentationCore::Get().SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
-        }
+    if (BMSlider("##vol_l", &m_LiveVolume, 0.0f, 2.0f, "", slBg, slGrab, slAct, sliderW)) {
+        // Mismo criterio que el boton de mute: siempre se aplica.
+        Core::PresentationCore::Get().SetLiveVolume(
+            m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
     }
 
     ImGui::Spacing();

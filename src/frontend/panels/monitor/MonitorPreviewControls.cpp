@@ -98,7 +98,7 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     // ── Transporte (Layout en 2 Filas Responsivas) ────────────────────────────
     float gap = MT::k_Gap;
     float btnH = MT::k_TransportH;
-    
+
     // Calculamos el ancho exacto para 4 botones en la primera fila, restando los 3 gaps.
     float navBtnW = (innerW - (gap * 3.0f)) / 4.0f;
     float iconSize = 16.0f;
@@ -112,7 +112,7 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     }
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
-    
+
     ImGui::PushID("btn_replay_prev");
     if (DrawIconButton("replay_10", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         int64_t t = std::max(static_cast<int64_t>(0), curMs - 10000);
@@ -120,7 +120,7 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     }
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
-    
+
     ImGui::PushID("btn_fwd_prev");
     if (DrawIconButton("forward_10", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         int64_t t = curMs + 10000;
@@ -129,7 +129,7 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     }
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
-    
+
     ImGui::PushID("btn_stop_prev");
     if (DrawIconButton("stop", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         player->SetPosition(0.0f);
@@ -142,7 +142,7 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 
     // FILA 2: Botón principal de PLAY / PAUSA
     const char* iconToUse = m_PreviewPlaying ? "pause" : "play";
-    
+
     ImGui::PushID("btn_main_transport_prev");
     // Usamos innerW para que el botón abarque el 100% del ancho (respetando los márgenes)
     // Multiplicamos btnH * 1.2f para que el botón de play sea un poco más grande e importante
@@ -151,7 +151,11 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
             player->SetPause(true);
             m_PreviewPlaying = false;
         } else {
-            player->SetMute(true);  // Monitor preview usualmente va muteado
+            // El player de preview es forceSilent desde su construccion
+            // (ver PresentationCoreImpl::preview), asi que jamas suena sin
+            // importar este SetMute/SetVolume. Se dejan igual, de forma
+            // explicita, como documentacion en el propio flujo de UI.
+            player->SetMute(true);
             player->SetVolume(0);
             player->SetPause(false);
             m_PreviewPlaying = true;

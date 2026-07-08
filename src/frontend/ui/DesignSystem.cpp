@@ -14,7 +14,6 @@ static ImU32 ToU32Alpha(const float* v, float a) {
     return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0], v[1], v[2], a));
 }
 
-// Aplica alpha a un color IM_COL32 manteniendo RGB
 static ImU32 WithAlpha(ImU32 col, int a)
 {
     return (col & 0x00FFFFFFu) | (static_cast<ImU32>(std::clamp(a, 0, 255)) << 24);
@@ -54,10 +53,6 @@ void SyncFromTheme(const ProyecThor::Settings::ThemeSettings& t) {
 
     SepColor        = ToU32Alpha(t.accent, 0.14f);
 }
-
-// ── resto del archivo (BeginGlassPanel, GlassButton, etc.) sin cambios ──
-
-// ── BeginGlassPanel ────────────────────────────────────────────────────────
 
 bool BeginGlassPanel(const char* name, GlassRenderer& glass, bool* open,
                      ImGuiWindowFlags flags, ImVec2 windowPadding)

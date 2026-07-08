@@ -21,9 +21,17 @@ namespace ProyecThor::Core {
 
     class PresentationCoreImpl {
     public:
+        // background: unico layer cuyo audio puede llegar realmente al
+        // publico, y solo cuando PresentationCore::SetProjecting(true) lo
+        // habilita (ver BackgroundLayer::SetPubliclyLive).
         BackgroundLayer background;
         OverlayLayer    overlay;
-        BackgroundLayer preview;
+
+        // preview: instancia separada usada por los paneles de biblioteca
+        // para scrubbing/preview. Se construye forceSilentAudio=true, asi
+        // que estructuralmente NUNCA puede sonar, sin importar que boton
+        // de UI la toque (ver VLCBasePlayer::m_ForceSilent).
+        BackgroundLayer preview{ true };
     };
 
     PresentationCore::PresentationCore()
@@ -284,9 +292,17 @@ namespace ProyecThor::Core {
     }
 
     void PresentationCore::SetProjecting(bool projecting) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.isProjecting = projecting;
-        ++m_StreamVersion;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_State.isProjecting = projecting;
+            ++m_StreamVersion;
+        }
+
+        // Unico punto que habilita/corta el audio real hacia el publico.
+        // Fuera del lock: BackgroundLayer solo toca atomicos de los
+        // players, no hace falta serializarlo con m_State.
+        if (m_Impl)
+            m_Impl->background.SetPubliclyLive(projecting);
     }
 
     bool PresentationCore::IsProjecting() const {
