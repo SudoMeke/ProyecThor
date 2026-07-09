@@ -44,8 +44,13 @@ namespace ProyecThor::Core {
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
 
-        std::string currentText;
+       std::string currentText;
         bool  showText          = false;
+
+        // ── Transiciones ──────────────────────────────────────────────
+        uint64_t transitionTrigger  = 0;
+        int      transitionType     = 0;
+        float    transitionDuration = 1.0f;
 
         float textSize          = 60.0f;
         float textColor[4]      = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -101,24 +106,31 @@ namespace ProyecThor::Core {
 
         void Update();
 
-        void RenderBackground(int outputW, int outputH);
+void RenderBackground(int outputW, int outputH);
         void RenderProjectorWindow();
-
         PresentationState GetState();
 void ApplyStyleByName(const std::string& styleName);
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
-        void SetLiveQuickNote(const std::string& text);
-        void ClearQuickNote();
+void ClearQuickNote();
+
+        // ── Transiciones ─────────────────────────────────────────────────────
+        // transitionTrigger se incrementa en CADA avance de slide (texto, fondo,
+        // overlay), sin importar si el contenido nuevo es igual al anterior. Ver
+        // PresentationState::transitionTrigger para el campo real.
+        void SetTransitionConfig(int type, float durationSeconds);
+        void SetBackgroundTransitionProgress(float progress);
 
         // ── Nota rápida SOLO LAN ─────────────────────────────────────────
         // Igual que SetLiveQuickNote/ClearQuickNote, pero el texto solo
         // llega a los clientes conectados por red (ver PresentationState::
         // lanQuickNoteText). No modifica currentText/showText/isProjecting,
         // por lo que la pantalla principal/proyector no se ve afectada.
-        void SetLiveQuickNoteLAN(const std::string& text);
-        void ClearQuickNoteLAN();
+        // PresentationCore.h
+void SetLiveQuickNote(const std::string& text, const float* colorOverride = nullptr);
+void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr);
+void ClearQuickNoteLAN();
 
         void*          GetBackgroundTexture();
         void*          GetProcessedBackgroundTexture(int targetW, int targetH);
@@ -260,7 +272,6 @@ void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio =
         int         m_ProjectorHeight = 1080;
         GLFWwindow* m_ProjectorWindow = nullptr;
         std::string m_ActiveFontName  = "Predeterminada";
-
         std::unordered_map<std::string, ImFont*>      m_ImGuiFonts;
         std::unordered_map<std::string, SavedStyle>   m_SavedStyles;
         std::unordered_map<int, std::string>          m_CategoryDefaultStyles;

@@ -254,14 +254,42 @@ if (m_HubMode)
             {
                 int mx, my;
                 glfwGetMonitorPos(monitors[state.targetMonitorIndex], &mx, &my);
+// Empujar SIEMPRE la config elegida por el usuario hacia el estado
+// compartido, para que tambien viaje a los clientes LAN.
+if (m_TransitionPanel) {
+    Core::PresentationCore::Get().SetTransitionConfig(
+        static_cast<int>(m_TransitionPanel->GetCurrentType()),
+        m_TransitionPanel->GetDuration());
+}
 
-                if (m_TransitionPanel && state.showText &&
-                    state.currentText != m_LastProjectedText)
-                {
-                    m_OutgoingText      = m_LastProjectedText;
-                    m_LastProjectedText = state.currentText;
-                    m_TransitionPanel->Trigger();
-                }
+// Disparo por CONTADOR, no por diff de contenido: asi tambien anima
+// cuando el slide "nuevo" es identico al anterior (mismo verso repetido).
+if (m_TransitionPanel && state.transitionTrigger != m_LastTransitionTrigger)
+{
+    m_LastTransitionTrigger = state.transitionTrigger;
+
+    // Guardamos TODO el contenido saliente (texto + fondo), no solo el
+    // texto, para poder dibujarlo blendeado durante la transicion.
+    m_OutgoingText        = m_LastProjectedText;
+    m_OutgoingBgColor[0]  = m_LastBgColor[0];
+    m_OutgoingBgColor[1]  = m_LastBgColor[1];
+    m_OutgoingBgColor[2]  = m_LastBgColor[2];
+    m_OutgoingBgWasVideo  = m_LastBgWasVideo;
+
+    m_LastProjectedText = state.currentText;
+    m_LastBgColor[0] = state.bgColor[0];
+    m_LastBgColor[1] = state.bgColor[1];
+    m_LastBgColor[2] = state.bgColor[2];
+    m_LastBgWasVideo = (state.bgType == Core::PresentationState::BackgroundType::Video);
+
+m_TransitionPanel->Trigger();
+}
+
+// Cada frame, mientras la transicion este activa, empujamos el progreso
+// actual hacia BackgroundLayer para que pueda blendear Active/Standby.
+if (m_TransitionPanel)
+    Core::PresentationCore::Get().SetBackgroundTransitionProgress(
+        m_TransitionPanel->IsActive() ? m_TransitionPanel->GetProgress() : 1.0f);
 
                 ImGui::SetNextWindowPos(ImVec2((float)mx, (float)my));
                 ImGui::SetNextWindowSize(ImVec2((float)mode->width, (float)mode->height));
@@ -281,7 +309,29 @@ ImGui::SetNextWindowClass(&projectorClass);
 
 ImGui::Begin("ProjectorLive", nullptr, flags);
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
+// Fondo de color solido, con crossfade si venimos de otro color solido
+if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
+{
+    ImU32 colFrom = IM_COL32(
+        (int)(m_OutgoingBgColor[0]*255), (int)(m_OutgoingBgColor[1]*255),
+        (int)(m_OutgoingBgColor[2]*255), 255);
+    ImU32 colTo = IM_COL32(
+        (int)(state.bgColor[0]*255), (int)(state.bgColor[1]*255),
+        (int)(state.bgColor[2]*255), 255);
 
+    bool transActive = m_TransitionPanel && m_TransitionPanel->IsActive();
+    ImU32 finalCol = transActive
+        ? ImGui::ColorConvertFloat4ToU32(ImLerp(
+              ImGui::ColorConvertU32ToFloat4(colFrom),
+              ImGui::ColorConvertU32ToFloat4(colTo),
+              m_TransitionPanel->GetProgress()))
+        : colTo;
+
+    drawList->AddRectFilled(
+        ImVec2((float)mx, (float)my),
+        ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+        finalCol);
+}
                 // Fondo de video
                 if (state.bgType == Core::PresentationState::BackgroundType::Video)
                 {

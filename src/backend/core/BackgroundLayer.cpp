@@ -30,13 +30,16 @@ void main() {
 }
 )GLSL";
 
-        static const char* k_BlitFrag = R"GLSL(
+     // k_BlitFrag actualizado
+static const char* k_BlitFrag = R"GLSL(
 #version 330 core
 in  vec2      v_UV;
 out vec4      fragColor;
 uniform sampler2D u_Tex;
+uniform float     u_Alpha;
 void main() {
-    fragColor = texture(u_Tex, v_UV);
+    vec4 c = texture(u_Tex, v_UV);
+    fragColor = vec4(c.rgb, c.a * u_Alpha);
 }
 )GLSL";
 
@@ -83,19 +86,20 @@ void main() {
             glBindVertexArray(0);
         }
 
-        static void BlitTexture(GLuint tex)
-        {
-            EnsureBlitResources();
-            glUseProgram(s_BlitProg);
-            glUniform1i(glGetUniformLocation(s_BlitProg, "u_Tex"), 0);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glBindVertexArray(s_QuadVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            glBindVertexArray(0);
-            glBindTexture(GL_TEXTURE_2D, 0);
-            glUseProgram(0);
-        }
+        static void BlitTexture(GLuint tex, float alpha = 1.0f)
+{
+    EnsureBlitResources();
+    glUseProgram(s_BlitProg);
+    glUniform1i(glGetUniformLocation(s_BlitProg, "u_Tex"), 0);
+    glUniform1f(glGetUniformLocation(s_BlitProg, "u_Alpha"), alpha);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glBindVertexArray(s_QuadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+}
 
         static double NowSeconds()
         {
@@ -193,11 +197,22 @@ void BackgroundLayer::Update()
             }
         }
 
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_BLEND);
-
-        glViewport(viewX, viewY, viewW, viewH);
-        BlitTexture(finalTex);
+      if (m_SwapPending && Standby().HasVideoFrame())
+        {
+            GLuint standbyTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Standby().GetTextureID()));
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glViewport(viewX, viewY, viewW, viewH);
+            BlitTexture(finalTex,   1.0f - m_TransitionProgress);
+            BlitTexture(standbyTex, m_TransitionProgress);
+            glDisable(GL_BLEND);
+        }
+        else
+        {
+            glDisable(GL_BLEND);
+            glViewport(viewX, viewY, viewW, viewH);
+            BlitTexture(finalTex);
+        }
 
         glViewport(0, 0, outputW, outputH);
     }

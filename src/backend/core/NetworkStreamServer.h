@@ -26,8 +26,12 @@ struct StreamSnapshot {
     bool        hasFrame       = false;   // true cuando hay frame JPEG disponible
     int         refW           = 1920;    // resolución real del proyector destino
     int         refH           = 1080;
-    uint64_t    version        = 0;
+uint64_t    version        = 0;
     uint64_t    fontVersion    = 0;       // cambia solo cuando cambia la fuente (evita recargar /font en cada poll)
+
+    uint64_t    transitionTrigger  = 0;
+    int         transitionType     = 0;
+    float       transitionDuration = 1.0f;
 };
 
 // ── StreamConfig ──────────────────────────────────────────────────────────────

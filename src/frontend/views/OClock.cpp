@@ -92,14 +92,20 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     bool isMain  = (m_TransmitMode     == OClockTransmitMode::MainOnly || m_TransmitMode     == OClockTransmitMode::Both);
     bool isLAN   = (m_TransmitMode     == OClockTransmitMode::LANOnly  || m_TransmitMode     == OClockTransmitMode::Both);
 
+    // Overtime -> mismo rojo que se usa en el display local.
+    // nullptr = sin override (PresentationCore usa el color de texto normal).
+    ImVec4 dangerV4 = ImGui::ColorConvertU32ToFloat4(DS::DangerColor);
+    float  dangerRGBA[4] = { dangerV4.x, dangerV4.y, dangerV4.z, dangerV4.w };
+    const float* colorOverride = m_IsOvertime ? dangerRGBA : nullptr;
+
     if (isMain) {
-        core.SetLiveQuickNote(timeStr);
+        core.SetLiveQuickNote(timeStr, colorOverride);
     } else if (wasMain) {
         core.ClearQuickNote();
     }
 
     if (isLAN) {
-        core.SetLiveQuickNoteLAN(timeStr); // ver NOTA arriba
+        core.SetLiveQuickNoteLAN(timeStr, colorOverride); // ver NOTA arriba
     } else if (wasLAN) {
         core.ClearQuickNoteLAN();          // ver NOTA arriba
     }

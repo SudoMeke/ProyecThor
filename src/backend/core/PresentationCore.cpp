@@ -62,14 +62,14 @@ namespace ProyecThor::Core {
         return m_CurrentSelection;
     }
 
-    void PresentationCore::SetLiveQuickNote(const std::string& text) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.currentText   = text;
-        m_State.showText      = !text.empty();
-        m_State.showQuickNote = true;
-        m_State.isProjecting  = true;
-        ++m_StreamVersion;
-    }
+    void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.currentText   = text;
+    m_State.showText      = !text.empty();
+    m_State.showQuickNote = true;
+    m_State.isProjecting  = true;
+    ++m_StreamVersion;
+}
 
     void PresentationCore::ClearQuickNote() {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -79,7 +79,7 @@ namespace ProyecThor::Core {
         ++m_StreamVersion;
     }
 
-    void PresentationCore::SetLiveQuickNoteLAN(const std::string& text) {
+    void PresentationCore::SetLiveQuickNoteLAN(const std::string& text, const float* /*colorOverride*/) {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.lanQuickNoteText = text;
         m_State.showLanQuickNote = !text.empty();
@@ -194,25 +194,24 @@ void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVide
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.bgPath = path;
         m_State.bgType = PresentationState::BackgroundType::Video;
+        ++m_State.transitionTrigger;   // NUEVO
         ++m_StreamVersion;
     }
     if (m_Impl)
         m_Impl->background.SetVideo(path, allowAudio);
 }
 
-    void PresentationCore::StopBackgroundMedia() {
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_State.bgPath     = "";
-            m_State.bgType     = PresentationState::BackgroundType::SolidColor;
-            m_State.bgColor[0] = 0.0f;
-            m_State.bgColor[1] = 0.0f;
-            m_State.bgColor[2] = 0.0f;
-            ++m_StreamVersion;
-        }
-        if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
+void PresentationCore::StopBackgroundMedia() {
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.bgPath     = "";
+        m_State.bgType     = PresentationState::BackgroundType::SolidColor;
+        m_State.bgColor[0] = 0.0f; m_State.bgColor[1] = 0.0f; m_State.bgColor[2] = 0.0f;
+        ++m_State.transitionTrigger;   // NUEVO
+        ++m_StreamVersion;
     }
-
+    if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
+}
     void PresentationCore::BlockBackgroundPath(const std::string& path) {
         if (m_Impl) m_Impl->background.BlockPath(path);
     }
@@ -221,34 +220,36 @@ void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVide
         if (m_Impl) m_Impl->background.UnblockPath();
     }
 
-    void PresentationCore::SetLayer0_Color(float r, float g, float b) {
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_State.bgColor[0] = r;
-            m_State.bgColor[1] = g;
-            m_State.bgColor[2] = b;
-            m_State.bgType     = PresentationState::BackgroundType::SolidColor;
-            m_State.bgPath     = "";
-            ++m_StreamVersion;
-        }
-        if (m_Impl) m_Impl->background.SetSolidColor(r, g, b);
+void PresentationCore::SetLayer0_Color(float r, float g, float b) {
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.bgColor[0] = r; m_State.bgColor[1] = g; m_State.bgColor[2] = b;
+        m_State.bgType     = PresentationState::BackgroundType::SolidColor;
+        m_State.bgPath     = "";
+        ++m_State.transitionTrigger;   // NUEVO
+        ++m_StreamVersion;
     }
-
-    void PresentationCore::SetOverlayMedia(const std::string& path) {
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_State.overlayPath = path;
-        }
-        if (m_Impl) m_Impl->overlay.PlayOverlay(path);
+    if (m_Impl) m_Impl->background.SetSolidColor(r, g, b);
+}
+void PresentationCore::SetOverlayMedia(const std::string& path) {
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.overlayPath = path;
+        ++m_State.transitionTrigger;   // NUEVO
     }
-
-    void PresentationCore::StopOverlayMedia() {
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_State.overlayPath = "";
-        }
-        if (m_Impl) m_Impl->overlay.StopOverlay();
+    if (m_Impl) m_Impl->overlay.PlayOverlay(path);
+}
+void PresentationCore::SetBackgroundTransitionProgress(float progress) {
+    if (m_Impl) m_Impl->background.SetTransitionProgress(progress);
+}
+void PresentationCore::StopOverlayMedia() {
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.overlayPath = "";
+        ++m_State.transitionTrigger;   // NUEVO
     }
+    if (m_Impl) m_Impl->overlay.StopOverlay();
+}
 
     void PresentationCore::UpdateTextStyle(float size, const float color[4], int align,
                                            int vAlign, const float margins[4], bool autoScale,
@@ -282,19 +283,21 @@ void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVide
         m_State.songVAlignment    = vAlign;
     }
 
-    void PresentationCore::SetLayer2_Text(const std::string& text) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.currentText = text;
-        m_State.showText    = !text.empty();
-        ++m_StreamVersion;
-    }
+void PresentationCore::SetLayer2_Text(const std::string& text) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.currentText = text;
+    m_State.showText    = !text.empty();
+    ++m_State.transitionTrigger;   // NUEVO
+    ++m_StreamVersion;
+}
 
-    void PresentationCore::ClearLayer2() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.currentText = "";
-        m_State.showText    = false;
-        ++m_StreamVersion;
-    }
+void PresentationCore::ClearLayer2() {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.currentText = "";
+    m_State.showText    = false;
+    ++m_State.transitionTrigger;   // NUEVO
+    ++m_StreamVersion;
+}
 
     void PresentationCore::SetProjecting(bool projecting) {
         {
@@ -367,7 +370,11 @@ void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVide
         if (m_Impl)
             m_Impl->background.SetLiveMute(mute);
     }
-
+void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.transitionType     = type;
+    m_State.transitionDuration = std::max(0.05f, durationSeconds);
+}
     void PresentationCore::LoadFontsIntoImGui() {
         ImGuiIO& io = ImGui::GetIO();
         m_ImGuiFonts["Predeterminada"] = io.Fonts->AddFontDefault();
@@ -760,6 +767,9 @@ void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVide
 
                 snap.textSize      = st.textSize;
                 snap.textAlignment = st.textAlignment;
+                snap.transitionTrigger  = st.transitionTrigger;
+  snap.transitionType     = st.transitionType;
+  snap.transitionDuration = st.transitionDuration;
                 snap.vAlignment    = st.vAlignment;
                 snap.autoScale     = st.autoScale;
                 snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);

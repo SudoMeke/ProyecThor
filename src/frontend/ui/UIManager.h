@@ -25,7 +25,11 @@ class UIManager {
 public:
     UIManager();
     ~UIManager();
-
+uint64_t m_LastTransitionTrigger = 0;
+float    m_LastBgColor[3]        = { 0.0f, 0.0f, 0.0f };
+float    m_OutgoingBgColor[3]    = { 0.0f, 0.0f, 0.0f };
+bool     m_LastBgWasVideo        = false;
+bool     m_OutgoingBgWasVideo    = false;
     bool Initialize(GLFWwindow* window);
     std::shared_ptr<TransitionPanel> GetTransitionPanelOwned() const { return m_TransitionPanelOwned; }
     void AddPanel(std::shared_ptr<ProyecThor::UI::IPanel> panel);

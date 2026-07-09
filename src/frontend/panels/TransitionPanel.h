@@ -32,7 +32,7 @@ public:
 
     std::string GetName() const override { return "Transiciones"; }
     void Render() override;
-
+float GetDuration() const { return m_Duration; }
     // Llamado desde UIManager justo antes de dibujar el texto en el proyector.
     bool  IsActive()          const { return m_Active; }
     float GetProgress()       const { return m_Progress; }

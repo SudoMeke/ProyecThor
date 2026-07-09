@@ -3,6 +3,7 @@
 #include "backend/media/VLCBasePlayer.h"
 #include "backend/shaders/PostProcessorFSR.h"
 #include <string>
+#include <algorithm>
 
 namespace ProyecThor::Core {
 
@@ -17,7 +18,7 @@ namespace ProyecThor::Core {
 
         int  m_TargetVolume = 100;
         bool m_TargetMuted  = true;
-
+    float m_TransitionProgress = 1.0f;
         // Gate real de audio al publico. Solo cuando esta en true el
         // player activo puede sonar de verdad (ver SetPubliclyLive). Sin
         // esto, cargar un video de fondo (SetVideo) o mover el doble
@@ -69,7 +70,7 @@ namespace ProyecThor::Core {
         void* GetTextureID();
 
         VLCBasePlayer* GetPlayer();
-
+void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
         // allowAudio=false para fondos decorativos (BackgroundsPanel):
         // estructuralmente no podran sonar aunque se este "al aire".
         void SetVideo(const std::string& path, bool allowAudio = true);
