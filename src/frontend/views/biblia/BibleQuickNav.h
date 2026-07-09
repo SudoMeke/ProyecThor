@@ -1,17 +1,18 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <imgui.h>
 #include "BibleTypes.h"
 
 namespace ProyecThor::UI {
 
-// Resultado de la resolucion en vivo del texto que el usuario va tecleando
-// en el buscador rapido.
+// Resultado de la resolucion del buscador rapido. Se va completando a
+// medida que el usuario confirma cada paso con Enter.
 struct QuickNavResolution {
     bool hasBook            = false;
-    int  bookCandidateCount = 0;   // cuantos libros calzan con el prefijo tecleado
-    int  bookIdx            = -1;  // indice dentro de bible.books del MEJOR candidato
+    int  bookCandidateCount = 0;   // cuantos libros calzaban con el prefijo tecleado
+    int  bookIdx            = -1;  // indice dentro de bible.books
 
     bool hasChapter         = false;
     int  chapterNumber      = -1;
@@ -23,50 +24,66 @@ struct QuickNavResolution {
     int  verseIdx           = -1;
 };
 
-// Overlay tipo "buscador rapido" (estilo command palette) para saltar a un
-// libro/capitulo/versiculo escribiendo texto libre, por ejemplo:
+// Los 3 pasos del asistente. Se avanza con Enter y se retrocede con
+// Backspace (con el campo vacio) o con Escape.
+enum class QuickNavStep {
+    Book,
+    Chapter,
+    Verse
+};
+
+// Overlay tipo asistente para saltar a un libro/capitulo/versiculo,
+// PASO A PASO:
 //
-//   "g"        -> mejor candidato: Genesis. Como tambien existe Galatas,
-//                 se muestra el total de coincidencias para invitar a
-//                 seguir escribiendo si no era el libro deseado.
-//   "gn5"      -> Genesis capitulo 5
-//   "gn5:1"    -> Genesis 5:1
-//   "1"        -> ambiguo entre 1 Samuel, 1 Reyes, 1 Cronicas, 1 Corintios,
-//                 1 Tesalonicenses, 1 Timoteo, 1 Pedro y 1 Juan: no se
-//                 confirma solo, hay que seguir escribiendo.
-//   "1co"      -> 1 Corintios (ya no ambiguo)
-//   "1co13:4"  -> 1 Corintios 13:4
+//   1) Escribe el libro (nombre o abreviatura: "gn", "1co", "salmos") y
+//      presiona Enter. Se confirma el mejor candidato (el de numero
+//      canonico mas bajo entre los que calzan con lo tecleado).
+//   2) Escribe el numero de capitulo y presiona Enter (Enter con el campo
+//      vacio confirma el primer capitulo disponible).
+//   3) Escribe el numero de versiculo y presiona Enter (Enter con el campo
+//      vacio confirma el primer versiculo disponible). Este ultimo Enter
+//      es el que confirma la seleccion completa.
 //
-// El buffer tecleado siempre se muestra en pantalla, y Enter confirma
-// siempre el MEJOR candidato actual (el de menor numero canonico), aunque
-// todavia existan otras coincidencias posibles.
+// En cualquier paso, Backspace con el campo ya vacio, o Escape, retroceden
+// un paso (y Escape en el primer paso cierra el buscador).
 class BibleQuickNav {
 public:
-    // Abre el overlay y reinicia el buffer de texto tecleado.
+    // Abre el overlay en el paso "Libro" y reinicia todo el estado.
     void Open();
     // Cierra el overlay sin confirmar ninguna seleccion.
     void Close();
     bool IsOpen() const { return m_Open; }
 
     // Debe llamarse todos los frames (no hace nada si esta cerrado). Captura
-    // el teclado (letras, numeros, espacio, ':', backspace, enter, escape) y
-    // recalcula la resolucion en vivo. Devuelve true SOLO en el frame en que
-    // el usuario confirma con Enter; en ese caso revisar GetResolution()
-    // para saber que libro/capitulo/versiculo fue confirmado.
+    // el teclado del paso actual y avanza/retrocede segun corresponda.
+    // Devuelve true SOLO en el frame en que se confirma el ultimo paso
+    // (Versiculo); en ese caso revisar GetResolution() para conocer la
+    // seleccion completa.
     bool Update(const BibleData& bible);
 
-    // Dibuja la tarjeta central con el buffer tecleado y la previsualizacion
-    // de Libro / Capitulo / Versiculo. Llamar despues de Update().
+    // Dibuja la tarjeta central con el paso actual. Llamar despues de Update().
     void Render(const BibleData& bible);
 
     const QuickNavResolution& GetResolution() const { return m_Resolution; }
-    const std::string&        GetBuffer()     const { return m_Buffer; }
 
 private:
-    void Resolve(const BibleData& bible);
+    void RefreshBookCandidates(const BibleData& bible);
+    void ConfirmBookStep(const BibleData& bible);
+    void ConfirmChapterStep(const BibleData& bible);
+    bool ConfirmVerseStep(const BibleData& bible);
+    void GoBackStep(const BibleData& bible);
 
-    bool               m_Open = false;
-    std::string        m_Buffer;
+    bool         m_Open = false;
+    QuickNavStep m_Step = QuickNavStep::Book;
+
+    std::string  m_BookBuffer;
+    std::string  m_ChapterBuffer;
+    std::string  m_VerseBuffer;
+
+    std::vector<int> m_BookCandidates; // numeros canonicos que calzan con m_BookBuffer
+
+    std::string  m_StatusMessage; // mensaje breve de error (ej: "Capitulo invalido")
+
     QuickNavResolution m_Resolution;
 };
 

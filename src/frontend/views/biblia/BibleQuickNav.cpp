@@ -3,13 +3,23 @@
 #include "BibleBookData.h"
 
 #include <cctype>
-#include <cmath>
 
 namespace ProyecThor::UI {
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Open / Close
+// ─────────────────────────────────────────────────────────────────────────────
+
 void BibleQuickNav::Open() {
     m_Open = true;
-    m_Buffer.clear();
+    m_Step = QuickNavStep::Book;
+
+    m_BookBuffer.clear();
+    m_ChapterBuffer.clear();
+    m_VerseBuffer.clear();
+    m_BookCandidates.clear();
+    m_StatusMessage.clear();
+
     m_Resolution = QuickNavResolution();
 }
 
@@ -18,101 +28,139 @@ void BibleQuickNav::Close() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Resolve: separa el buffer tecleado en tres partes:
-//    1) la parte "libro": letras, y ademas un digito inicial 1/2/3 si el
-//       libro empieza con numero (ej: "1co", "2s").
-//    2) la parte "capitulo": digitos que vienen justo despues de la parte
-//       libro (ej: en "gn5" es "5").
-//    3) la parte "versiculo": digitos que vienen despues de ':' (ej: en
-//       "gn5:1" es "1").
-//  Con la parte libro se buscan candidatos por prefijo (BibleBooks) y se
-//  toma como mejor candidato el de menor numero canonico. Capitulo y
-//  versiculo solo se resuelven si el libro ya quedo resuelto.
+//  RefreshBookCandidates: recalcula que libros calzan con lo tecleado hasta
+//  ahora en el paso "Libro". Se llama cada vez que ese buffer cambia.
 // ─────────────────────────────────────────────────────────────────────────────
 
-void BibleQuickNav::Resolve(const BibleData& bible) {
-    m_Resolution = QuickNavResolution();
-    if (m_Buffer.empty() || bible.books.empty()) return;
+void BibleQuickNav::RefreshBookCandidates(const BibleData& bible) {
+    m_BookCandidates.clear();
+    if (m_BookBuffer.empty() || bible.books.empty()) return;
 
-    size_t i = 0;
-    std::string bookPart;
+    std::string norm = TextUtils::Normalize(m_BookBuffer);
+    if (norm.empty()) return;
 
-    if (i < m_Buffer.size() && (m_Buffer[i] == '1' || m_Buffer[i] == '2' || m_Buffer[i] == '3')) {
-        bookPart += m_Buffer[i];
-        i++;
-    }
-    while (i < m_Buffer.size()
-           && (std::isalpha((unsigned char)m_Buffer[i]) || m_Buffer[i] == ' ')) {
-        bookPart += m_Buffer[i];
-        i++;
-    }
+    m_BookCandidates = BibleBooks::FindBookCandidates(norm);
+}
 
-    std::string chapterPart;
-    while (i < m_Buffer.size() && std::isdigit((unsigned char)m_Buffer[i])) {
-        chapterPart += m_Buffer[i];
-        i++;
+// ─────────────────────────────────────────────────────────────────────────────
+//  Confirmacion de cada paso (llamadas al presionar Enter)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void BibleQuickNav::ConfirmBookStep(const BibleData& bible) {
+    if (m_BookCandidates.empty()) {
+        m_StatusMessage = "Ningun libro coincide con lo escrito";
+        return;
     }
 
-    std::string versePart;
-    if (i < m_Buffer.size() && m_Buffer[i] == ':') {
-        i++;
-        while (i < m_Buffer.size() && std::isdigit((unsigned char)m_Buffer[i])) {
-            versePart += m_Buffer[i];
-            i++;
-        }
-    }
-
-    if (bookPart.empty()) return;
-
-    std::string normPrefix = TextUtils::Normalize(bookPart);
-    if (normPrefix.empty()) return;
-
-    std::vector<int> candidates = BibleBooks::FindBookCandidates(normPrefix);
-    m_Resolution.bookCandidateCount = (int)candidates.size();
-    if (candidates.empty()) return;
-
-    int bestCanonical = candidates.front();
+    int bestCanonical = m_BookCandidates.front();
     for (int bi = 0; bi < (int)bible.books.size(); bi++) {
         if (bible.books[bi].canonicalNumber == bestCanonical) {
-            m_Resolution.bookIdx = bi;
-            m_Resolution.hasBook = true;
+            m_Resolution.bookIdx            = bi;
+            m_Resolution.hasBook            = true;
+            m_Resolution.bookCandidateCount = (int)m_BookCandidates.size();
             break;
         }
     }
-    if (!m_Resolution.hasBook) return;
 
+    if (!m_Resolution.hasBook) {
+        m_StatusMessage = "Ese libro no esta cargado en esta Biblia";
+        return;
+    }
+
+    m_StatusMessage.clear();
+    m_ChapterBuffer.clear();
+    m_Step = QuickNavStep::Chapter;
+}
+
+void BibleQuickNav::ConfirmChapterStep(const BibleData& bible) {
     const BookData& book = bible.books[m_Resolution.bookIdx];
+    if (book.chapters.empty()) {
+        m_StatusMessage = "Este libro no tiene capitulos cargados";
+        return;
+    }
 
-    if (!chapterPart.empty()) {
-        int chapNum = 0;
-        try { chapNum = std::stoi(chapterPart); } catch (...) { chapNum = 0; }
-        if (chapNum > 0) {
-            for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
-                if (book.chapters[ci].number == chapNum) {
-                    m_Resolution.hasChapter        = true;
-                    m_Resolution.chapterNumber     = chapNum;
-                    m_Resolution.chapterIdx        = ci;
-                    m_Resolution.chapterVerseCount = (int)book.chapters[ci].verses.size();
-                    break;
-                }
-            }
+    int chapNum = 0;
+    if (m_ChapterBuffer.empty()) {
+        chapNum = book.chapters.front().number;
+    } else {
+        try { chapNum = std::stoi(m_ChapterBuffer); }
+        catch (...) { m_StatusMessage = "Capitulo invalido"; return; }
+    }
+
+    for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
+        if (book.chapters[ci].number == chapNum) {
+            m_Resolution.hasChapter        = true;
+            m_Resolution.chapterNumber     = chapNum;
+            m_Resolution.chapterIdx        = ci;
+            m_Resolution.chapterVerseCount = (int)book.chapters[ci].verses.size();
+            break;
         }
     }
 
-    if (m_Resolution.hasChapter && !versePart.empty()) {
-        int verseNum = 0;
-        try { verseNum = std::stoi(versePart); } catch (...) { verseNum = 0; }
-        if (verseNum > 0) {
-            const ChapterData& chap = book.chapters[m_Resolution.chapterIdx];
-            for (int vi = 0; vi < (int)chap.verses.size(); vi++) {
-                if (chap.verses[vi].number == verseNum) {
-                    m_Resolution.hasVerse    = true;
-                    m_Resolution.verseNumber = verseNum;
-                    m_Resolution.verseIdx    = vi;
-                    break;
-                }
-            }
+    if (!m_Resolution.hasChapter) {
+        m_StatusMessage = "Ese capitulo no existe";
+        return;
+    }
+
+    m_StatusMessage.clear();
+    m_VerseBuffer.clear();
+    m_Step = QuickNavStep::Verse;
+}
+
+bool BibleQuickNav::ConfirmVerseStep(const BibleData& bible) {
+    const BookData&    book = bible.books[m_Resolution.bookIdx];
+    const ChapterData& chap = book.chapters[m_Resolution.chapterIdx];
+
+    if (chap.verses.empty()) {
+        m_StatusMessage = "Este capitulo no tiene versiculos cargados";
+        return false;
+    }
+
+    int verseNum = 0;
+    if (m_VerseBuffer.empty()) {
+        verseNum = chap.verses.front().number;
+    } else {
+        try { verseNum = std::stoi(m_VerseBuffer); }
+        catch (...) { m_StatusMessage = "Versiculo invalido"; return false; }
+    }
+
+    for (int vi = 0; vi < (int)chap.verses.size(); vi++) {
+        if (chap.verses[vi].number == verseNum) {
+            m_Resolution.hasVerse    = true;
+            m_Resolution.verseNumber = verseNum;
+            m_Resolution.verseIdx    = vi;
+            return true;
         }
+    }
+
+    m_StatusMessage = "Ese versiculo no existe";
+    return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GoBackStep: retrocede un paso, tipo breadcrumb.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void BibleQuickNav::GoBackStep(const BibleData& bible) {
+    switch (m_Step) {
+        case QuickNavStep::Chapter:
+            m_Step = QuickNavStep::Book;
+            m_Resolution.hasBook    = false;
+            m_Resolution.hasChapter = false;
+            m_ChapterBuffer.clear();
+            m_StatusMessage.clear();
+            RefreshBookCandidates(bible);
+            break;
+
+        case QuickNavStep::Verse:
+            m_Step = QuickNavStep::Chapter;
+            m_Resolution.hasVerse = false;
+            m_VerseBuffer.clear();
+            m_StatusMessage.clear();
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -124,53 +172,68 @@ bool BibleQuickNav::Update(const BibleData& bible) {
     if (!m_Open) return false;
 
     ImGuiIO& io = ImGui::GetIO();
-    bool changed = false;
 
+    // Escape: en el primer paso cierra el buscador, en los demas retrocede.
     if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-        Close();
+        if (m_Step == QuickNavStep::Book) Close();
+        else GoBackStep(bible);
         return false;
     }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_Backspace, true) && !m_Buffer.empty()) {
-        m_Buffer.pop_back();
-        changed = true;
-    }
+    std::string* activeBuffer =
+        (m_Step == QuickNavStep::Book)    ? &m_BookBuffer :
+        (m_Step == QuickNavStep::Chapter) ? &m_ChapterBuffer :
+                                             &m_VerseBuffer;
 
-    for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
-        ImWchar wc = io.InputQueueCharacters[i];
-        if (wc >= 32 && wc < 128) {
-            char c = (char)wc;
-            if (std::isalnum((unsigned char)c) || c == ' ' || c == ':') {
-                m_Buffer += c;
-                changed = true;
-            }
+    bool bookBufferChanged = false;
+
+    // Backspace: borra el ultimo caracter del paso actual; si ya estaba
+    // vacio, retrocede un paso (como en un breadcrumb).
+    if (ImGui::IsKeyPressed(ImGuiKey_Backspace, true)) {
+        if (!activeBuffer->empty()) {
+            activeBuffer->pop_back();
+            if (m_Step == QuickNavStep::Book) bookBufferChanged = true;
+            m_StatusMessage.clear();
+        } else if (m_Step != QuickNavStep::Book) {
+            GoBackStep(bible);
         }
     }
 
-    if (changed) Resolve(bible);
+    // Captura de caracteres: letras/espacio en el paso Libro, solo digitos
+    // en los pasos Capitulo y Versiculo.
+    for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
+        ImWchar wc = io.InputQueueCharacters[i];
+        if (wc < 32 || wc >= 128) continue;
+        char c = (char)wc;
+
+        if (m_Step == QuickNavStep::Book) {
+            if (std::isalnum((unsigned char)c) || c == ' ') {
+                m_BookBuffer += c;
+                bookBufferChanged = true;
+                m_StatusMessage.clear();
+            }
+        } else if (std::isdigit((unsigned char)c)) {
+            activeBuffer->push_back(c);
+            m_StatusMessage.clear();
+        }
+    }
+
+    if (bookBufferChanged) RefreshBookCandidates(bible);
 
     if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
-        if (m_Resolution.hasBook) {
-            const BookData& book = bible.books[m_Resolution.bookIdx];
-
-            if (!m_Resolution.hasChapter && !book.chapters.empty()) {
-                m_Resolution.hasChapter        = true;
-                m_Resolution.chapterIdx        = 0;
-                m_Resolution.chapterNumber     = book.chapters.front().number;
-                m_Resolution.chapterVerseCount = (int)book.chapters.front().verses.size();
-            }
-
-            if (m_Resolution.hasChapter && !m_Resolution.hasVerse) {
-                const ChapterData& chap = book.chapters[m_Resolution.chapterIdx];
-                if (!chap.verses.empty()) {
-                    m_Resolution.hasVerse    = true;
-                    m_Resolution.verseIdx    = 0;
-                    m_Resolution.verseNumber = chap.verses.front().number;
+        switch (m_Step) {
+            case QuickNavStep::Book:
+                ConfirmBookStep(bible);
+                break;
+            case QuickNavStep::Chapter:
+                ConfirmChapterStep(bible);
+                break;
+            case QuickNavStep::Verse:
+                if (ConfirmVerseStep(bible)) {
+                    Close();
+                    return true;
                 }
-            }
-
-            Close();
-            return true;
+                break;
         }
     }
 
@@ -180,6 +243,16 @@ bool BibleQuickNav::Update(const BibleData& bible) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Render
 // ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+void DrawHint(const std::string& text) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.55f, 1.0f));
+    ImGui::TextUnformatted(text.c_str());
+    ImGui::PopStyleColor();
+}
+
+} // namespace anonimo
 
 void BibleQuickNav::Render(const BibleData& bible) {
     if (!m_Open) return;
@@ -197,14 +270,14 @@ void BibleQuickNav::Render(const BibleData& bible) {
     ImGui::End();
     ImGui::PopStyleColor();
 
-    ImVec2 cardSize = ImVec2(420.0f, 260.0f);
+    ImVec2 cardSize = ImVec2(440.0f, 260.0f);
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
 
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.11f, 0.98f));
     ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.25f, 0.35f, 0.55f, 0.85f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   12.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(20.0f, 18.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(22.0f, 20.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
 
     constexpr ImGuiWindowFlags kFlags =
@@ -214,69 +287,88 @@ void BibleQuickNav::Render(const BibleData& bible) {
 
     ImGui::Begin("##QuickNavCard", nullptr, kFlags);
 
-    // "Esc para cancelar" arriba a la derecha
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.55f, 1.0f));
-    const char* escHint = "Esc para cancelar";
-    ImGui::SetCursorPosX(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(escHint).x);
-    ImGui::TextUnformatted(escHint);
+    // Cabecera: breadcrumb con lo ya confirmado
+    if (m_Resolution.hasBook) {
+        std::string crumb = bible.books[m_Resolution.bookIdx].name;
+        if (m_Resolution.hasChapter)
+            crumb += "   >   Capitulo " + std::to_string(m_Resolution.chapterNumber);
+        DrawHint(crumb);
+    } else {
+        DrawHint("Buscador rapido");
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // Paso actual: etiqueta + buffer tecleado en grande
+    const char* stepLabel =
+        (m_Step == QuickNavStep::Book)    ? "Libro" :
+        (m_Step == QuickNavStep::Chapter) ? "Capitulo" : "Versiculo";
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.43f, 0.50f, 1.0f));
+    ImGui::TextUnformatted(stepLabel);
     ImGui::PopStyleColor();
 
-    // Buffer tecleado por el usuario, siempre visible
-    ImGui::Spacing();
+    const std::string& currentBuffer =
+        (m_Step == QuickNavStep::Book)    ? m_BookBuffer :
+        (m_Step == QuickNavStep::Chapter) ? m_ChapterBuffer : m_VerseBuffer;
+
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.85f, 1.0f, 1.0f));
-    std::string shown = m_Buffer.empty() ? "" : m_Buffer;
-    ImGui::SetWindowFontScale(1.15f);
-    if (!shown.empty())
-        ImGui::TextUnformatted(shown.c_str());
-    else
-        ImGui::TextDisabled("Escribe: gn5:1, 1co13, salmos 23...");
-    if (!shown.empty()) ImGui::SameLine(0.0f, 2.0f);
-    if (std::fmod(ImGui::GetTime(), 1.0) < 0.5)
-        ImGui::TextUnformatted("|");
+    ImGui::SetWindowFontScale(1.6f);
+    ImGui::TextUnformatted(currentBuffer.empty() ? "_" : currentBuffer.c_str());
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+
+    // Ayuda contextual segun el paso
+    if (m_Step == QuickNavStep::Book) {
+        if (!m_BookBuffer.empty()) {
+            if (m_BookCandidates.empty()) {
+                DrawHint("Ningun libro coincide todavia...");
+            } else {
+                std::string preview = std::string("-> ")
+                    + BibleBooks::GetCanonicalBookName(m_BookCandidates.front());
+                if (m_BookCandidates.size() > 1)
+                    preview += "  (+" + std::to_string(m_BookCandidates.size() - 1) + " mas, sigue escribiendo)";
+                DrawHint(preview);
+            }
+        } else {
+            DrawHint("Escribe el libro (ej: gn, 1co, salmos) y presiona Enter");
+        }
+    } else if (m_Step == QuickNavStep::Chapter) {
+        const BookData& book = bible.books[m_Resolution.bookIdx];
+        if (!book.chapters.empty()) {
+            DrawHint("Capitulos disponibles: " + std::to_string(book.chapters.front().number)
+                + " - " + std::to_string(book.chapters.back().number)
+                + "   (Enter vacio = capitulo " + std::to_string(book.chapters.front().number) + ")");
+        }
+    } else {
+        const ChapterData& chap = bible.books[m_Resolution.bookIdx].chapters[m_Resolution.chapterIdx];
+        if (!chap.verses.empty()) {
+            DrawHint("Versiculos disponibles: " + std::to_string(chap.verses.front().number)
+                + " - " + std::to_string(chap.verses.back().number)
+                + "   (Enter vacio = versiculo " + std::to_string(chap.verses.front().number) + ")");
+        }
+    }
+
+    // Mensaje de error, si lo hay
+    if (!m_StatusMessage.empty()) {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.40f, 0.40f, 1.0f));
+        ImGui::TextUnformatted(m_StatusMessage.c_str());
+        ImGui::PopStyleColor();
+    }
 
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    auto DrawField = [](const char* label, const std::string& value, bool resolved) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.43f, 0.50f, 1.0f));
-        ImGui::TextUnformatted(label);
-        ImGui::PopStyleColor();
-        ImGui::PushStyleColor(ImGuiCol_Text,
-            resolved ? ImVec4(0.92f, 0.94f, 0.98f, 1.0f) : ImVec4(0.45f, 0.48f, 0.55f, 1.0f));
-        ImGui::SetWindowFontScale(1.4f);
-        ImGui::TextUnformatted(value.c_str());
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-    };
-
-    if (m_Resolution.hasBook) {
-        std::string bookLabel = bible.books[m_Resolution.bookIdx].name;
-        if (m_Resolution.bookCandidateCount > 1)
-            bookLabel += "  (+" + std::to_string(m_Resolution.bookCandidateCount - 1)
-                       + " mas, sigue escribiendo para afinar)";
-        DrawField("Libro", bookLabel, true);
-    } else {
-        DrawField("Libro", "...", false);
-    }
-
-    DrawField("Capitulo",
-        m_Resolution.hasChapter ? std::to_string(m_Resolution.chapterNumber) : "...",
-        m_Resolution.hasChapter);
-
-    DrawField("Versiculo",
-        m_Resolution.hasVerse ? std::to_string(m_Resolution.verseNumber) : "...",
-        m_Resolution.hasVerse);
-
-    if (m_Resolution.hasChapter) {
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.43f, 0.50f, 1.0f));
-        ImGui::Text("Versiculos: %d", m_Resolution.chapterVerseCount);
-        ImGui::PopStyleColor();
-    }
+    DrawHint(m_Step == QuickNavStep::Book
+        ? "Enter: confirmar libro    Esc: cancelar"
+        : "Enter: confirmar    Backspace (vacio) / Esc: paso anterior");
 
     ImGui::End();
     ImGui::PopStyleVar(3);
