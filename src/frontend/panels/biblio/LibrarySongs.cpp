@@ -424,27 +424,25 @@ if (ctx.currentCategoryInt == kCat_Songs)
     {
         const float avail = ImGui::GetContentRegionAvail().x;
         const float sp    = ImGui::GetStyle().ItemSpacing.x;
+        const float bw3   = std::floor((avail - sp * 2.0f) / 3.0f);
+        const ImVec2 btnSize(bw3, DS::ButtonHeight);
 
-        // Fila 1: Nuevo | Importar | Eliminar (tres iguales)
-        const float bw3 = std::floor((avail - sp * 2.0f) / 3.0f);
-        const ImVec2 btnSize3(bw3, DS::ButtonHeight);
-
-        if (GlassIconButton("newSong", "add", "+", "Nuevo", btnSize3))
+        if (GlassIconButton("newSong", "add", "+", "Nuevo", btnSize))
             CreateNewSong(ctx);
         ImGui::SameLine();
-        if (GlassIconButton("importSong", "upload_file", "^", "Importar", btnSize3))
+        if (GlassIconButton("importSong", "upload_file", "^", "Importar", btnSize))
             ctx.importFile();
         ImGui::SameLine();
-        if (GlassIconButton("deleteSong", "delete", "X", "Eliminar", btnSize3,
+        if (GlassIconButton("deleteSong", "delete", "X", "Eliminar", btnSize,
                             ImGui::ColorConvertU32ToFloat4(DS::DangerColor)))
             ctx.deleteSelectedItem();
 
         ImGui::Spacing();
 
         // Fila 2: Actualizar — ancho completo para que no quede suelto
-        if (GlassIconButton("refreshSong", "repeat", "R", "Actualizar",
-                            { -1.f, DS::ButtonHeight }))
+        if (GlassIconButton("refreshDoc", "repeat", "R", "Actualizar", btnSize))
             ctx.refreshList();
+        ImGui::SameLine();
     }
 }
 // =============================================================================
