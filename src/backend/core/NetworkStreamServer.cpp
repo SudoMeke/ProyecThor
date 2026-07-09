@@ -542,11 +542,7 @@ std::string NetworkStreamServer::BuildHTMLPage()
 <body>
 <div id="screen">
   <div id="viewport">
-    <div id="idle-overlay">
-      <div id="idle-logo">ProyecThor</div>
-      <div id="idle-dot"></div>
-    </div>
-
+   <div id="idle-overlay">
     <!-- Fondo capturado (JPEG polling o MJPEG) -->
     <img id="bg-frame" src="" alt="" aria-hidden="true">
 
