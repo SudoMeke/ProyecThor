@@ -1,184 +1,19 @@
 #include "BibleView.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/core/AppPaths.h"
+#include "biblia/BibleTextUtils.h"
+#include "biblia/BibleBookData.h"
+#include "biblia/BibleXmlIO.h"
+#include "biblia/BibleSearch.h"
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
 #include <algorithm>
-#include <cctype>
 #include <cstring>
-#include <cmath>
 #include "frontend/ui/bin/StyleGeneralApp.h"
-
-namespace fs = std::filesystem;
 
 namespace ProyecThor::UI {
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers internos
-// ─────────────────────────────────────────────────────────────────────────────
-
-static std::string ToLowerUTF8(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (unsigned char c : s)
-        out += static_cast<char>(std::tolower(c));
-    return out;
-}
-
-static std::string StripAccents(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    size_t i = 0;
-    while (i < s.size()) {
-        unsigned char c = static_cast<unsigned char>(s[i]);
-        if (c < 0x80) { out += static_cast<char>(c); i++; }
-        else if (c == 0xC3 && i + 1 < s.size()) {
-            unsigned char n = static_cast<unsigned char>(s[i + 1]);
-            char rep = '?';
-            if      (n >= 0xA0 && n <= 0xA5) rep = 'a';
-            else if (n >= 0xA8 && n <= 0xAB) rep = 'e';
-            else if (n >= 0xAC && n <= 0xAF) rep = 'i';
-            else if (n >= 0xB2 && n <= 0xB6) rep = 'o';
-            else if (n >= 0xB9 && n <= 0xBC) rep = 'u';
-            else if (n == 0xB1)              rep = 'n';
-            else if (n >= 0x80 && n <= 0x85) rep = 'a';
-            else if (n >= 0x88 && n <= 0x8B) rep = 'e';
-            else if (n >= 0x8C && n <= 0x8F) rep = 'i';
-            else if (n >= 0x92 && n <= 0x96) rep = 'o';
-            else if (n >= 0x99 && n <= 0x9C) rep = 'u';
-            else if (n == 0x91)              rep = 'n';
-            else rep = static_cast<char>(n);
-            out += rep; i += 2;
-        } else { i++; }
-    }
-    return out;
-}
-
-static std::string Normalize(const std::string& s) {
-    std::string r = StripAccents(ToLowerUTF8(s));
-    r.erase(std::remove(r.begin(), r.end(), ' '), r.end());
-    return r;
-}
-
-static ImU32 Col(float r, float g, float b, float a = 1.0f) {
-    return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, a));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Tabla de abreviaturas
-// ─────────────────────────────────────────────────────────────────────────────
-
-static const std::pair<const char*, int> kAbbrevTable[] = {
-    {"genesis",1},{"gen",1},{"gn",1},
-    {"exodo",2},{"exo",2},{"ex",2},
-    {"levitico",3},{"lev",3},{"lv",3},
-    {"numeros",4},{"num",4},{"nm",4},
-    {"deuteronomio",5},{"deut",5},{"dt",5},
-    {"josue",6},{"jos",6},
-    {"jueces",7},{"jue",7},{"jc",7},
-    {"rut",8},{"rt",8},
-    {"1samuel",9},{"1sam",9},{"1s",9},
-    {"2samuel",10},{"2sam",10},{"2s",10},
-    {"1reyes",11},{"1re",11},{"1r",11},
-    {"2reyes",12},{"2re",12},{"2r",12},
-    {"1cronicas",13},{"1cro",13},{"1cr",13},
-    {"2cronicas",14},{"2cro",14},{"2cr",14},
-    {"esdras",15},{"esd",15},
-    {"nehemias",16},{"neh",16},
-    {"ester",17},{"est",17},
-    {"job",18},
-    {"salmos",19},{"sal",19},{"ps",19},{"sl",19},
-    {"proverbios",20},{"prov",20},{"pr",20},
-    {"eclesiastes",21},{"ecl",21},{"qo",21},
-    {"cantares",22},{"cnt",22},{"ct",22},{"can",22},
-    {"isaias",23},{"isa",23},{"is",23},
-    {"jeremias",24},{"jer",24},{"jr",24},
-    {"lamentaciones",25},{"lam",25},
-    {"ezequiel",26},{"eze",26},{"ez",26},
-    {"daniel",27},{"dan",27},{"dn",27},
-    {"oseas",28},{"ose",28},{"os",28},
-    {"joel",29},{"jl",29},
-    {"amos",30},{"am",30},
-    {"abdias",31},{"abd",31},{"ab",31},
-    {"jonas",32},{"jon",32},
-    {"miqueas",33},{"miq",33},{"mi",33},
-    {"nahum",34},{"nah",34},
-    {"habacuc",35},{"hab",35},
-    {"sofonias",36},{"sof",36},
-    {"hageo",37},{"hag",37},
-    {"zacarias",38},{"zac",38},
-    {"malaquias",39},{"mal",39},
-    {"mateo",40},{"mat",40},{"mt",40},
-    {"marcos",41},{"mar",41},{"mc",41},{"mr",41},
-    {"lucas",42},{"luc",42},{"lc",42},
-    {"juan",43},{"jn",43},{"jua",43},
-    {"hechos",44},{"hch",44},{"hec",44},{"act",44},
-    {"romanos",45},{"rom",45},{"ro",45},
-    {"1corintios",46},{"1cor",46},{"1co",46},
-    {"2corintios",47},{"2cor",47},{"2co",47},
-    {"galatas",48},{"gal",48},{"ga",48},
-    {"efesios",49},{"efe",49},{"ef",49},
-    {"filipenses",50},{"fil",50},{"php",50},
-    {"colosenses",51},{"col",51},
-    {"1tesalonicenses",52},{"1tes",52},{"1ts",52},
-    {"2tesalonicenses",53},{"2tes",53},{"2ts",53},
-    {"1timoteo",54},{"1tim",54},{"1ti",54},
-    {"2timoteo",55},{"2tim",55},{"2ti",55},
-    {"tito",56},{"tit",56},
-    {"filemon",57},{"flm",57},{"fm",57},
-    {"hebreos",58},{"heb",58},
-    {"santiago",59},{"sant",59},{"stg",59},{"sg",59},
-    {"1pedro",60},{"1ped",60},{"1pe",60},
-    {"2pedro",61},{"2ped",61},{"2pe",61},
-    {"1juan",62},{"1jn",62},
-    {"2juan",63},{"2jn",63},
-    {"3juan",64},{"3jn",64},
-    {"judas",65},{"jud",65},
-    {"apocalipsis",66},{"apo",66},{"ap",66},{"rev",66},
-    {nullptr,0}
-};
-
-static int ResolveAbbrev(const std::string& norm) {
-    for (int k = 0; kAbbrevTable[k].first != nullptr; k++)
-        if (norm == kAbbrevTable[k].first) return kAbbrevTable[k].second;
-    return 0;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Secciones y colores
-// ─────────────────────────────────────────────────────────────────────────────
-
-BibleSection BibleView::GetBookSection(int n) const {
-    if (n >= 1  && n <= 5)  return BibleSection::Pentateuch;
-    if (n >= 6  && n <= 17) return BibleSection::HistoricalOT;
-    if (n >= 18 && n <= 22) return BibleSection::Wisdom;
-    if (n >= 23 && n <= 27) return BibleSection::MajorProphets;
-    if (n >= 28 && n <= 39) return BibleSection::MinorProphets;
-    if (n >= 40 && n <= 43) return BibleSection::Gospels;
-    if (n == 44)             return BibleSection::Acts;
-    if (n >= 45 && n <= 57) return BibleSection::PaulineEpistles;
-    if (n >= 58 && n <= 65) return BibleSection::GeneralEpistles;
-    return BibleSection::Apocalypse;
-}
-
-void BibleView::GetSectionColor(BibleSection section, float& r, float& g, float& b) const {
-    switch (section) {
-        case BibleSection::Pentateuch:      r=0.95f; g=0.75f; b=0.35f; break;
-        case BibleSection::HistoricalOT:    r=0.55f; g=0.80f; b=0.45f; break;
-        case BibleSection::Wisdom:          r=0.95f; g=0.85f; b=0.30f; break;
-        case BibleSection::MajorProphets:   r=0.75f; g=0.50f; b=0.95f; break;
-        case BibleSection::MinorProphets:   r=0.50f; g=0.65f; b=0.95f; break;
-        case BibleSection::Gospels:         r=0.30f; g=0.80f; b=0.85f; break;
-        case BibleSection::Acts:            r=0.45f; g=0.88f; b=0.60f; break;
-        case BibleSection::PaulineEpistles: r=0.95f; g=0.58f; b=0.35f; break;
-        case BibleSection::GeneralEpistles: r=0.90f; g=0.50f; b=0.70f; break;
-        case BibleSection::Apocalypse:      r=0.95f; g=0.35f; b=0.35f; break;
-        default:                            r=0.70f; g=0.70f; b=0.70f; break;
-    }
-}
+using TextUtils::Col;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helper: build the projected text string
@@ -197,97 +32,15 @@ static std::string BuildProjectedText(const BookData& book,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Carga XML
+//  Carga y guardado (delegado a biblia/BibleXmlIO)
 // ─────────────────────────────────────────────────────────────────────────────
 
 void BibleView::LoadXMLBible(const std::string& path) {
     m_CurrentBible    = BibleData();
     m_BibleLoaded     = false;
     m_LoadedBiblePath = path;
-
-    const char* bookNames[] = {
-        "Genesis","Exodo","Levitico","Numeros","Deuteronomio",
-        "Josue","Jueces","Rut","1 Samuel","2 Samuel","1 Reyes","2 Reyes",
-        "1 Cronicas","2 Cronicas","Esdras","Nehemias","Ester","Job","Salmos",
-        "Proverbios","Eclesiastes","Cantares","Isaias","Jeremias","Lamentaciones",
-        "Ezequiel","Daniel","Oseas","Joel","Amos","Abdias","Jonas","Miqueas",
-        "Nahum","Habacuc","Sofonias","Hageo","Zacarias","Malaquias",
-        "Mateo","Marcos","Lucas","Juan","Hechos","Romanos","1 Corintios",
-        "2 Corintios","Galatas","Efesios","Filipenses","Colosenses","1 Tesalonicenses",
-        "2 Tesalonicenses","1 Timoteo","2 Timoteo","Tito","Filemon","Hebreos",
-        "Santiago","1 Pedro","2 Pedro","1 Juan","2 Juan","3 Juan","Judas","Apocalipsis"
-    };
-
-    std::ifstream file(path);
-    if (!file.is_open()) return;
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string xml = buffer.str();
-
-    size_t bookPos = 0;
-    while ((bookPos = xml.find("<book", bookPos)) != std::string::npos) {
-        BookData book;
-        int bookNum = 0;
-        size_t numStart = xml.find("number=\"", bookPos);
-        if (numStart != std::string::npos) {
-            numStart += 8;
-            size_t numEnd = xml.find("\"", numStart);
-            try { bookNum = std::stoi(xml.substr(numStart, numEnd - numStart)); } catch(...) {}
-        }
-        book.canonicalNumber = bookNum;
-        book.name = (bookNum >= 1 && bookNum <= 66)
-            ? bookNames[bookNum - 1]
-            : "Libro " + std::to_string(bookNum);
-
-        size_t nextBookPos = xml.find("<book", bookPos + 5);
-        if (nextBookPos == std::string::npos) nextBookPos = xml.length();
-
-        size_t chapPos = bookPos;
-        while ((chapPos = xml.find("<chapter", chapPos)) != std::string::npos
-               && chapPos < nextBookPos) {
-            ChapterData chapter;
-            size_t cnumStart = xml.find("number=\"", chapPos);
-            if (cnumStart != std::string::npos && cnumStart < nextBookPos) {
-                cnumStart += 8;
-                size_t cnumEnd = xml.find("\"", cnumStart);
-                try { chapter.number = std::stoi(xml.substr(cnumStart, cnumEnd - cnumStart)); } catch(...) {}
-            }
-            size_t nextChapPos = xml.find("<chapter", chapPos + 8);
-            if (nextChapPos == std::string::npos) nextChapPos = nextBookPos;
-
-            size_t versPos = chapPos;
-            while ((versPos = xml.find("<verse", versPos)) != std::string::npos
-                   && versPos < nextChapPos) {
-                VerseData verse;
-                size_t vnumStart = xml.find("number=\"", versPos);
-                if (vnumStart != std::string::npos && vnumStart < nextChapPos) {
-                    vnumStart += 8;
-                    size_t vnumEnd = xml.find("\"", vnumStart);
-                    try { verse.number = std::stoi(xml.substr(vnumStart, vnumEnd - vnumStart)); } catch(...) {}
-                }
-                size_t textStart = xml.find(">", versPos) + 1;
-                size_t textEnd   = xml.find("</verse>", textStart);
-                if (textStart != std::string::npos && textEnd != std::string::npos
-                    && textStart < textEnd)
-                    verse.text = xml.substr(textStart, textEnd - textStart);
-                chapter.verses.push_back(verse);
-                versPos = textEnd;
-            }
-            if (!chapter.verses.empty()) book.chapters.push_back(chapter);
-            chapPos = nextChapPos;
-        }
-        if (!book.chapters.empty()) m_CurrentBible.books.push_back(book);
-        bookPos = nextBookPos;
-    }
-
-    m_CurrentBible.name = fs::path(path).stem().string();
-    m_BibleLoaded       = !m_CurrentBible.books.empty();
+    m_BibleLoaded     = XmlIO::LoadBible(path, m_CurrentBible);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Guardado de versiculo editado en XML
-// ─────────────────────────────────────────────────────────────────────────────
 
 void BibleView::SaveVerseToXML(int bookIdx, int chapIdx, int verseIdx) {
     if (m_LoadedBiblePath.empty()) { m_EditStatus = "Error: ruta desconocida"; return; }
@@ -300,32 +53,13 @@ void BibleView::SaveVerseToXML(int bookIdx, int chapIdx, int verseIdx) {
     if (verseIdx < 0 || verseIdx >= (int)chap.verses.size())
         { m_EditStatus = "Error: versiculo invalido"; return; }
 
-    // FIXED: Apply the edited buffer text to the in-memory model FIRST
     chap.verses[verseIdx].text   = std::string(m_EditBuffer);
     chap.verses[verseIdx].edited = true;
 
-    // Rewrite the entire XML
-    std::ofstream out(m_LoadedBiblePath, std::ios::trunc);
-    if (!out.is_open()) { m_EditStatus = "Error: no se pudo abrir el archivo"; return; }
-
-    out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bible>\n";
-    for (auto& b : m_CurrentBible.books) {
-        out << "  <book number=\"" << b.canonicalNumber << "\" name=\"" << b.name << "\">\n";
-        for (auto& c : b.chapters) {
-            out << "    <chapter number=\"" << c.number << "\">\n";
-            for (auto& v : c.verses) {
-                out << "      <verse number=\"" << v.number << "\">"
-                    << v.text
-                    << "</verse>\n";
-            }
-            out << "    </chapter>\n";
-        }
-        out << "  </book>\n";
-    }
-    out << "</bible>\n";
-    out.close();
-
-    m_EditStatus = "Guardado correctamente";
+    if (XmlIO::SaveBible(m_LoadedBiblePath, m_CurrentBible))
+        m_EditStatus = "Guardado correctamente";
+    else
+        m_EditStatus = "Error: no se pudo abrir el archivo";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,7 +74,6 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
     if (verseIdx < 0 || verseIdx >= (int)chap.verses.size()) return;
     auto& verse = chap.verses[verseIdx];
 
-    // FIXED: Build projected text via shared helper so it's always consistent
     std::string fullText = BuildProjectedText(book, chap, verse, m_CurrentBible.name);
 
     m_ProjectedBookNum  = book.canonicalNumber;
@@ -351,7 +84,6 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
     m_ProjectedVerseIdx = verseIdx;
     m_ScrollToVerse     = verseIdx;
 
-    // Add to history (no duplicate at tail)
     bool isDuplicate = !m_History.empty()
         && m_History.back().bookIdx  == bookIdx
         && m_History.back().chapIdx  == chapIdx
@@ -369,8 +101,6 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
         if (m_History.size() > 50)
             m_History.erase(m_History.begin());
     } else {
-        // FIXED: Even if it's a duplicate position, update fullText in case
-        // the verse was just edited and re-projected with new content.
         m_History.back().fullText = fullText;
     }
 
@@ -399,98 +129,6 @@ void BibleView::ReprojectInCurrentBible() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Busqueda inteligente
-// ─────────────────────────────────────────────────────────────────────────────
-
-bool BibleView::ParseSmartQuery(const std::string& rawQuery,
-                                 int& outBook, int& outChap, int& outVerse) {
-    outBook = outChap = outVerse = -1;
-    if (!m_BibleLoaded || rawQuery.empty()) return false;
-
-    std::string q = StripAccents(ToLowerUTF8(rawQuery));
-    int chapNum = -1, verseNum = -1;
-
-    size_t colonPos = q.rfind(':');
-    if (colonPos != std::string::npos) {
-        std::string afterColon = q.substr(colonPos + 1);
-        afterColon.erase(std::remove_if(afterColon.begin(), afterColon.end(),
-            [](char c){ return !std::isdigit((unsigned char)c); }), afterColon.end());
-        if (!afterColon.empty()) try { verseNum = std::stoi(afterColon); } catch(...) {}
-
-        std::string beforeColon = q.substr(0, colonPos);
-        size_t lastSp = beforeColon.rfind(' ');
-        std::string chapStr = (lastSp != std::string::npos) ? beforeColon.substr(lastSp + 1) : "";
-        chapStr.erase(std::remove_if(chapStr.begin(), chapStr.end(),
-            [](char c){ return !std::isdigit((unsigned char)c); }), chapStr.end());
-        if (!chapStr.empty()) try { chapNum = std::stoi(chapStr); } catch(...) {}
-
-        q = (lastSp != std::string::npos) ? beforeColon.substr(0, lastSp) : beforeColon;
-        if (chapNum < 0)
-            while (!q.empty() && std::isdigit((unsigned char)q.back())) q.pop_back();
-    } else {
-        size_t lastSp = q.rfind(' ');
-        if (lastSp != std::string::npos) {
-            std::string tail = q.substr(lastSp + 1);
-            bool allDigits = !tail.empty();
-            for (char c : tail) if (!std::isdigit((unsigned char)c)) { allDigits = false; break; }
-            if (allDigits) {
-                try { chapNum = std::stoi(tail); } catch(...) {}
-                q = q.substr(0, lastSp);
-            }
-        }
-    }
-
-    while (!q.empty() && q.front() == ' ') q.erase(q.begin());
-    while (!q.empty() && q.back()  == ' ') q.pop_back();
-
-    int resolvedBookNum = -1;
-    {
-        std::string nosp = q;
-        nosp.erase(std::remove(nosp.begin(), nosp.end(), ' '), nosp.end());
-        resolvedBookNum = ResolveAbbrev(nosp);
-    }
-    if (resolvedBookNum <= 0) {
-        int bestLen = -1;
-        for (auto& b : m_CurrentBible.books) {
-            std::string bNorm = Normalize(b.name);
-            if (bNorm.find(q) != std::string::npos || q.find(bNorm) != std::string::npos) {
-                if ((int)bNorm.size() > bestLen) {
-                    bestLen = (int)bNorm.size();
-                    resolvedBookNum = b.canonicalNumber;
-                }
-            }
-        }
-    }
-    if (resolvedBookNum <= 0) return false;
-
-    for (int bi = 0; bi < (int)m_CurrentBible.books.size(); bi++) {
-        if (m_CurrentBible.books[bi].canonicalNumber != resolvedBookNum) continue;
-        outBook = bi;
-        auto& book = m_CurrentBible.books[bi];
-        if (chapNum > 0) {
-            for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
-                if (book.chapters[ci].number == chapNum) {
-                    outChap = ci;
-                    if (verseNum > 0) {
-                        for (int vi = 0; vi < (int)book.chapters[ci].verses.size(); vi++) {
-                            if (book.chapters[ci].verses[vi].number == verseNum)
-                                { outVerse = vi; break; }
-                        }
-                        if (outVerse < 0) outVerse = 0;
-                    }
-                    break;
-                }
-            }
-            if (outChap < 0) outChap = 0;
-        } else {
-            outChap = 0;
-        }
-        break;
-    }
-    return outBook >= 0;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  Navegacion
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -513,6 +151,24 @@ void BibleView::NavigateVerse(int delta) {
     } else {
         m_SelectedVerse = newVerse;
     }
+    ProjectVerse(m_SelectedBook, m_SelectedChapter, m_SelectedVerse);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Confirmacion del buscador rapido (biblia/BibleQuickNav)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void BibleView::HandleQuickNavConfirm() {
+    const QuickNavResolution& res = m_QuickNav.GetResolution();
+    if (!res.hasBook) return;
+
+    m_SelectedBook    = res.bookIdx;
+    m_SelectedChapter = res.hasChapter ? res.chapterIdx : 0;
+    m_SelectedVerse   = res.hasVerse   ? res.verseIdx   : 0;
+    m_LiveSearch[0]   = '\0';
+    m_FilteredBook    = -1;
+    m_FilteredChapter = -1;
+
     ProjectVerse(m_SelectedBook, m_SelectedChapter, m_SelectedVerse);
 }
 
@@ -557,7 +213,7 @@ void BibleView::RenderTopBar() {
 
     if (searchChanged) {
         int bk, ch, vs;
-        if (ParseSmartQuery(std::string(m_LiveSearch), bk, ch, vs)) {
+        if (Search::ParseSmartQuery(m_CurrentBible, std::string(m_LiveSearch), bk, ch, vs)) {
             m_FilteredBook    = bk;
             m_FilteredChapter = (ch >= 0) ? ch : 0;
             if (bk >= 0) {
@@ -590,7 +246,7 @@ void BibleView::RenderTopBar() {
             auto& pc = pb.chapters[m_ProjectedChapIdx];
             if (m_ProjectedVerseIdx < (int)pc.verses.size()) {
                 float r, g, b;
-                GetSectionColor(GetBookSection(pb.canonicalNumber), r, g, b);
+                BibleBooks::GetSectionColor(BibleBooks::GetBookSection(pb.canonicalNumber), r, g, b);
                 ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(r*0.12f, g*0.12f, b*0.12f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(r*0.22f, g*0.22f, b*0.22f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(r, g, b, 1.0f));
@@ -599,22 +255,22 @@ void BibleView::RenderTopBar() {
                 std::string projLabel = "   " + pb.name + " "
                     + std::to_string(pc.number) + ":"
                     + std::to_string(pc.verses[m_ProjectedVerseIdx].number);
-                
+
                 bool btnClicked = ImGui::Button(projLabel.c_str(), ImVec2(0.0f, 28.0f));
-                
-                // Dibujamos el icono manualMENTE por encima del botón que acabamos de crear
+
+                // Dibujamos el icono manualmente por encima del boton que acabamos de crear
                 ImVec2 btnMin = ImGui::GetItemRectMin();
                 auto it = StyleGeneralApp::Icons.find("izquierda");
                 if (it != StyleGeneralApp::Icons.end() && it->second.textureID) {
                     float iconSize = ImGui::GetFontSize() * 0.9f;
                     ImVec2 iconPos = ImVec2(btnMin.x + 8.0f, btnMin.y + (28.0f - iconSize) * 0.5f);
-                    
+
                     ImGui::GetWindowDrawList()->AddImage(
                         it->second.textureID,
                         iconPos,
                         ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                         ImVec2(0, 0), ImVec2(1, 1),
-                        Col(r, g, b, 1.0f) // Teñido con el color del botón
+                        Col(r, g, b, 1.0f) // Tenido con el color del boton
                     );
                 }
 
@@ -654,6 +310,33 @@ void BibleView::RenderTopBar() {
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar();
 
+    // Boton del buscador rapido (overlay tipo command palette)
+    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::SetCursorPosY(centerY);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.14f, 0.18f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.26f, 0.38f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.55f, 0.85f, 1.0f, 1.0f));
+
+    if (ImGui::Button("  Buscador (Ctrl+K)  ", ImVec2(0.0f, 28.0f)) && m_BibleLoaded)
+        m_QuickNav.Open();
+
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Buscador rapido de versiculos.\n"
+            "Escribe libremente, por ejemplo:\n"
+            "  g         -> Genesis (si hay mas libros con 'g', sigue escribiendo)\n"
+            "  gn5:1     -> Genesis 5:1\n"
+            "  1co13:4   -> 1 Corintios 13:4");
+    }
+
+    m_QuickNavBtnPos  = ImGui::GetItemRectMin();
+    m_QuickNavBtnSize = ImGui::GetItemRectSize();
+
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+
     ImGui::EndChild();
     ImGui::PopStyleColor(); // ChildBg
 
@@ -663,7 +346,6 @@ void BibleView::RenderTopBar() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  RenderHistoryPopup
-//  FIXED: Pop style vars/colors BEFORE ImGui::End(), not after.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void BibleView::RenderHistoryPopup() {
@@ -677,7 +359,6 @@ void BibleView::RenderHistoryPopup() {
     ImGui::SetNextWindowSizeConstraints(ImVec2(260.0f, 60.0f), ImVec2(400.0f, 420.0f));
     ImGui::SetNextWindowBgAlpha(0.97f);
 
-    // Push style BEFORE Begin
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.09f, 0.12f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.20f, 0.30f, 0.45f, 0.70f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -749,11 +430,10 @@ void BibleView::RenderHistoryPopup() {
                 Core::PresentationCore::Get().SetProjecting(true);
                 m_ShowHistory = false;
                 earlyExit = true;
-                break; // FIXED: break loop, then End() normally below
+                break;
             }
         }
 
-        // Close if click outside
         if (!earlyExit
             && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
             && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -761,7 +441,6 @@ void BibleView::RenderHistoryPopup() {
         }
     }
 
-    // FIXED: Always call End() before PopStyleVar/Color
     ImGui::End();
 
     ImGui::PopStyleVar(3);
@@ -789,13 +468,17 @@ void BibleView::RenderBookGrid() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(spacing, spacing));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
 
+    const QuickNavResolution& quickRes = m_QuickNav.GetResolution();
+
     for (int i = 0; i < (int)m_CurrentBible.books.size(); i++) {
         auto& b = m_CurrentBible.books[i];
         float r, g, bv;
-        GetSectionColor(GetBookSection(b.canonicalNumber), r, g, bv);
+        BibleBooks::GetSectionColor(BibleBooks::GetBookSection(b.canonicalNumber), r, g, bv);
 
         bool selected = (m_SelectedBook == i);
         bool filtered = (m_FilteredBook < 0) || (i == m_FilteredBook);
+        // Resaltamos el libro apuntado en vivo por el buscador rapido (si esta abierto)
+        bool quickHit = m_QuickNav.IsOpen() && quickRes.hasBook && quickRes.bookIdx == i;
         float alpha   = filtered ? 1.0f : 0.18f;
 
         ImGui::PushStyleColor(ImGuiCol_Button,
@@ -815,6 +498,12 @@ void BibleView::RenderBookGrid() {
             m_LiveSearch[0]   = '\0';
             m_FilteredBook    = -1;
             m_FilteredChapter = -1;
+        }
+        if (quickHit) {
+            ImVec2 bMin = ImGui::GetItemRectMin();
+            ImVec2 bMax = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRect(bMin, bMax,
+                Col(0.55f, 0.95f, 0.65f, 0.90f), 6.0f, 0, 2.0f);
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", b.name.c_str());
@@ -837,7 +526,7 @@ void BibleView::RenderChapterGrid() {
     auto& book = m_CurrentBible.books[m_SelectedBook];
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.45f, 1.0f));
-    ImGui::Text("  CAPITULOS  —  %s", book.name.c_str());
+    ImGui::Text("  CAPITULOS  -  %s", book.name.c_str());
     ImGui::PopStyleColor();
 
     ImGui::BeginChild("##ChapterGrid", ImVec2(0.0f, 0.0f), false);
@@ -849,7 +538,7 @@ void BibleView::RenderChapterGrid() {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
 
     float r, g, bv;
-    GetSectionColor(GetBookSection(book.canonicalNumber), r, g, bv);
+    BibleBooks::GetSectionColor(BibleBooks::GetBookSection(book.canonicalNumber), r, g, bv);
 
     for (int i = 0; i < (int)book.chapters.size(); i++) {
         bool selected = (m_SelectedChapter == i);
@@ -887,9 +576,9 @@ void BibleView::RenderVerseList() {
     auto& chap = book.chapters[m_SelectedChapter];
 
     float r, g, bv;
-    GetSectionColor(GetBookSection(book.canonicalNumber), r, g, bv);
+    BibleBooks::GetSectionColor(BibleBooks::GetBookSection(book.canonicalNumber), r, g, bv);
 
-    const float marginH     = 28.0f; // Aumentado de 14 a 28 para dar espacio al icono
+    const float marginH     = 28.0f;
     const float numColW     = 32.0f;
     const float gap         = 8.0f;
     const float rowPadV     = 7.0f;
@@ -938,17 +627,15 @@ void BibleView::RenderVerseList() {
         if (isProjected) {
             auto it = StyleGeneralApp::Icons.find("izquierda");
             if (it != StyleGeneralApp::Icons.end() && it->second.textureID) {
-                // Ajustamos el tamaño relativo a la fuente actual
-                float iconSize = ImGui::GetFontSize() * 0.85f; 
+                float iconSize = ImGui::GetFontSize() * 0.85f;
                 ImVec2 iconPos = ImVec2(rowMin.x + 4.0f, rowMin.y + rowPadV + 2.0f);
-                
-                // AddImage permite pasar un color al final que "tiñe" la textura
+
                 dl->AddImage(
                     it->second.textureID,
                     iconPos,
                     ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                     ImVec2(0, 0), ImVec2(1, 1),
-                    Col(r, g, bv, 0.95f) // Usamos el color de la sección bíblica!
+                    Col(r, g, bv, 0.95f)
                 );
             }
         }
@@ -975,32 +662,28 @@ void BibleView::RenderVerseList() {
             ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.60f, 0.80f, 1.00f, 1.00f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(3.0f, 2.0f));
-            
-            // Creamos el botón vacío sin el emoji del lápiz
+
             bool btnEditClicked = ImGui::Button("  ##edit", ImVec2(20.0f, 20.0f));
-            
-            // Dibujamos el icono "editar" manualmente encima
+
             ImVec2 btnMin = ImGui::GetItemRectMin();
             auto itEdit = StyleGeneralApp::Icons.find("editar");
             if (itEdit != StyleGeneralApp::Icons.end() && itEdit->second.textureID) {
-                float iconSize = 14.0f; // Tamaño del icono dentro del botón
+                float iconSize = 14.0f;
                 ImVec2 iconPos = ImVec2(btnMin.x + (20.0f - iconSize) * 0.5f, btnMin.y + (20.0f - iconSize) * 0.5f);
-                
+
                 ImGui::GetWindowDrawList()->AddImage(
                     itEdit->second.textureID,
                     iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                     ImVec2(0, 0), ImVec2(1, 1),
-                    Col(0.70f, 0.85f, 1.0f, 1.0f) // Le damos un tinte celeste suave
+                    Col(0.70f, 0.85f, 1.0f, 1.0f)
                 );
             } else {
-                // Si olvidaste poner la imagen, dibuja una 'E' para que no quede invisible ni salga el '?'
                 ImGui::GetWindowDrawList()->AddText(
                     ImVec2(btnMin.x + 6.0f, btnMin.y + 2.0f),
                     Col(1.0f, 1.0f, 1.0f, 1.0f), "E"
                 );
             }
 
-            // Lógica original de cuando se hace clic
             if (btnEditClicked) {
                 m_EditBookIdx  = m_SelectedBook;
                 m_EditChapIdx  = m_SelectedChapter;
@@ -1011,7 +694,7 @@ void BibleView::RenderVerseList() {
                 m_EditStatus.clear();
                 m_ShowEditModal = true;
             }
-            
+
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(3);
         }
@@ -1030,8 +713,6 @@ void BibleView::RenderVerseList() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  RenderEditModal
-//  FIXED: after saving, re-project the verse so the projector shows the new text.
-//         Status message is cleared when the modal is closed (Cancelar / X).
 // ─────────────────────────────────────────────────────────────────────────────
 
 void BibleView::RenderEditModal() {
@@ -1110,8 +791,6 @@ void BibleView::RenderEditModal() {
         ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         if (ImGui::Button("Guardar", ImVec2(btnW, 32.0f))) {
             SaveVerseToXML(m_EditBookIdx, m_EditChapIdx, m_EditVerseIdx);
-            // FIXED: Always re-project after saving so the projector reflects
-            // the new text immediately, whether or not this was the active verse.
             if (m_EditBookIdx  == m_ProjectedBookIdx
              && m_EditChapIdx  == m_ProjectedChapIdx
              && m_EditVerseIdx == m_ProjectedVerseIdx) {
@@ -1123,7 +802,6 @@ void BibleView::RenderEditModal() {
     }
     ImGui::End();
 
-    // FIXED: Pop window styles AFTER End()
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
 
@@ -1184,9 +862,17 @@ void BibleView::Render() {
         ReprojectInCurrentBible();
     }
 
-    if (!m_SearchFocused && m_BibleLoaded) {
+    // Navegacion con flechas (deshabilitada si el buscador o el buscador rapido tienen foco)
+    if (!m_SearchFocused && !m_QuickNav.IsOpen() && m_BibleLoaded) {
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  false)) NavigateVerse(-1);
         if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) NavigateVerse(+1);
+    }
+
+    // Atajo de teclado Ctrl+K para abrir el buscador rapido desde cualquier parte
+    ImGuiIO& io = ImGui::GetIO();
+    if (!m_ShowEditModal && !m_QuickNav.IsOpen() && m_BibleLoaded
+        && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) {
+        m_QuickNav.Open();
     }
 
     RenderTopBar();
@@ -1225,6 +911,14 @@ void BibleView::Render() {
     }
 
     RenderEditModal();
+
+    // El overlay del buscador rapido se actualiza y dibuja al final para
+    // quedar siempre por encima del resto de la vista.
+    if (m_BibleLoaded && !m_ShowEditModal) {
+        if (m_QuickNav.Update(m_CurrentBible))
+            HandleQuickNavConfirm();
+        m_QuickNav.Render(m_CurrentBible);
+    }
 }
 
 } // namespace ProyecThor::UI
