@@ -75,7 +75,8 @@ private:
 
     bool         m_Open = false;
     QuickNavStep m_Step = QuickNavStep::Book;
-
+double m_OpenSince    = -1.0; // ImGui::GetTime() cuando se llamo Open()
+    double m_ClosingUntil = -1.0;
     std::string  m_BookBuffer;
     std::string  m_ChapterBuffer;
     std::string  m_VerseBuffer;

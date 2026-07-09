@@ -195,49 +195,7 @@ void BibleView::RenderTopBar() {
     ImGui::TextDisabled("|");
     ImGui::SameLine(0.0f, 10.0f);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 6.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.10f, 0.12f, 0.16f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.16f, 0.22f, 1.0f));
-    ImGui::SetNextItemWidth(260.0f);
-    ImGui::SetCursorPosY(centerY);
-
-    if (m_NeedsFocusSearch) { ImGui::SetKeyboardFocusHere(); m_NeedsFocusSearch = false; }
-
-    bool searchChanged = ImGui::InputTextWithHint("##liveSearch",
-        "Gn 1:1  Jn 3:16  salmo 23...", m_LiveSearch, sizeof(m_LiveSearch));
-    m_SearchFocused = ImGui::IsItemActive();
-
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(2);
-
-    if (searchChanged) {
-        int bk, ch, vs;
-        if (Search::ParseSmartQuery(m_CurrentBible, std::string(m_LiveSearch), bk, ch, vs)) {
-            m_FilteredBook    = bk;
-            m_FilteredChapter = (ch >= 0) ? ch : 0;
-            if (bk >= 0) {
-                m_SelectedBook    = bk;
-                m_SelectedChapter = (ch >= 0) ? ch : 0;
-                if (vs >= 0) m_SelectedVerse = vs;
-            }
-        } else {
-            m_FilteredBook = m_FilteredChapter = -1;
-        }
-    }
-
-    if (m_SearchFocused && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-        if (m_SelectedBook >= 0) {
-            ProjectVerse(m_SelectedBook, m_SelectedChapter,
-                         m_SelectedVerse >= 0 ? m_SelectedVerse : 0);
-            m_LiveSearch[0]   = '\0';
-            m_FilteredBook    = -1;
-            m_FilteredChapter = -1;
-        }
-    }
-
-    // Chip del versiculo proyectado
-    ImGui::SameLine(0.0f, 10.0f);
+    // ── Chip del versiculo proyectado ──────────────────────────────────
     ImGui::SetCursorPosY(centerY);
     if (m_ProjectedBookIdx >= 0
         && m_ProjectedBookIdx < (int)m_CurrentBible.books.size()) {
@@ -286,55 +244,89 @@ void BibleView::RenderTopBar() {
         }
     }
 
-    // Boton historial
+    // ── Boton historial (solo icono, el conteo va en el tooltip) ──────
     ImGui::SameLine(0.0f, 10.0f);
     ImGui::SetCursorPosY(centerY);
 
     bool hasHistory = !m_History.empty();
+    const float iconBtnSize = 28.0f;
+
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Button,
         m_ShowHistory
             ? ImVec4(0.20f, 0.30f, 0.45f, 1.0f)
             : ImVec4(0.12f, 0.14f, 0.18f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.26f, 0.38f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text,
-        hasHistory ? ImVec4(0.55f, 0.85f, 1.0f, 1.0f) : ImVec4(0.40f, 0.42f, 0.48f, 1.0f));
 
-    std::string histLabel = "  Historial (" + std::to_string(m_History.size()) + ")  ";
-    if (ImGui::Button(histLabel.c_str(), ImVec2(0.0f, 28.0f)) && hasHistory)
+    bool histClicked = ImGui::Button("##history", ImVec2(iconBtnSize, iconBtnSize));
+
+    {
+        ImVec2 hMin = ImGui::GetItemRectMin();
+        auto itHist = StyleGeneralApp::Icons.find("history");
+        if (itHist != StyleGeneralApp::Icons.end() && itHist->second.textureID) {
+            float iconSize = ImGui::GetFontSize() * 0.95f;
+            ImVec2 iconPos = ImVec2(hMin.x + (iconBtnSize - iconSize) * 0.5f,
+                                     hMin.y + (iconBtnSize - iconSize) * 0.5f);
+            ImGui::GetWindowDrawList()->AddImage(
+                itHist->second.textureID,
+                iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                ImVec2(0, 0), ImVec2(1, 1),
+                hasHistory ? Col(0.55f, 0.85f, 1.0f, 1.0f) : Col(0.40f, 0.42f, 0.48f, 1.0f));
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        if (hasHistory)
+            ImGui::SetTooltip("Historial (%d)", (int)m_History.size());
+        else
+            ImGui::SetTooltip("Historial vacio");
+    }
+
+    if (histClicked && hasHistory)
         m_ShowHistory = !m_ShowHistory;
 
     m_HistoryBtnPos  = ImGui::GetItemRectMin();
     m_HistoryBtnSize = ImGui::GetItemRectSize();
 
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
 
-    // Boton del buscador rapido (overlay tipo command palette)
+    // ── Boton del buscador rapido (solo icono, overlay tipo command palette) ─
     ImGui::SameLine(0.0f, 10.0f);
     ImGui::SetCursorPosY(centerY);
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.14f, 0.18f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.26f, 0.38f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.55f, 0.85f, 1.0f, 1.0f));
 
-    if (ImGui::Button("  Buscador (Ctrl+K)  ", ImVec2(0.0f, 28.0f)) && m_BibleLoaded)
+    bool searchClicked = ImGui::Button("##quicknav", ImVec2(iconBtnSize, iconBtnSize));
+
+    {
+        ImVec2 sMin = ImGui::GetItemRectMin();
+        auto itSearch = StyleGeneralApp::Icons.find("search");
+        if (itSearch != StyleGeneralApp::Icons.end() && itSearch->second.textureID) {
+            float iconSize = ImGui::GetFontSize() * 0.9f;
+            ImVec2 iconPos = ImVec2(sMin.x + (iconBtnSize - iconSize) * 0.5f,
+                                     sMin.y + (iconBtnSize - iconSize) * 0.5f);
+            ImGui::GetWindowDrawList()->AddImage(
+                itSearch->second.textureID,
+                iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                ImVec2(0, 0), ImVec2(1, 1),
+                Col(0.55f, 0.85f, 1.0f, 1.0f));
+        }
+    }
+
+    if (searchClicked && m_BibleLoaded)
         m_QuickNav.Open();
 
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Buscador rapido de versiculos.\n"
-            "Escribe libremente, por ejemplo:\n"
-            "  g         -> Genesis (si hay mas libros con 'g', sigue escribiendo)\n"
-            "  gn5:1     -> Genesis 5:1\n"
-            "  1co13:4   -> 1 Corintios 13:4");
+            "Buscador rapido (Ctrl+K)");
     }
 
     m_QuickNavBtnPos  = ImGui::GetItemRectMin();
     m_QuickNavBtnSize = ImGui::GetItemRectSize();
 
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
 
     ImGui::EndChild();

@@ -604,6 +604,7 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
     StyleGeneralApp::LoadAppIcon("original_screen",   "bin/assets/icons/ui/original_screen.png");
     StyleGeneralApp::LoadAppIcon("add_photo",   "bin/assets/icons/ui/add_photo.png");
 StyleGeneralApp::LoadAppIcon("upload_file", "bin/assets/icons/ui/upload_file.png");
+StyleGeneralApp::LoadAppIcon("history",    "bin/assets/icons/ui/history.png");
 StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png");
         }},
 
