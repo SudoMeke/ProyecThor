@@ -92,8 +92,11 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     bool isMain  = (m_TransmitMode     == OClockTransmitMode::MainOnly || m_TransmitMode     == OClockTransmitMode::Both);
     bool isLAN   = (m_TransmitMode     == OClockTransmitMode::LANOnly  || m_TransmitMode     == OClockTransmitMode::Both);
 
-    // Overtime -> mismo rojo que se usa en el display local.
-    // nullptr = sin override (PresentationCore usa el color de texto normal).
+    // Forzar el estilo elegido por el usuario para el cronometro, para que
+    // no dependa de lo ultimo que haya quedado activo (Biblia/Cancion).
+    if ((isMain || isLAN) && !m_StyleName.empty())
+        core.ApplyStyleByName(m_StyleName);
+
     ImVec4 dangerV4 = ImGui::ColorConvertU32ToFloat4(DS::DangerColor);
     float  dangerRGBA[4] = { dangerV4.x, dangerV4.y, dangerV4.z, dangerV4.w };
     const float* colorOverride = m_IsOvertime ? dangerRGBA : nullptr;
@@ -105,14 +108,51 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     }
 
     if (isLAN) {
-        core.SetLiveQuickNoteLAN(timeStr, colorOverride); // ver NOTA arriba
+        core.SetLiveQuickNoteLAN(timeStr, colorOverride);
     } else if (wasLAN) {
-        core.ClearQuickNoteLAN();          // ver NOTA arriba
+        core.ClearQuickNoteLAN();
     }
 
     m_PrevTransmitMode = m_TransmitMode;
 }
 
+void OClock::RenderStyleSelector() {
+    ImGui::Spacing();
+    ImGui::TextColored(ToVec4(DS::TextHint), "Estilo para el público");
+
+    auto& core = Core::PresentationCore::Get();
+    std::vector<std::string> styleNames = core.GetSavedStyleNames();
+
+    std::string preview = m_StyleName.empty() ? "Usar estilo actual" : m_StyleName;
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.05f, 0.09f, 0.13f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.07f, 0.12f, 0.17f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+    ImGui::SetNextItemWidth(-1.0f);
+
+    if (ImGui::BeginCombo("##oclockStyle", preview.c_str())) {
+        bool noneSelected = m_StyleName.empty();
+        if (ImGui::Selectable("Usar estilo actual", noneSelected))
+            m_StyleName.clear();
+        if (noneSelected) ImGui::SetItemDefaultFocus();
+
+        for (const auto& name : styleNames) {
+            bool sel = (m_StyleName == name);
+            if (ImGui::Selectable(name.c_str(), sel))
+                m_StyleName = name;
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(2);
+
+    if (m_StyleName.empty()) {
+        ImGui::TextColored(ToVec4(DS::TextHint),
+            "Sin estilo fijo: heredara el ultimo estilo activo (Biblia/Cancion).");
+    }
+}
 // ── Render ───────────────────────────────────────────────────────────────
 
 void OClock::Render(GlassRenderer& glass) {
@@ -275,7 +315,7 @@ void OClock::Render(GlassRenderer& glass) {
     ImGui::Checkbox("Barra de progreso", &m_ShowProgressBar);
     ImGui::SameLine(0, 16);
     ImGui::Checkbox("Prefijo \"+\" en overtime", &m_ShowSignPrefix);
-
+    RenderStyleSelector();   // <-- nuevo
     ImGui::Spacing();
 
     // ── Botones de control ─────────────────────────────────────────────────

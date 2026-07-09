@@ -755,7 +755,12 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                 PresentationState st = GetState();
 
                 StreamSnapshot snap;
-                snap.isProjecting  = st.isProjecting;
+                // El cliente web usa "isProjecting" solo para decidir si oculta el overlay
+// de idle y muestra el texto. No debe confundirse con el "isProjecting"
+// real que controla el proyector principal y el audio publico — por eso
+// aqui se OR-ea con showLanQuickNote: si hay una nota SOLO-LAN activa,
+// el cliente de red debe mostrarla aunque la pantalla principal este idle.
+snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
                 if (st.showLanQuickNote) {
                     snap.currentText = st.lanQuickNoteText;

@@ -20,7 +20,7 @@ enum class OClockTransmitMode {
 
 class OClock {
 public:
-    OClock();
+ OClock();
     void Render(GlassRenderer& glass);
 
 private:
@@ -32,7 +32,7 @@ private:
     std::string GetFormattedTime() const;
     float       GetProgressRatio() const; // 0..1 hasta el objetivo (clamped)
     void        SyncTransmission(const std::string& timeStr);
-
+void        RenderStyleSelector();
     // ── Lógica de tiempo (cuenta ASCENDENTE con objetivo) ──────────────────
     bool m_IsRunning  = false;
     bool m_IsOvertime = false;
@@ -52,6 +52,7 @@ private:
     // ── Transmisión ──────────────────────────────────────────────────────
     OClockTransmitMode m_TransmitMode     = OClockTransmitMode::Off;
     OClockTransmitMode m_PrevTransmitMode = OClockTransmitMode::Off;
+     std::string m_StyleName;
 };
 
 } // namespace ProyecThor::UI
