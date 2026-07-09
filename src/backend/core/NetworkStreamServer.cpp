@@ -254,50 +254,75 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
 
     // ── GET /stream  (MJPEG — modo HighQuality) ───────────────────────────────
     svr.Get("/stream", [this](const httplib::Request& req, httplib::Response& res)
-    {
-        // httplib soporta chunked responses con un content_provider
-        res.set_header("Access-Control-Allow-Origin", "*");
-        res.set_header("Cache-Control", "no-cache");
-        res.set_header("Connection", "keep-alive");
+{
+    res.set_header("Access-Control-Allow-Origin", "*");
+    res.set_header("Cache-Control", "no-cache");
+    res.set_header("Connection", "keep-alive");
 
-        const std::string boundary = "PTframe";
+    const std::string boundary = "PTframe";
 
-        res.set_chunked_content_provider(
-            "multipart/x-mixed-replace; boundary=" + boundary,
-            [this, boundary](size_t /*offset*/, httplib::DataSink& sink)
+    res.set_chunked_content_provider(
+        "multipart/x-mixed-replace; boundary=" + boundary,
+        [this, boundary](size_t /*offset*/, httplib::DataSink& sink)
+        {
+            using Clock = std::chrono::steady_clock;
+            auto nextFrameDeadline = Clock::now();
+
+            while (m_Running.load())
             {
-                while (m_Running.load())
+                StreamConfig cfg = GetConfig();
+
+                // Frecuencia objetivo segun el modo activo. UltraStable
+                // respeta el FPS elegido por el usuario (30 o 60); el resto
+                // se queda en ~30fps como hasta ahora.
+                int fps = 30;
+                if (cfg.videoMode == StreamConfig::VideoMode::UltraStable)
+                    fps = std::clamp(cfg.targetFPS, 24, 60);
+
+                const auto frameInterval =
+                    std::chrono::microseconds(1000000 / std::max(1, fps));
+
+                std::vector<uint8_t> jpegData;
                 {
-                    std::vector<uint8_t> jpegData;
-                    {
-                        std::lock_guard<std::mutex> lk(m_ProviderMutex);
-                        if (m_FrameProvider) jpegData = m_FrameProvider();
-                    }
-
-                    if (!jpegData.empty())
-                    {
-                        std::ostringstream hdr;
-                        hdr << "--" << boundary << "\r\n"
-                            << "Content-Type: image/jpeg\r\n"
-                            << "Content-Length: " << jpegData.size() << "\r\n\r\n";
-                        std::string hdrStr = hdr.str();
-
-                        if (!sink.write(hdrStr.data(), hdrStr.size())) return false;
-                        if (!sink.write(reinterpret_cast<const char*>(jpegData.data()),
-                                        jpegData.size()))           return false;
-
-                        std::string tail = "\r\n";
-                        if (!sink.write(tail.data(), tail.size())) return false;
-                    }
-
-                    // ~30fps para HighQuality, el caller decide el rate via jpegQuality
-                    std::this_thread::sleep_for(std::chrono::milliseconds(33));
+                    std::lock_guard<std::mutex> lk(m_ProviderMutex);
+                    if (m_FrameProvider) jpegData = m_FrameProvider();
                 }
-                return false; // cierra el stream cuando el servidor se detiene
-            }
-        );
-    });
 
+                if (!jpegData.empty())
+                {
+                    std::ostringstream hdr;
+                    hdr << "--" << boundary << "\r\n"
+                        << "Content-Type: image/jpeg\r\n"
+                        << "Content-Length: " << jpegData.size() << "\r\n\r\n";
+                    std::string hdrStr = hdr.str();
+
+                    if (!sink.write(hdrStr.data(), hdrStr.size())) return false;
+                    if (!sink.write(reinterpret_cast<const char*>(jpegData.data()),
+                                    jpegData.size()))           return false;
+
+                    std::string tail = "\r\n";
+                    if (!sink.write(tail.data(), tail.size())) return false;
+                }
+
+                // Pacing anti-drift: avanzamos el deadline en pasos fijos de
+                // frameInterval. Si nos atrasamos (frame de red lenta, JPEG
+                // grande, etc.) NO intentamos mandar rafagas para "ponernos
+                // al dia" — eso es lo que rompe la fluidez percibida. En vez
+                // de eso, resincronizamos el deadline al momento actual y
+                // seguimos desde ahi, priorizando timing estable sobre
+                // recuperar frames perdidos.
+                nextFrameDeadline += frameInterval;
+                auto now = Clock::now();
+                if (nextFrameDeadline > now) {
+                    std::this_thread::sleep_for(nextFrameDeadline - now);
+                } else {
+                    nextFrameDeadline = now;
+                }
+            }
+            return false;
+        }
+    );
+});
     // ── Error handler ─────────────────────────────────────────────────────────
     svr.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
         res.status = 404;
@@ -353,7 +378,7 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
     };
     auto B = [](bool v) -> const char* { return v ? "true" : "false"; };
 
-    bool hiQ = (cfg.videoMode == StreamConfig::VideoMode::HighQuality);
+  bool hiQ = (cfg.videoMode != StreamConfig::VideoMode::LowLatency);
 
     std::ostringstream j;
     j << "{"
@@ -508,20 +533,6 @@ std::string NetworkStreamServer::BuildHTMLPage()
     pointer-events: none; z-index: 20;
   }
   #idle-overlay.hidden { opacity: 0; pointer-events: none; }
-  #idle-logo {
-    font-size: clamp(18px, 4vw, 32px);
-    color: rgba(255,255,255,0.12);
-    letter-spacing: 0.15em; font-weight: 300; text-transform: uppercase;
-  }
-  #idle-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: rgba(255,255,255,0.08);
-    animation: pulse 2.5s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%,100% { transform:scale(1);   opacity:0.4; }
-    50%      { transform:scale(1.6); opacity:0.9; }
-  }
 
   /* Status bar */
   #status-bar {

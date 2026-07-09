@@ -37,22 +37,28 @@ uint64_t    version        = 0;
 // ── StreamConfig ──────────────────────────────────────────────────────────────
 // Qué capas transmitir y en qué calidad
 struct StreamConfig {
-    bool sendBackground = true;   // fondo de color o video capturado
-    bool sendText       = true;   // overlay de texto
-    bool sendOverlay    = true;   // overlay de video/imagen
+    bool sendBackground = true;
+    bool sendText       = true;
+    bool sendOverlay    = true;
 
-    // Calidad de video
     enum class VideoMode {
-        HighQuality,   // MJPEG continuo ~30fps, más CPU
-        LowLatency     // JPEG polling ~200ms, menos CPU
+        HighQuality,   // MJPEG continuo ~30fps, prioriza latencia baja
+        LowLatency,    // JPEG polling ~200ms, menos CPU
+        UltraStable    // NUEVO: MJPEG con framerate objetivo fijo (30/60fps),
+                       // pacing preciso anti-drift y calidad casi sin perdida.
+                       // Acepta mas delay (buffer/timing) a cambio de fluidez
+                       // perfecta — pensado para pantallas/proyectores donde
+                       // la estabilidad importa mas que la latencia minima.
     };
     VideoMode videoMode = VideoMode::LowLatency;
 
     int  jpegQuality    = 80;     // 1-100
     int  frameWidth     = 1280;
     int  frameHeight    = 720;
-};
 
+    // Solo aplica cuando videoMode == UltraStable. 30 o 60.
+    int  targetFPS      = 60;
+};
 // ── NetworkStreamServer ───────────────────────────────────────────────────────
 // Endpoints:
 //   GET /           → HTML interactivo
@@ -106,7 +112,7 @@ private:
     int                 m_Port    { 8080 };
     std::string         m_BaseURL;
     std::thread         m_Thread;
-
+double m_LastCaptureTime = 0.0;
     mutable std::mutex  m_ProviderMutex;
     SnapshotProvider    m_SnapshotProvider;
     FrameProvider       m_FrameProvider;

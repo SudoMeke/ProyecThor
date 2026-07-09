@@ -168,20 +168,47 @@ static void SectionDivider(const char* label)
     dl->AddText(ImVec2(tx, pos.y), Col(kAccent), label);
     ImGui::Dummy(ImVec2(w, ts.y + 12.0f));
 }
+// Frecuencia de CAPTURA deseada segun el modo activo. Debe calzar con el
+// ritmo al que realmente se va a enviar, para no gastar CPU comprimiendo
+// frames que nunca se transmiten a tiempo (o que quedan obsoletos antes
+// de salir por /stream), y para que el modo Ultra reciba un frame nuevo
+// justo cuando el pacing del servidor lo necesita.
+static int DesiredCaptureFPS(const Core::StreamConfig& cfg)
+{
+    switch (cfg.videoMode) {
+        case Core::StreamConfig::VideoMode::UltraStable:
+            return std::clamp(cfg.targetFPS, 24, 60);
+        case Core::StreamConfig::VideoMode::HighQuality:
+            return 30;
+        case Core::StreamConfig::VideoMode::LowLatency:
+        default:
+            // El cliente solo pollea /frame cada ~150-500ms; capturar mas
+            // rapido que eso es trabajo tirado.
+            return 8;
+    }
+}
 
-// ── Render ────────────────────────────────────────────────────────────────────
 void StreamingPanel::Render()
 {
     auto& core  = Core::PresentationCore::Get();
     auto  state = core.GetState();
 
-    if (state.isStreamingNet && m_Config.sendBackground)
-        CaptureAndPushFrame(m_Config.frameWidth, m_Config.frameHeight, m_Config.jpegQuality);
+    if (state.isStreamingNet && m_Config.sendBackground) {
+        double now      = ImGui::GetTime();
+        int    fps      = DesiredCaptureFPS(m_Config);
+        double interval = 1.0 / static_cast<double>(fps);
+
+        if (now - m_LastCaptureTime >= interval) {
+            m_LastCaptureTime = now;
+            CaptureAndPushFrame(m_Config.frameWidth, m_Config.frameHeight, m_Config.jpegQuality);
+        }
+    }
 
     if (state.isStreamingNet)
         RebuildQRTexture(state.networkURL);
     else if (!m_QRCachedURL.empty())
         RebuildQRTexture("");
+
 
     // Configuración limpia del contenedor principal sin forzar espaciados rotos
     ImGui::PushStyleColor(ImGuiCol_WindowBg, kSurface);
@@ -460,7 +487,6 @@ void StreamingPanel::RenderLayerSelector()
     }
 }
 
-// ── RenderQualitySelector ─────────────────────────────────────────────────────
 void StreamingPanel::RenderQualitySelector()
 {
     auto& core = Core::PresentationCore::Get();
@@ -470,25 +496,33 @@ void StreamingPanel::RenderQualitySelector()
     ImGui::Dummy(ImVec2(0.0f, 15.0f));
     SectionDivider("MODO DE TRANSMISIÓN");
 
-    bool isHQ = (m_Config.videoMode == Core::StreamConfig::VideoMode::HighQuality);
+    using VM = Core::StreamConfig::VideoMode;
 
     struct Card {
         const char* id; const char* title; const char* sub1; const char* sub2;
-        bool active; Core::StreamConfig::VideoMode mode;
-    } cards[2] = {
-        { "##ll", "Bajo Consumo",  "~150 ms latencia", "Polling (Dispositivos lentos)",  !isHQ, Core::StreamConfig::VideoMode::LowLatency  },
-        { "##hq", "Alta Calidad",  "< 33 ms latencia", "MJPEG Fluido (Recomendado)",      isHQ, Core::StreamConfig::VideoMode::HighQuality },
+        bool active; VM mode;
+    } cards[3] = {
+        { "##ll", "Bajo Consumo", "~150 ms latencia",
+          "Polling (dispositivos lentos)",
+          m_Config.videoMode == VM::LowLatency,  VM::LowLatency  },
+        { "##hq", "Alta Calidad", "< 33 ms latencia",
+          "MJPEG fluido (recomendado)",
+          m_Config.videoMode == VM::HighQuality, VM::HighQuality },
+        { "##us", "Ultra Estable", "Mas delay, cero cortes",
+          "MJPEG a FPS fijo + nitidez maxima",
+          m_Config.videoMode == VM::UltraStable, VM::UltraStable },
     };
 
-    float cardW = (w - 12.0f) * 0.5f;
-    float cardH = 85.0f;
+    float gap   = 10.0f;
+    float cardW = (w - gap * 2.0f) / 3.0f;
+    float cardH = 90.0f;
 
     float startSelectorLocalY = ImGui::GetCursorPosY();
     ImVec2 baseScreenPos = ImGui::GetCursorScreenPos();
 
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         auto& c = cards[i];
-        float localX = (i == 0) ? 0.0f : cardW + 12.0f;
+        float localX = i * (cardW + gap);
 
         ImVec2 p0 = ImVec2(baseScreenPos.x + localX, baseScreenPos.y);
         ImVec2 p1 = ImVec2(p0.x + cardW, p0.y + cardH);
@@ -508,35 +542,75 @@ void StreamingPanel::RenderQualitySelector()
             dl->AddRectFilled(p0, ImVec2(p1.x, p0.y + 4.0f), Col(kAccent), 12.0f, ImDrawFlags_RoundCornersTop);
         }
 
-        // Posicionamiento local del botón invisible para evitar solapamientos rotos
         ImGui::SetCursorPos(ImVec2(localX, startSelectorLocalY));
         ImGui::InvisibleButton(c.id, ImVec2(cardW, cardH));
-        
+
         bool hovered = ImGui::IsItemHovered();
         bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
-        if (hovered && !c.active) {
+        if (hovered && !c.active)
             dl->AddRectFilled(p0, p1, ColA(kAccent, 0.05f), 12.0f);
-        }
 
         float lh = ImGui::GetTextLineHeight();
-        float py = p0.y + 14.0f;
-        float px = p0.x + 14.0f;
+        float py = p0.y + 12.0f;
+        float px = p0.x + 12.0f;
 
         dl->AddText(ImVec2(px, py), c.active ? Col(kAccent) : Col(kGrayText), c.title);
-        py += lh + 6.0f;
+        py += lh + 5.0f;
         dl->AddText(ImVec2(px, py), Col(kGrayDim), c.sub1);
-        py += lh + 4.0f;
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f, ImVec2(px, py), 
-            ColA(kGrayDim, 0.7f), c.sub2, nullptr, cardW - 20.0f);
+        py += lh + 3.0f;
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.82f, ImVec2(px, py),
+            ColA(kGrayDim, 0.7f), c.sub2, nullptr, cardW - 16.0f);
 
         if (!c.active && clicked) {
             m_Config.videoMode = c.mode;
+            // Al entrar a Ultra, subimos la calidad por defecto a un piso
+            // alto (el usuario puede bajarla despues si su red no aguanta).
+            if (c.mode == VM::UltraStable && m_Config.jpegQuality < 92)
+                m_Config.jpegQuality = 95;
             m_ConfigDirty = true;
         }
     }
 
     ImGui::SetCursorPosY(startSelectorLocalY + cardH);
+
+    // ── Selector de FPS, solo visible/relevante en modo Ultra ─────────────
+    if (m_Config.videoMode == VM::UltraStable) {
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        ImGui::TextColored(kGrayText, "Cuadros por segundo:");
+        ImGui::SameLine(0.0f, 10.0f);
+
+        bool is30 = (m_Config.targetFPS == 30);
+        bool is60 = (m_Config.targetFPS == 60);
+
+        auto fpsButton = [&](const char* label, int fps, bool active) {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                active ? ColA(kAccent, 0.35f) : Col(kSurface2));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(kAccent, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_Text, active ? kAccent : kGrayText);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            bool clicked = ImGui::Button(label, ImVec2(64.0f, 28.0f));
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+            if (clicked && m_Config.targetFPS != fps) {
+                m_Config.targetFPS = fps;
+                m_ConfigDirty = true;
+            }
+        };
+
+        fpsButton("30 FPS", 30, is30);
+        ImGui::SameLine(0.0f, 6.0f);
+        fpsButton("60 FPS", 60, is60);
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(kGrayDim, 0.85f));
+        ImGui::TextWrapped(
+            "Prioriza fluidez perfecta sobre latencia: el servidor envia a "
+            "ritmo fijo y con calidad alta. Recomendado con JPEG en 90%% o mas "
+            "y red WiFi estable — a 60 FPS + calidad alta el consumo de ancho "
+            "de banda es considerablemente mayor.");
+        ImGui::PopStyleColor();
+    }
 
     if (m_ConfigDirty && on) {
         core.GetNetworkServer()->SetConfig(m_Config);

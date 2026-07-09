@@ -22,10 +22,8 @@ private:
     void RenderQualitySelector();
     void RenderURLSection();
 
-    // Captura el framebuffer OpenGL, comprime a JPEG y llama core.PushFrame()
     void CaptureAndPushFrame(int w, int h, int quality);
 
-    // Genera y cachea la textura OpenGL del QR cuando la URL cambia
     void RebuildQRTexture(const std::string& url);
     void DrawQR(ImDrawList* dl, ImVec2 origin, float size);
 
@@ -35,9 +33,13 @@ private:
     Core::StreamConfig m_Config;
     bool               m_ConfigDirty = false;
 
+    // Throttle de captura: ImGui::GetTime() de la ultima vez que se
+    // capturo/comprimio un frame. Usado en Render() para no capturar mas
+    // rapido de lo que cada modo de transmision realmente necesita.
+    double m_LastCaptureTime = 0.0;
+
     // QR
     std::string           m_QRCachedURL;
-    // Módulos del QR: 0 = claro, 1 = oscuro. Tamaño = m_QRSize * m_QRSize
     std::vector<uint8_t>  m_QRModules;
     int                   m_QRSize = 0;
 };
