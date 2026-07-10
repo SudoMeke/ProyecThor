@@ -80,7 +80,12 @@ private:
     char        m_RenameBuffer[512]{};
     bool        m_RenameIsURL       = false;
     int         m_RenameURLIndex    = -1;
+bool        m_ShowPlaylistsTab   = false;
+    std::string m_ActivePlaylistName;
+    int         m_ActivePlaylistIndex = -1;
+    char        m_EditTags[256]{};
 
+    void SelectPlaylistSong(const std::string& playlistName, int index);
     // ── Toast "archivo en uso" ───────────────────────────────────────────
     // Aviso temporal que aparece cuando DeleteSelectedItem() no logra
     // eliminar un archivo porque sigue bloqueado por otro subsistema

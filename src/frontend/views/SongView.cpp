@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <cstdlib>
+#include "frontend/ui/bin/StyleGeneralApp.h"
 
 // Windows headers para SHGetKnownFolderPath
 #ifdef _WIN32
@@ -544,21 +545,35 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
                 ImGui::EndPopup();
             }
 
-            // ── Dibujado manual de la tarjeta ─────────────────────────────────
             ImDrawList* drawList = ImGui::GetWindowDrawList();
+// ── Fondo tipo ProPresenter: PNG oscuro si hay textura, si no
+            //    un degradado procedural que imita el mismo look ──────────
+            auto bgIt = StyleGeneralApp::Icons.find("song_card_bg");
+            bool hasBgTexture = (bgIt != StyleGeneralApp::Icons.end() && bgIt->second.textureID != nullptr);
 
-            ImU32 bgColor;
-            if      (isSelected) bgColor = IM_COL32( 20,  55,  20, 255);
-            else if (isHovered)  bgColor = IM_COL32( 30,  30,  40, 255);
-            else                 bgColor = IM_COL32( 18,  18,  26, 255);
+            if (hasBgTexture)
+            {
+                ImU32 tint = isSelected ? IM_COL32(255,255,255,255) : IM_COL32(205,205,205,255);
+                drawList->AddImageRounded(bgIt->second.textureID, p_min, p_max,
+                                          ImVec2(0,0), ImVec2(1,1), tint, 10.0f);
+            }
+            else
+            {
+                ImU32 top    = IM_COL32(14, 14, 20, 255);
+                ImU32 bottom = IM_COL32(4, 4, 8, 255);
+                drawList->AddRectFilledMultiColor(p_min, p_max, top, top, bottom, bottom);
+            }
+
+            if (isSelected)
+                drawList->AddRectFilled(p_min, p_max, IM_COL32(40, 120, 60, 60), 10.0f);
+            else if (isHovered)
+                drawList->AddRectFilled(p_min, p_max, IM_COL32(255, 255, 255, 12), 10.0f);
 
             ImU32 borderColor = isSelected
                 ? IM_COL32(80, 200, 100, 200)
-                : IM_COL32(255, 255, 255, 18);
-            float borderSize  = isSelected ? 1.5f : 1.0f;
-
-            drawList->AddRectFilled(p_min, p_max, bgColor, 10.0f);
-            drawList->AddRect(p_min, p_max, borderColor, 10.0f, 0, borderSize);
+                : IM_COL32(255, 255, 255, 22);
+            float borderSize = isSelected ? 1.5f : 1.0f;
+           drawList->AddRect(p_min, p_max, borderColor, 10.0f, 0, borderSize);
 
             drawList->PushClipRect(p_min, p_max, true);
 

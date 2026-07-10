@@ -19,7 +19,7 @@
 #include "UIStrings.h"
 #include "frontend/ui/UIManager.h"
 #include "ui/DesignSystem.h"
-
+#include "biblio/LibraryPlaylists.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -135,7 +135,22 @@ Library::LibraryContext LibraryPanel::BuildContext()
         [this](const std::string& f) { return LoadSongVerses(f); },
         [](const std::string& styleName) {
             Core::PresentationCore::Get().ApplyStyleByName(styleName);
-        }
+        },
+        m_ShowPlaylistsTab,
+        m_ActivePlaylistName,
+        m_ActivePlaylistIndex,
+        []() { return Library::ListPlaylists(); },
+        [](const std::string& name) { return Library::LoadPlaylist(name).songs; },
+        [](const std::string& name) { return Library::CreatePlaylist(name); },
+        [](const std::string& name) { Library::DeletePlaylist(name); },
+        [](const std::string& a, const std::string& b) { return Library::RenamePlaylist(a, b); },
+        [](const std::string& pl, const std::string& song) { Library::AddSongToPlaylist(pl, song); },
+        [](const std::string& pl, int idx) { Library::RemoveSongFromPlaylist(pl, idx); },
+        [](const std::string& pl, int idx, int delta) { Library::MovePlaylistSong(pl, idx, delta); },
+        [this](const std::string& pl, int idx) { SelectPlaylistSong(pl, idx); },
+        m_EditTags,
+        [](const std::string& f) { return Library::GetSongTags(f); },
+        [](const std::string& f, const std::vector<std::string>& t) { Library::SetSongTags(f, t); }
     };
 }
 
@@ -378,6 +393,7 @@ ImVec2 textSize = font->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, 0.0f, messa
 // =============================================================================
 //  Render — ahora envuelto en DS::BeginGlassPanel/EndGlassPanel
 // =============================================================================
+
 void LibraryPanel::Render()
 {
     const auto& str = ProyecThor::UI::GetUIStrings();
@@ -449,9 +465,17 @@ void LibraryPanel::Render()
     }
     ImGui::SameLine(0.f, 1.0f);
 
-    // ── Panel de contenido derecho ─────────────────────────────────────────
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.f, 8.f));
-    ImGui::BeginChild("##content", ImVec2(0.f, totalH), false);
+// ── Panel de contenido derecho ─────────────────────────────────────────
+    // Margen unificado para TODAS las categorias (Canciones, Video, Documentos,
+    // Audio). Centralizado aca para que ningun sub-panel (por ejemplo el grid
+    // de Canciones/Playlists, que resetea su propio WindowPadding a 0 para
+    // alinear columnas) pueda "comerse" el margen exterior del panel.
+    constexpr float kContentMarginX = 18.0f;
+    constexpr float kContentMarginY = 16.0f;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kContentMarginX, kContentMarginY));
+    ImGui::BeginChild("##content", ImVec2(0.f, totalH),
+                      ImGuiChildFlags_AlwaysUseWindowPadding);
     ImGui::PopStyleVar();
 
     {
@@ -566,6 +590,32 @@ std::vector<std::string> LibraryPanel::LoadSongVerses(const std::string& filenam
 //  carpeta correspondiente se hace con ImportSelectedFileToLibrary, que es
 //  identica para las dos plataformas.
 // =============================================================================
+void LibraryPanel::SelectPlaylistSong(const std::string& playlistName, int index)
+{
+    Library::Playlist pl = Library::LoadPlaylist(playlistName);
+    if (index < 0 || index >= (int)pl.songs.size()) return;
+
+    const std::string& filename = pl.songs[index];
+
+    Core::LibrarySelection s;
+    s.title       = filename;
+    s.type        = Core::ItemType::Song;
+    s.contentData = LoadSongVerses(filename);
+    Core::PresentationCore::Get().SetSelection(s);
+
+    std::string defaultStyle =
+        Core::PresentationCore::Get().GetCategoryDefaultStyle(Core::ItemType::Song);
+    if (!defaultStyle.empty())
+        Core::PresentationCore::Get().ApplyStyleByName(defaultStyle);
+
+    m_ActivePlaylistName  = playlistName;
+    m_ActivePlaylistIndex = index;
+
+    auto it = std::find(m_Items.begin(), m_Items.end(), filename);
+    if (it != m_Items.end())
+        m_SelectedIndex = (int)std::distance(m_Items.begin(), it);
+}
+
 void LibraryPanel::ImportFile()
 {
 #ifdef _WIN32

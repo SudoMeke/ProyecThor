@@ -809,6 +809,22 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         FrameProfiler::Add(FrameProfiler::s_ImGuiRender, FrameProfiler::ElapsedMs(t3));
 
+        // ── Captura + blur del contenido REAL de la app ──────────────────────
+        // Antes esto solo se hacia UNA vez, antes de entrar al loop, en el
+        // instante exacto en que RenderAll() todavia dibujaba el Hub -- por
+        // eso el efecto glass quedaba "congelado" mostrando el Hub para
+        // siempre, sin importar a que panel se navegara despues.
+        //
+        // Ahora se recaptura cada frame: se toma el contenido que la propia
+        // app acaba de dibujar (paneles, dockspace, lo que sea que este
+        // detras del panel de vidrio) y se difumina. Los BeginGlassPanel()
+        // del PROXIMO frame usan este resultado como fondo. Esto genera un
+        // desfase de un unico frame (imperceptible a 60fps) pero evita la
+        // referencia circular de que el vidrio intente mostrarse a si mismo
+        // difuminado en el mismo frame en que se esta dibujando.
+        uiManager.GetGlassRenderer().CaptureCurrentFrame();
+        uiManager.GetGlassRenderer().Blur(1.0f, 1);
+
         auto t4 = Clock::now();
         {
             GLFWwindow* ctxBackup = glfwGetCurrentContext();

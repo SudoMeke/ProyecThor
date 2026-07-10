@@ -14,6 +14,10 @@ void RenderRenameModal(LibraryContext& ctx);
 // Combo de estilo por defecto para Songs y Bibles.
 // Solo se renderiza si currentCategoryInt == Songs o Bibles.
 // currentCategoryInt se interpreta como LibraryCategory.
-void RenderDefaultStyleCombo(LibraryContext& ctx);
+//
+// trailingReserve: pixeles a dejar libres en el extremo derecho del combo
+// (por ejemplo, para ubicar el boton de "Actualizar" en la misma fila,
+// en la esquina, sin que el combo se lo tape).
+void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve = 0.0f);
 
 } // namespace ProyecThor::Library

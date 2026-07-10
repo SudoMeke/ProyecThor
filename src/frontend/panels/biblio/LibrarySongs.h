@@ -17,4 +17,9 @@ void SaveSong(LibraryContext& ctx,
 std::string GetSongAuthor(const std::string& filename);
 void SetSongAuthor(const std::string& filename, const std::string& author);
 
+std::vector<std::string> GetSongTags(const std::string& filename);
+void SetSongTags(const std::string& filename, const std::vector<std::string>& tags);
+
+void ApplySongSelection(LibraryContext& ctx, const std::string& filename);
+
 } // namespace ProyecThor::Library

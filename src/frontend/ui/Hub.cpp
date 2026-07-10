@@ -45,6 +45,12 @@ struct UpdateVersionInfo {
 // Para agregar una nueva actualizacion con su propia portada, solo hay que
 // anadir una nueva linea a esta lista con su archivo de imagen.
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
+        {
+        4, "0.3.3",
+        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
+        "splash_bg5.png",
+        "Mejoras en LAN, transiciones y mejoras de UI."
+    },
     {
         3, "0.3.2",
         " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
