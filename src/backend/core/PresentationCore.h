@@ -70,6 +70,7 @@ namespace ProyecThor::Core {
 
         float livePosition      = 0.0f;
         int   liveVolume        = 100;
+        bool  liveMuted         = false;
 
         std::string quickNoteText;
         bool showQuickNote = false;
@@ -89,7 +90,8 @@ namespace ProyecThor::Core {
             static PresentationCore instance;
             return instance;
         }
-
+void SetGlobalMute(bool mute);
+    bool GetGlobalMute() const;
         PresentationCore();
         ~PresentationCore();
 
@@ -195,6 +197,7 @@ namespace ProyecThor::Core {
         float GetLivePosition();
         void  SetLivePosition(float pos);
         int   GetLiveVolume();
+        bool  GetLiveMute();
         void  SetLiveVolume(int volume);
         void  SetLiveMute(bool mute);
 
@@ -239,7 +242,7 @@ namespace ProyecThor::Core {
         void RenderStageContent(int w, int h); // contenido visual del Stage (siguiente entrega)
 
         std::string ResolveFontFilePath(const std::string& fontName) const;
-
+bool m_GlobalMuted = false;
         unsigned int m_FBO          = 0;
         unsigned int m_FBOTex       = 0;
         unsigned int m_FBORenderBuf = 0;

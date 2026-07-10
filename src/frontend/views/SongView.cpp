@@ -444,7 +444,8 @@ void SongView::Render()
     auto presentState = core.GetState();
     int  hAlign       = presentState.songTextAlignment;
     int  vAlign       = presentState.songVAlignment;
-
+ImFont* styleFont = core.GetImGuiFont(presentState.selectedFont, presentState.textSize);
+if (!styleFont) styleFont = ImGui::GetFont();
     // ── Navegacion con teclado ────────────────────────────────────────────────
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
         !selection.contentData.empty())
@@ -577,49 +578,86 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
 
             drawList->PushClipRect(p_min, p_max, true);
 
-            int lineCount = 1;
-            for (char ch : stanza) if (ch == '\n') lineCount++;
+// ── Padding escalado desde los margenes reales del estilo (referencia
+//    1920px, igual criterio que el proyector y el preview del editor de
+//    estilos) en vez de un padding fijo de 10px ────────────────────────
+float cardScale = cardSize.x / 1920.0f;
+float padL = std::clamp(presentState.margins[0] * cardScale, 6.0f, cardSize.x * 0.35f);
+float padT = std::clamp(presentState.margins[1] * cardScale, 6.0f, cardSize.y * 0.35f);
+float padR = std::clamp(presentState.margins[2] * cardScale, 6.0f, cardSize.x * 0.35f);
+float padB = std::clamp(presentState.margins[3] * cardScale, 6.0f, cardSize.y * 0.35f);
 
-            float totalTextHeight = lineCount * ImGui::GetTextLineHeight();
-            float startY = 10.0f;
-            if      (vAlign == 1) startY = std::max(10.0f, (cardSize.y - totalTextHeight) * 0.5f);
-            else if (vAlign == 2) startY = std::max(10.0f,  cardSize.y - totalTextHeight - 10.0f);
+float safeW = std::max(10.0f, cardSize.x - padL - padR);
+float safeH = std::max(10.0f, cardSize.y - padT - padB);
 
-            float  currentY  = startY;
-            size_t startPos  = 0;
-            size_t endPos    = stanza.find('\n');
-            ImU32  textColor = ImGui::GetColorU32(ImGuiCol_Text);
+// ── Partir la estrofa en lineas una sola vez ────────────────────────────
+std::vector<std::string> lines;
+{
+    size_t sp = 0, ep = stanza.find('\n');
+    while (true) {
+        std::string ln = stanza.substr(sp, ep - sp);
+        if (!ln.empty() && ln.back() == '\r') ln.pop_back();
+        lines.push_back(ln);
+        if (ep == std::string::npos) break;
+        sp = ep + 1;
+        ep = stanza.find('\n', sp);
+    }
+}
 
-            while (startPos != std::string::npos)
-            {
-                std::string line = stanza.substr(startPos, endPos - startPos);
-                if (!line.empty() && line.back() == '\r') line.pop_back();
+auto measureBlock = [&](float size, float& outW, float& outH) {
+    outW = 0.0f;
+    for (const auto& ln : lines) {
+        if (ln.empty()) continue;
+        ImVec2 sz = styleFont->CalcTextSizeA(size, FLT_MAX, 0.0f, ln.c_str());
+        outW = std::max(outW, sz.x);
+    }
+    outH = lines.size() * size;
+};
 
-                if (!line.empty())
-                {
-                    float textWidth = ImGui::CalcTextSize(line.c_str()).x;
-                    float localX    = 10.0f;
-                    if      (hAlign == 1) localX = std::max(10.0f, (cardSize.x - textWidth) * 0.5f);
-                    else if (hAlign == 2) localX = std::max(10.0f,  cardSize.x - textWidth - 10.0f);
+// ── Tamano de fuente: el del estilo elegido, escalado al tamano de la
+//    tarjeta, y reducido si autoScale esta activo y no entra ───────────
+float displaySize = std::max(6.0f, presentState.textSize * cardScale);
 
-                    drawList->AddText(ImVec2(p_min.x + localX, p_min.y + currentY), textColor, line.c_str());
-                }
+if (presentState.autoScale) {
+    float w, h;
+    measureBlock(displaySize, w, h);
+    while (displaySize > 6.0f && (w > safeW || h > safeH)) {
+        displaySize -= 1.0f;
+        measureBlock(displaySize, w, h);
+    }
+}
 
-                currentY += ImGui::GetTextLineHeight();
-                if (endPos == std::string::npos) break;
-                startPos = endPos + 1;
-                endPos   = stanza.find('\n', startPos);
-            }
+float blockW, blockH;
+measureBlock(displaySize, blockW, blockH);
 
-            std::string numStr = std::to_string((int)i + 1);
-            ImVec2 numSize = ImGui::CalcTextSize(numStr.c_str());
-            drawList->AddText(
-                ImVec2(p_max.x - numSize.x - 8.0f, p_max.y - numSize.y - 5.0f),
-                ImGui::GetColorU32(ImGuiCol_TextDisabled),
-                numStr.c_str()
-            );
+float startY = padT;
+if      (vAlign == 1) startY = std::max(padT, (cardSize.y - blockH) * 0.5f);
+else if (vAlign == 2) startY = std::max(padT,  cardSize.y - blockH - padB);
 
-            drawList->PopClipRect();
+ImU32 textColor = IM_COL32(
+    (int)(presentState.textColor[0] * 255.0f),
+    (int)(presentState.textColor[1] * 255.0f),
+    (int)(presentState.textColor[2] * 255.0f),
+    (int)(presentState.textColor[3] * 255.0f));
+
+float currentY = startY;
+for (const auto& line : lines)
+{
+    if (!line.empty())
+    {
+        ImVec2 lineSz = styleFont->CalcTextSizeA(displaySize, FLT_MAX, 0.0f, line.c_str());
+        float localX = padL;
+        if      (hAlign == 1) localX = std::max(padL, (cardSize.x - lineSz.x) * 0.5f);
+        else if (hAlign == 2) localX = std::max(padL,  cardSize.x - lineSz.x - padR);
+
+        drawList->AddText(styleFont, displaySize,
+                          ImVec2(p_min.x + localX, p_min.y + currentY),
+                          textColor, line.c_str());
+    }
+    currentY += displaySize;
+}
+
+drawList->PopClipRect();
 
             ImGui::PopID();
         }

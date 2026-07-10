@@ -17,28 +17,26 @@ namespace ProyecThor::UI {
 
     private:
         UIManager* m_UIManager       = nullptr;
+
+        // ── Estado de proyeccion (pantalla principal / publico) ──────────────
         bool       m_isProjecting    = false;
-
         float      m_PulseTime       = 0.0f;
-        float      m_PressAnim       = 0.0f;
-        bool       m_WasPressed      = false;
 
-        float      m_HoverClearText  = 0.0f;
-        float      m_HoverStopVideo  = 0.0f;
-        float      m_HoverMonitor    = 0.0f;
+        // ── Estado del monitor de control (Stage / monitor de confianza) ─────
+        bool       m_isStageActive     = false;
+        int        m_StageMonitorIndex = 0;
 
         void ToggleSecondaryDisplay(bool active);
-void RenderDivider();
-        void RenderProjectButton(float dt);
-        void RenderActionRow(float dt);
-        void RenderStatusBar();
-        void RenderMonitorInfo();
+        void ToggleStageDisplay(bool active);
+        void CycleTargetMonitor(int direction);
+        void CycleStageMonitor(int direction);
 
-        bool RenderIconButton(const char* id,
-                              float cx, float cy, float radius,
-                              float& hoverAnim,
-                              ImVec4 colorBase, ImVec4 colorHover,
-                              float dt);
+        void RenderDivider();
+        void RenderMonitorInfo();
+        void RenderProjectButton(float dt);
+        void RenderStatusBar();
+        void RenderStageSection(float dt);
+        void RenderActionRow(float dt);
     };
 
 } // namespace ProyecThor::UI

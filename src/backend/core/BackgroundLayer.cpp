@@ -45,17 +45,22 @@ void main() {
 }
 )GLSL";
 
-        static const char* k_BlitFrag = R"GLSL(
+      // BackgroundLayer.cpp — reemplazar k_BlitFrag y BlitTexture
+
+static const char* k_BlitFrag = R"GLSL(
 #version 330 core
 in  vec2      v_UV;
 out vec4      fragColor;
 uniform sampler2D u_Tex;
 uniform float     u_Alpha;
+uniform float     u_FlipY;
 void main() {
-    vec4 c = texture(u_Tex, v_UV);
+    vec2 uv = vec2(v_UV.x, mix(v_UV.y, 1.0 - v_UV.y, u_FlipY));
+    vec4 c = texture(u_Tex, uv);
     fragColor = vec4(c.rgb, c.a * u_Alpha);
 }
 )GLSL";
+
 
         static BlitResources& EnsureBlitResources()
         {
@@ -104,20 +109,21 @@ void main() {
             return s_ResourcesPerContext.emplace(ctx, res).first->second;
         }
 
-        static void BlitTexture(GLuint tex, float alpha = 1.0f)
-        {
-            BlitResources& res = EnsureBlitResources();
-            glUseProgram(res.prog);
-            glUniform1i(glGetUniformLocation(res.prog, "u_Tex"), 0);
-            glUniform1f(glGetUniformLocation(res.prog, "u_Alpha"), alpha);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glBindVertexArray(res.vao);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            glBindVertexArray(0);
-            glBindTexture(GL_TEXTURE_2D, 0);
-            glUseProgram(0);
-        }
+       static void BlitTexture(GLuint tex, float alpha = 1.0f, float flipY = 0.0f)
+{
+    BlitResources& res = EnsureBlitResources();
+    glUseProgram(res.prog);
+    glUniform1i(glGetUniformLocation(res.prog, "u_Tex"), 0);
+    glUniform1f(glGetUniformLocation(res.prog, "u_Alpha"), alpha);
+    glUniform1f(glGetUniformLocation(res.prog, "u_FlipY"), flipY);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glBindVertexArray(res.vao);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+}
 
          static double NowSeconds()
         {
@@ -216,21 +222,21 @@ void BackgroundLayer::Update()
         }
 
       if (m_SwapPending && Standby().HasVideoFrame())
-        {
-            GLuint standbyTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Standby().GetTextureID()));
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glViewport(viewX, viewY, viewW, viewH);
-            BlitTexture(finalTex,   1.0f - m_TransitionProgress);
-            BlitTexture(standbyTex, m_TransitionProgress);
-            glDisable(GL_BLEND);
-        }
-        else
-        {
-            glDisable(GL_BLEND);
-            glViewport(viewX, viewY, viewW, viewH);
-            BlitTexture(finalTex);
-        }
+{
+    GLuint standbyTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Standby().GetTextureID()));
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glViewport(viewX, viewY, viewW, viewH);
+    BlitTexture(finalTex,   1.0f - m_TransitionProgress, m_FlipVideoY ? 1.0f : 0.0f);
+    BlitTexture(standbyTex, m_TransitionProgress,          m_FlipVideoY ? 1.0f : 0.0f);
+    glDisable(GL_BLEND);
+}
+else
+{
+    glDisable(GL_BLEND);
+    glViewport(viewX, viewY, viewW, viewH);
+    BlitTexture(finalTex, 1.0f, m_FlipVideoY ? 1.0f : 0.0f);
+}
 
         glViewport(0, 0, outputW, outputH);
     }
@@ -376,11 +382,12 @@ void BackgroundLayer::PerformSwap()
         {
             // Al pasar a "en vivo", el player activo adopta el target de
             // volumen/mute que el operador ya haya configurado (ver
-            // SetLiveVolume/SetLiveMute). El standby se mantiene mudo:
-            // solo el que el publico ve puede sonar.
-            Active().SetAudioActive(true);
-            Active().SetMute(m_TargetMuted);
-            Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+            // SetLiveVolume/SetLiveMute). Sin embargo, si el contenido
+            // actualmente cargado no permite audio, debe permanecer mudo.
+            bool activeAudioAllowed = m_ContentAllowsAudio;
+            Active().SetAudioActive(activeAudioAllowed);
+            Active().SetMute(m_TargetMuted || !activeAudioAllowed);
+            Active().SetVolume(activeAudioAllowed && !m_TargetMuted ? m_TargetVolume : 0);
             Standby().SetAudioActive(false);
         }
         else

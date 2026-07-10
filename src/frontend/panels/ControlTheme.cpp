@@ -25,15 +25,11 @@ void Sync(const ProyecThor::Settings::ThemeSettings& t) {
     ComboBgHover = V(t.surface2);
     ComboPopupBg = V(t.surface1, 0.98f);
 
-    ProjectHalo      = V(t.danger);
-    ProjectBtnLive   = V(t.danger, 0.85f);
-    ProjectBtnIdle   = V(t.accentDim);
-    ProjectBtnOff    = V(t.surface1);
-    ProjectIconOn    = V(t.textPrimary);
-    ProjectIconOff   = V(t.textFaint);
-    ProjectLabelLive = V(t.danger, 0.85f);
-    ProjectLabelIdle = V(t.accentLight);
-    ProjectLabelOff  = V(t.textFaint);
+    ProjectBtnLive = V(t.danger, 0.85f);
+    ProjectBtnIdle = V(t.accentDim);
+    ProjectBtnOff  = V(t.surface1);
+    ProjectIconOn  = V(t.textPrimary);
+    ProjectIconOff = V(t.textFaint);
 
     StatusBarBgLive = V(t.danger, 0.14f);
     StatusBarBgIdle = V(t.surface0);
@@ -41,11 +37,17 @@ void Sync(const ProyecThor::Settings::ThemeSettings& t) {
     StatusTextIdle  = V(t.textDim);
     StatusDotIdle   = V(t.textFaint, 1.0f);
 
-    ActionBtnBase       = V(t.surface1);
-    ActionBtnHoverClear = V(t.accentDim);
-    ActionBtnHoverStop  = V(t.danger, 0.35f);
-    ActionBtnHoverMon   = V(t.success, 0.30f);
-    ActionLabel         = V(t.textDim);
+    ActionBtnBase          = V(t.surface1);
+    ActionBtnHoverClear    = V(t.accentDim);
+    ActionBtnHoverStop     = V(t.danger, 0.35f);
+    ActionBtnHoverStretch  = V(t.accentDim);
+    ActionBtnActiveStretch = V(t.accent, 0.55f);
+
+    StageBtnLive  = V(t.accent, 0.85f);
+    StageBtnIdle  = V(t.surface1);
+    StageBtnHover = V(t.surface2);
+    StageIconOn   = V(t.textPrimary);
+    StageIconOff  = V(t.textFaint);
 }
 
 } // namespace ProyecThor::UI::ControlTheme

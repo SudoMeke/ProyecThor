@@ -20,6 +20,8 @@ using namespace Components;
 void MonitorView::RenderLiveControls(Core::VLCBasePlayer* /*unused*/, float w)
 {
     Core::VLCBasePlayer* bg = Core::PresentationCore::Get().GetBackgroundPlayer();
+    m_LiveMuted  = Core::PresentationCore::Get().GetLiveMute();
+    m_LiveVolume = static_cast<float>(Core::PresentationCore::Get().GetLiveVolume()) * 0.01f;
     m_LivePlaying = bg && !bg->IsPaused();
 
     int64_t liveLenMs = bg ? bg->GetLength() : 0;

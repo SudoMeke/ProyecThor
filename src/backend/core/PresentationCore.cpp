@@ -96,7 +96,17 @@ LibrarySelection PresentationCore::GetSelection() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_State;
     }
+void PresentationCore::SetGlobalMute(bool mute) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_GlobalMuted = mute;
+    
+    // Si manejas el volumen global en VLC o en tu OverlayLayer, aplícalo aquí.
+    // Ejemplo: m_Impl->overlay.SetMute(mute);
+}
 
+bool PresentationCore::GetGlobalMute() const {
+    return m_GlobalMuted;
+}
     void* PresentationCore::GetPreviewTexture() {
         return m_Impl ? m_Impl->preview.GetTextureID() : nullptr;
     }
@@ -161,11 +171,11 @@ LibrarySelection PresentationCore::GetSelection() {
     }
 
     void PresentationCore::RenderProjectorWindow() {
-        if (m_Impl) {
-            m_Impl->background.Render(m_ProjectorWidth, m_ProjectorHeight);
-            m_Impl->overlay.Render();
-        }
+    if (m_Impl) {
+        m_Impl->background.Render(m_ProjectorWidth, m_ProjectorHeight);
+        m_Impl->overlay.Render();
     }
+}
     // ── Ventanas secundarias, API generica ──────────────────────────────
     bool PresentationCore::CreateSecondaryWindow(const std::string& id, int monitorIndex,
                                                   const std::string& title,
@@ -237,12 +247,20 @@ LibrarySelection PresentationCore::GetSelection() {
 
     // ── Atajos con nombre fijo: Proyector ────────────────────────────────
     bool PresentationCore::CreateProjectorWindow(int monitorIndex)
-    {
-        bool ok = CreateSecondaryWindow(kProjectorId, monitorIndex, "ProyecThor - Proyector",
-            [this](int w, int h) {
-                (void)w; (void)h;
-                RenderProjectorWindow(); // background.Render + overlay.Render
-            });
+{
+    int monitorCount = 0;
+    GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+    if (monitorIndex >= 0 && monitorIndex < monitorCount) {
+        if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[monitorIndex])) {
+            SetProjectorSize(vm->width, vm->height); // <-- clave
+        }
+    }
+
+    bool ok = CreateSecondaryWindow(kProjectorId, monitorIndex, "ProyecThor - Proyector",
+        [this](int w, int h) {
+            SetProjectorSize(w, h);   // también usar el tamaño real que llega al renderFn
+            RenderProjectorWindow();
+        });
 
         if (ok) {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -462,6 +480,11 @@ void PresentationCore::ClearLayer2() {
         return m_State.liveVolume;
     }
 
+    bool PresentationCore::GetLiveMute() {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_State.liveMuted;
+    }
+
     void PresentationCore::SetLiveVolume(int volume) {
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -472,6 +495,10 @@ void PresentationCore::ClearLayer2() {
     }
 
     void PresentationCore::SetLiveMute(bool mute) {
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_State.liveMuted = mute;
+        }
         if (m_Impl)
             m_Impl->background.SetLiveMute(mute);
     }

@@ -33,7 +33,11 @@ namespace ProyecThor::Core {
         // false -> viene de "Fondos" (BackgroundsPanel/LayersBgTab), NUNCA
         //          suena sin importar el estado de m_IsLiveToPublic.
         bool m_ContentAllowsAudio = true;
-
+#ifdef _WIN32
+    bool m_FlipVideoY = false;
+#else
+    bool m_FlipVideoY = true;  // default: VAAPI en Linux suele invertir
+#endif
         bool  m_IsVideo = false;
         float m_BgColor[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -55,7 +59,8 @@ namespace ProyecThor::Core {
         // toque.
         explicit BackgroundLayer(bool forceSilentAudio = false);
         ~BackgroundLayer() = default;
-
+void SetFlipVideoY(bool flip) { m_FlipVideoY = flip; }
+    bool GetFlipVideoY() const { return m_FlipVideoY; }
         void Update();
         void Render(int outputW, int outputH);
 

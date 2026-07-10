@@ -35,6 +35,7 @@ bool     m_OutgoingBgWasVideo    = false;
     void AddPanel(std::shared_ptr<ProyecThor::UI::IPanel> panel);
     void RenderAll();
     void Shutdown();
+    void RequestSettings();
 
     GlassRenderer& GetGlassRenderer() { return m_GlassRenderer; }
 
