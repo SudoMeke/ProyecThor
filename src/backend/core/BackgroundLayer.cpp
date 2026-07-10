@@ -1,14 +1,29 @@
 #include "BackgroundLayer.h"
+#include "frontend/windowing/SecondaryOutputWindow.h"
 #include <iostream>
 #include <chrono>
 #include <GL/glew.h>
+#include <unordered_map>
 
 namespace ProyecThor::Core {
 
     namespace {
-        static GLuint s_QuadVAO  = 0;
-        static GLuint s_QuadVBO  = 0;
-        static GLuint s_BlitProg = 0;
+        struct BlitResources {
+            GLuint vao = 0, vbo = 0, prog = 0;
+        };
+
+        static std::unordered_map<GLFWwindow*, BlitResources> s_ResourcesPerContext;
+
+        // Registrado una sola vez: cuando una ventana secundaria (Proyector,
+        // Stage, o cualquier otra a futuro) se destruye, purgamos su entrada
+        // del cache. Sin esto, si GLFW reutiliza esa direccion de puntero
+        // para una ventana nueva, BlitTexture() bindearia un VAO de un
+        // contexto GL que ya no existe.
+        static bool s_DestroyHookRegistered = [] {
+            SecondaryOutputWindow::RegisterContextDestroyCallback(
+                [](GLFWwindow* ctx) { s_ResourcesPerContext.erase(ctx); });
+            return true;
+        }();
 
         static const float k_QuadVerts[] = {
             -1.0f,  1.0f,  0.0f, 1.0f,
@@ -30,8 +45,7 @@ void main() {
 }
 )GLSL";
 
-     // k_BlitFrag actualizado
-static const char* k_BlitFrag = R"GLSL(
+        static const char* k_BlitFrag = R"GLSL(
 #version 330 core
 in  vec2      v_UV;
 out vec4      fragColor;
@@ -43,10 +57,14 @@ void main() {
 }
 )GLSL";
 
-        static void EnsureBlitResources()
+        static BlitResources& EnsureBlitResources()
         {
-            if (s_QuadVAO != 0) return;
+            GLFWwindow* ctx = glfwGetCurrentContext();
+            auto it = s_ResourcesPerContext.find(ctx);
+            if (it != s_ResourcesPerContext.end())
+                return it->second;
 
+            BlitResources res;
             auto compile = [](GLenum type, const char* src) -> GLuint {
                 GLuint id = glCreateShader(type);
                 glShaderSource(id, 1, &src, nullptr);
@@ -63,50 +81,50 @@ void main() {
                 return id;
             };
 
-            GLuint vert  = compile(GL_VERTEX_SHADER,   k_BlitVert);
-            GLuint frag  = compile(GL_FRAGMENT_SHADER, k_BlitFrag);
-            s_BlitProg   = glCreateProgram();
-            glAttachShader(s_BlitProg, vert);
-            glAttachShader(s_BlitProg, frag);
-            glLinkProgram(s_BlitProg);
+            GLuint vert = compile(GL_VERTEX_SHADER,   k_BlitVert);
+            GLuint frag = compile(GL_FRAGMENT_SHADER, k_BlitFrag);
+            res.prog = glCreateProgram();
+            glAttachShader(res.prog, vert);
+            glAttachShader(res.prog, frag);
+            glLinkProgram(res.prog);
             glDeleteShader(vert);
             glDeleteShader(frag);
 
-            glGenVertexArrays(1, &s_QuadVAO);
-            glGenBuffers(1, &s_QuadVBO);
-            glBindVertexArray(s_QuadVAO);
-            glBindBuffer(GL_ARRAY_BUFFER, s_QuadVBO);
+            glGenVertexArrays(1, &res.vao);
+            glGenBuffers(1, &res.vbo);
+            glBindVertexArray(res.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, res.vbo);
             glBufferData(GL_ARRAY_BUFFER, sizeof(k_QuadVerts), k_QuadVerts, GL_STATIC_DRAW);
             glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                                  reinterpret_cast<void*>(0));
+            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
             glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                                  reinterpret_cast<void*>(2 * sizeof(float)));
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
             glBindVertexArray(0);
+
+            return s_ResourcesPerContext.emplace(ctx, res).first->second;
         }
 
         static void BlitTexture(GLuint tex, float alpha = 1.0f)
-{
-    EnsureBlitResources();
-    glUseProgram(s_BlitProg);
-    glUniform1i(glGetUniformLocation(s_BlitProg, "u_Tex"), 0);
-    glUniform1f(glGetUniformLocation(s_BlitProg, "u_Alpha"), alpha);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glBindVertexArray(s_QuadVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glUseProgram(0);
-}
+        {
+            BlitResources& res = EnsureBlitResources();
+            glUseProgram(res.prog);
+            glUniform1i(glGetUniformLocation(res.prog, "u_Tex"), 0);
+            glUniform1f(glGetUniformLocation(res.prog, "u_Alpha"), alpha);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glBindVertexArray(res.vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindVertexArray(0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glUseProgram(0);
+        }
 
-        static double NowSeconds()
+         static double NowSeconds()
         {
             using namespace std::chrono;
             return duration<double>(steady_clock::now().time_since_epoch()).count();
         }
-    } // anonymous namespace
+    } // anonymous namespace   <-- ESTO FALTABA
 
     BackgroundLayer::BackgroundLayer(bool forceSilentAudio)
         : m_PlayerA(2, true, forceSilentAudio)

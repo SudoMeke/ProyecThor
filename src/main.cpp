@@ -564,6 +564,7 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
             }
 
             glfwMakeContextCurrent(mainWindow);
+            ProyecThor::Core::PresentationCore::Get().SetMainWindow(mainWindow);
             glfwSwapInterval(1);
             glewExperimental = GL_TRUE;
             GLenum status = glewInit();
@@ -780,6 +781,7 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         auto t1 = Clock::now();
         core.Update();
         FrameProfiler::Add(FrameProfiler::s_CoreUpdate, FrameProfiler::ElapsedMs(t1));
+core.RenderAllSecondaryWindows(); 
 
         int fw, fh;
         glfwGetFramebufferSize(mainWindow, &fw, &fh);

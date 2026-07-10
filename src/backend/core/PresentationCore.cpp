@@ -45,10 +45,9 @@ namespace ProyecThor::Core {
         if (m_NetworkServer && m_NetworkServer->IsRunning())
             m_NetworkServer->Stop();
         DestroyFBO();
-        DestroyProjectorWindow();
+        DestroyAllSecondaryWindows();
     }
-
-    LibrarySelection PresentationCore::GetSelection() {
+LibrarySelection PresentationCore::GetSelection() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         LibrarySelection sel  = m_CurrentSelection;
         m_CurrentSelection.title = "";
@@ -63,13 +62,13 @@ namespace ProyecThor::Core {
     }
 
     void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    m_State.currentText   = text;
-    m_State.showText      = !text.empty();
-    m_State.showQuickNote = true;
-    m_State.isProjecting  = true;
-    ++m_StreamVersion;
-}
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.currentText   = text;
+        m_State.showText      = !text.empty();
+        m_State.showQuickNote = true;
+        m_State.isProjecting  = true;
+        ++m_StreamVersion;
+    }
 
     void PresentationCore::ClearQuickNote() {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -167,28 +166,134 @@ namespace ProyecThor::Core {
             m_Impl->overlay.Render();
         }
     }
-
-    void PresentationCore::CreateProjectorWindow() {
-        int targetIndex = ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.targetMonitor;
-        if (targetIndex < 0) {
-            int monitorCount = 0;
-            glfwGetMonitors(&monitorCount);
-            targetIndex = (monitorCount > 1) ? 1 : 0;
+    // ── Ventanas secundarias, API generica ──────────────────────────────
+    bool PresentationCore::CreateSecondaryWindow(const std::string& id, int monitorIndex,
+                                                  const std::string& title,
+                                                  SecondaryOutputWindow::RenderFn renderFn)
+    {
+        if (!m_MainWindow) {
+            std::cerr << "[PresentationCore] CreateSecondaryWindow('" << id
+                      << "'): falta SetMainWindow() previo.\n";
+            return false;
         }
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.targetMonitorIndex = targetIndex;
+        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+
+        SecondaryOutput& out = m_SecondaryWindows[id]; // crea si no existe
+        if (!out.window.Create(m_MainWindow, monitorIndex, title))
+        {
+            m_SecondaryWindows.erase(id);
+            return false;
+        }
+        out.renderFn = std::move(renderFn);
+        return true;
     }
 
-    void PresentationCore::DestroyProjectorWindow() {
-        m_ProjectorWindow = nullptr;
+    void PresentationCore::DestroySecondaryWindow(const std::string& id)
+    {
+        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+        m_SecondaryWindows.erase(id); // el destructor de SecondaryOutputWindow limpia la ventana
     }
 
-    GLFWwindow* PresentationCore::GetProjectorWindow() const {
-        return nullptr;
+    void PresentationCore::DestroyAllSecondaryWindows()
+    {
+        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+        m_SecondaryWindows.clear();
     }
 
-  // .cpp
+    bool PresentationCore::IsSecondaryWindowActive(const std::string& id) const
+    {
+        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+        auto it = m_SecondaryWindows.find(id);
+        return it != m_SecondaryWindows.end() && it->second.window.IsActive();
+    }
+
+    int PresentationCore::GetSecondaryWindowMonitor(const std::string& id) const
+    {
+        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+        auto it = m_SecondaryWindows.find(id);
+        if (it == m_SecondaryWindows.end() || !it->second.window.IsActive())
+            return -1;
+        return it->second.window.GetMonitorIndex();
+    }
+
+    void PresentationCore::RenderAllSecondaryWindows()
+    {
+        // Copia de punteros bajo lock, render fuera del lock: RenderFrame
+        // hace MakeContextCurrent + swap, no queremos tener el mutex
+        // tomado durante llamadas GL potencialmente bloqueantes (vsync).
+        std::vector<SecondaryOutput*> active;
+        {
+            std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+            active.reserve(m_SecondaryWindows.size());
+            for (auto& [id, out] : m_SecondaryWindows)
+                if (out.window.IsActive())
+                    active.push_back(&out);
+        }
+
+        for (auto* out : active)
+            out->window.RenderFrame(out->renderFn);
+    }
+
+    // ── Atajos con nombre fijo: Proyector ────────────────────────────────
+    bool PresentationCore::CreateProjectorWindow(int monitorIndex)
+    {
+        bool ok = CreateSecondaryWindow(kProjectorId, monitorIndex, "ProyecThor - Proyector",
+            [this](int w, int h) {
+                (void)w; (void)h;
+                RenderProjectorWindow(); // background.Render + overlay.Render
+            });
+
+        if (ok) {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_State.targetMonitorIndex = monitorIndex;
+        }
+        return ok;
+    }
+
+    void PresentationCore::DestroyProjectorWindow()
+    {
+        DestroySecondaryWindow(kProjectorId);
+    }
+
+    bool PresentationCore::IsProjectorWindowActive() const
+    {
+        return IsSecondaryWindowActive(kProjectorId);
+    }
+
+    GLFWwindow* PresentationCore::GetProjectorWindow() const
+    {
+        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
+        auto it = m_SecondaryWindows.find(kProjectorId);
+        return (it != m_SecondaryWindows.end()) ? it->second.window.GetWindow() : nullptr;
+    }
+
+    // ── Atajos con nombre fijo: Stage ─────────────────────────────────────
+    bool PresentationCore::CreateStageWindow(int monitorIndex)
+    {
+        return CreateSecondaryWindow(kStageId, monitorIndex, "ProyecThor - Stage",
+            [this](int w, int h) { RenderStageContent(w, h); });
+    }
+
+    void PresentationCore::DestroyStageWindow()
+    {
+        DestroySecondaryWindow(kStageId);
+    }
+
+    bool PresentationCore::IsStageWindowActive() const
+    {
+        return IsSecondaryWindowActive(kStageId);
+    }
+void PresentationCore::RenderStageContent(int w, int h)
+    {
+        // Placeholder temporal: contenido real del Stage (texto en vivo,
+        // reloj, FPS, estado LAN) todavia no implementado. Sin esto la
+        // ventana del Stage queda con basura de memoria de video sin
+        // inicializar en vez de un fondo solido.
+        glClearColor(0.05f, 0.05f, 0.06f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        (void)w; (void)h;
+    }
 void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);

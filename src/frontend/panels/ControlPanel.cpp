@@ -421,12 +421,21 @@ void ControlPanel::ToggleSecondaryDisplay(bool active) {
     auto& core = Core::PresentationCore::Get();
     core.SetProjecting(active);
     if (active) {
-        core.CreateProjectorWindow();
-        std::cout << "[ControlPanel] Proyeccion iniciada.\n";
+        auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+
+        int monitorCount = 0;
+        glfwGetMonitors(&monitorCount);
+        int monitorIndex = std::clamp(
+            settings.projection.targetMonitor < 0 ? 1 : settings.projection.targetMonitor,
+            0, std::max(0, monitorCount - 1));
+
+        if (core.CreateProjectorWindow(monitorIndex))
+            std::cout << "[ControlPanel] Proyeccion iniciada en monitor " << monitorIndex << ".\n";
+        else
+            std::cerr << "[ControlPanel] No se pudo crear la ventana de proyeccion.\n";
     } else {
         core.DestroyProjectorWindow();
         std::cout << "[ControlPanel] Proyeccion detenida.\n";
     }
 }
-
 } // namespace ProyecThor::UI

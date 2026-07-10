@@ -61,6 +61,7 @@ file(GLOB EXTERNAL_TOOLS            CONFIGURE_DEPENDS "src/external/tools/*.cpp"
 file(GLOB FRONTEND_UI_BIN_SOURCES   CONFIGURE_DEPENDS "src/frontend/ui/bin/*.cpp")
 
 # -- FRONTEND --
+file(GLOB FRONTEND_WINDOWING_SOURCES CONFIGURE_DEPENDS "src/frontend/windowing/*.cpp")
 file(GLOB FRONTEND_PANELS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/*.cpp")
 file(GLOB FRONTEND_CAPTURE_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/capture/*.cpp")
 file(GLOB FRONTEND_LAYERS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/layers/*.cpp")
@@ -130,6 +131,7 @@ if(WIN32)
         ${FRONTEND_VIEWS_SOURCES}
         ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
         ${EXTERNAL_TOOLS}
@@ -158,6 +160,7 @@ else()
         ${FRONTEND_VIEWS_SOURCES}
         ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
         ${EXTERNAL_TOOLS}
@@ -199,6 +202,7 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/shaders"
 
     # FRONTEND
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/windowing"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/ui"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels"
