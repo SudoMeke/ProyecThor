@@ -49,7 +49,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
         4, "0.3.3",
         " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
         "splash_bg5.png",
-        "Mejoras en LAN, transiciones y mejoras de UI."
+        "Multimonitor, nueva biblioteca, búsqueda bíblica mejorada y LAN más estable."
     },
     {
         3, "0.3.2",
@@ -489,7 +489,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 3; // id de kUpdateRegistry (3 = v0.3.2, 1 = v0.3.1, 2 = v0.3.0)
+    static int    selectedUpdateVer = 4; // id de kUpdateRegistry (4 = v0.3.3, 3 = v0.3.2, 1 = v0.3.1, 2 = v0.3.0)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -778,7 +778,38 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
             // ── Bloque de contenido condicional por versión ──────────────────
-           if (selectedUpdateVer == 3) { // v0.3.2
+           if (selectedUpdateVer == 4) { // v0.3.3
+                Cat("Biblioteca renovada");
+                Bul("Nueva biblioteca con listas y playlists más prácticas.");
+                Bul("Mejoramos la sección de biblioteca y la navegación entre canciones.");
+                Bul("Se agregaron iconos nuevos en la Biblia y la búsqueda ahora muestra resultados más claros.");
+                Bul("Solucionamos el refresco de la biblioteca y la carga de contenidos al actualizar la lista.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Control de proyección");
+                Bul("Soporte multimonitor más estable para proyector y stage.");
+                Bul("El panel de control fue reorganizado en una sola fila de botones sin scroll interno.");
+                Bul("Se sincroniza correctamente el mute y el volumen en vivo entre el control y el monitor.");
+                Bul("Mejoramos la conmutación entre fuentes y la respuesta de los botones de control.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Red local y streaming");
+                Bul("Mejor estabilidad LAN y menos cortes en la transmisión local.");
+                Bul("Se corrigieron problemas de marcas de agua y fuentes en el stream LAN.");
+                Bul("Ajustes del servidor de red para manejar mejor conexiones, estado y reconexiones.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Interfaz y experiencia");
+                Bul("Actualizamos iconografía y estilo en varias secciones para una apariencia más profesional.");
+                Bul("UI más consistente con transiciones fluidas y controles visuales mejorados.");
+                Bul("Mejoras específicas para la usabilidad de Linux.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Correcciones y estabilidad");
+                Bul("Solucionamos fallos de reproducción y mejoramos el manejo de audio del backend.");
+                Bul("Arreglamos el botón de refresh y la sincronización de estado entre vistas.");
+                Bul("Refinamos la estabilidad general en el sistema multimonitor y de streaming.");
+            } else if (selectedUpdateVer == 3) { // v0.3.2
     Cat("Soporte para Linux");
     Bul("ProyecThor ahora corre de forma nativa en Linux, con build propio via CMake.");
     Bul("Pruebas realizadas en Arch Linux (y derivados como CachyOS), incluyendo el flujo completo de instalacion via paquete.");
