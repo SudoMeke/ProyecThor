@@ -319,9 +319,8 @@ void BibleView::RenderTopBar() {
         m_QuickNav.Open();
 
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
-            "Buscador rapido (Ctrl+K)");
-    }
+    ImGui::SetTooltip("Buscador rapido (Ctrl+F)");
+}
 
     m_QuickNavBtnPos  = ImGui::GetItemRectMin();
     m_QuickNavBtnSize = ImGui::GetItemRectSize();
@@ -859,14 +858,14 @@ void BibleView::Render() {
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  false)) NavigateVerse(-1);
         if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) NavigateVerse(+1);
     }
+ UpdateModifierTaps();
 
-    // Atajo de teclado Ctrl+K para abrir el buscador rapido desde cualquier parte
-    ImGuiIO& io = ImGui::GetIO();
-    if (!m_ShowEditModal && !m_QuickNav.IsOpen() && m_BibleLoaded
-        && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) {
-        m_QuickNav.Open();
+    // Navegacion con flechas (deshabilitada si el buscador, el buscador
+    // rapido o el salto de capitulo/versiculo tienen foco)
+    if (!m_SearchFocused && !m_QuickNav.IsOpen() && m_JumpMode == JumpKind::None && m_BibleLoaded) {
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  false)) NavigateVerse(-1);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) NavigateVerse(+1);
     }
-
     RenderTopBar();
 
     if (ImGui::BeginTable("##BibleLayout", 2, ImGuiTableFlags_Resizable)) {
@@ -904,13 +903,211 @@ void BibleView::Render() {
 
     RenderEditModal();
 
-    // El overlay del buscador rapido se actualiza y dibuja al final para
-    // quedar siempre por encima del resto de la vista.
-    if (m_BibleLoaded && !m_ShowEditModal) {
+     if (m_BibleLoaded && !m_ShowEditModal && m_JumpMode == JumpKind::None) {
         if (m_QuickNav.Update(m_CurrentBible))
             HandleQuickNavConfirm();
         m_QuickNav.Render(m_CurrentBible);
     }
+
+    UpdateJumpOverlay();
+    RenderJumpOverlay();
+}
+// ─────────────────────────────────────────────────────────────────────
+//  Taps de Ctrl / Alt → salto rapido de capitulo / versiculo
+// ─────────────────────────────────────────────────────────────────────
+
+void BibleView::UpdateModifierTaps() {
+    // No disparamos taps si no hay Biblia, si se esta editando un
+    // versiculo, o si el buscador grande (Ctrl+F) esta abierto — evita
+    // que se pisen los overlays.
+    bool overlaysBlocked = !m_BibleLoaded || m_ShowEditModal || m_QuickNav.IsOpen();
+
+    ImGuiIO& io  = ImGui::GetIO();
+    double   now = ImGui::GetTime();
+    constexpr double kTapMaxHold = 0.35; // mas que esto ya no cuenta como "tap"
+
+    // ── Ctrl → capitulo ──────────────────────────────────────────────
+    bool ctrlDown = io.KeyCtrl;
+    if (ctrlDown && m_CtrlDownSince < 0.0) {
+        m_CtrlDownSince  = now;
+        m_CtrlComboFired = false;
+    }
+    if (ctrlDown && ImGui::IsKeyPressed(ImGuiKey_F, false))
+        m_CtrlComboFired = true; // Ctrl+F es el buscador grande, no un tap
+
+    if (!ctrlDown && m_CtrlDownSince >= 0.0) {
+        double heldFor = now - m_CtrlDownSince;
+        if (!overlaysBlocked && !m_CtrlComboFired && heldFor < kTapMaxHold) {
+            if (m_JumpMode == JumpKind::Chapter) CloseJump();
+            else if (m_JumpMode == JumpKind::None) OpenJump(JumpKind::Chapter);
+        }
+        m_CtrlDownSince = -1.0;
+    }
+
+    // ── Alt → versiculo ──────────────────────────────────────────────
+    bool altDown = io.KeyAlt;
+    if (altDown && m_AltDownSince < 0.0) {
+        m_AltDownSince  = now;
+        m_AltComboFired = false;
+    }
+    if (!altDown && m_AltDownSince >= 0.0) {
+        double heldFor = now - m_AltDownSince;
+        if (!overlaysBlocked && !m_AltComboFired && heldFor < kTapMaxHold) {
+            if (m_JumpMode == JumpKind::Verse) CloseJump();
+            else if (m_JumpMode == JumpKind::None) OpenJump(JumpKind::Verse);
+        }
+        m_AltDownSince = -1.0;
+    }
 }
 
+void BibleView::OpenJump(JumpKind kind) {
+    if (m_SelectedBook < 0 || m_SelectedBook >= (int)m_CurrentBible.books.size()) return;
+    if (kind == JumpKind::Verse) {
+        auto& book = m_CurrentBible.books[m_SelectedBook];
+        if (m_SelectedChapter < 0 || m_SelectedChapter >= (int)book.chapters.size()) return;
+    }
+    m_JumpMode = kind;
+    m_JumpBuffer.clear();
+    m_JumpStatus.clear();
+}
+
+void BibleView::CloseJump() {
+    m_JumpMode = JumpKind::None;
+    m_JumpBuffer.clear();
+    m_JumpStatus.clear();
+}
+
+void BibleView::ConfirmJump() {
+    if (m_SelectedBook < 0 || m_SelectedBook >= (int)m_CurrentBible.books.size()) {
+        CloseJump();
+        return;
+    }
+    auto& book = m_CurrentBible.books[m_SelectedBook];
+
+    if (m_JumpMode == JumpKind::Chapter) {
+        if (m_JumpBuffer.empty()) { m_JumpStatus = "Escribe un numero de capitulo"; return; }
+        int chapNum = 0;
+        try { chapNum = std::stoi(m_JumpBuffer); }
+        catch (...) { m_JumpStatus = "Numero invalido"; return; }
+
+        for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
+            if (book.chapters[ci].number == chapNum) {
+                m_SelectedChapter = ci;
+                m_SelectedVerse   = 0;
+                CloseJump();
+                return;
+            }
+        }
+        m_JumpStatus = "Ese capitulo no existe en " + book.name;
+    }
+    else if (m_JumpMode == JumpKind::Verse) {
+        if (m_SelectedChapter < 0 || m_SelectedChapter >= (int)book.chapters.size()) {
+            CloseJump();
+            return;
+        }
+        auto& chap = book.chapters[m_SelectedChapter];
+        if (m_JumpBuffer.empty()) { m_JumpStatus = "Escribe un numero de versiculo"; return; }
+        int verseNum = 0;
+        try { verseNum = std::stoi(m_JumpBuffer); }
+        catch (...) { m_JumpStatus = "Numero invalido"; return; }
+
+        for (int vi = 0; vi < (int)chap.verses.size(); vi++) {
+            if (chap.verses[vi].number == verseNum) {
+                m_SelectedVerse = vi;
+                m_ScrollToVerse = vi;
+                ProjectVerse(m_SelectedBook, m_SelectedChapter, vi);
+                CloseJump();
+                return;
+            }
+        }
+        m_JumpStatus = "Ese versiculo no existe en este capitulo";
+    }
+}
+
+void BibleView::UpdateJumpOverlay() {
+    if (m_JumpMode == JumpKind::None) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        ImVec2 mp = io.MousePos;
+        bool inside = mp.x >= m_JumpCardMin.x && mp.x <= m_JumpCardMax.x &&
+                      mp.y >= m_JumpCardMin.y && mp.y <= m_JumpCardMax.y;
+        if (!inside) { CloseJump(); return; }
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Backspace, true) && !m_JumpBuffer.empty())
+        m_JumpBuffer.pop_back();
+
+    for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
+        ImWchar wc = io.InputQueueCharacters[i];
+        if (wc >= '0' && wc <= '9')
+            m_JumpBuffer += (char)wc;
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
+        ConfirmJump();
+}
+
+void BibleView::RenderJumpOverlay() {
+    if (m_JumpMode == JumpKind::None) return;
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 cardSize = ImVec2(300.0f, 150.0f);
+    ImVec2 center   = vp->GetCenter();
+
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.11f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.25f, 0.35f, 0.55f, 0.85f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   12.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(20.0f, 18.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+
+    constexpr ImGuiWindowFlags kFlags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove     | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoNav      | ImGuiWindowFlags_NoScrollbar;
+
+    ImGui::Begin("##JumpOverlay", nullptr, kFlags);
+
+    m_JumpCardMin = ImGui::GetWindowPos();
+    ImVec2 winSize = ImGui::GetWindowSize();
+    m_JumpCardMax = ImVec2(m_JumpCardMin.x + winSize.x, m_JumpCardMin.y + winSize.y);
+
+    const char* label = (m_JumpMode == JumpKind::Chapter) ? "Ir a capitulo" : "Ir a versiculo";
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.43f, 0.50f, 1.0f));
+    ImGui::TextUnformatted(label);
+    ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.85f, 1.0f, 1.0f));
+    ImGui::SetWindowFontScale(1.6f);
+    ImGui::TextUnformatted(m_JumpBuffer.empty() ? "_" : m_JumpBuffer.c_str());
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleColor();
+
+    if (!m_JumpStatus.empty()) {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.40f, 0.40f, 1.0f));
+        ImGui::TextUnformatted(m_JumpStatus.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.55f, 1.0f));
+    ImGui::TextUnformatted(m_JumpMode == JumpKind::Chapter
+        ? "Enter: confirmar    Ctrl de nuevo / clic afuera: cerrar"
+        : "Enter: confirmar    Alt de nuevo / clic afuera: cerrar");
+    ImGui::PopStyleColor();
+
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+}
 } // namespace ProyecThor::UI

@@ -28,7 +28,26 @@ private:
     void RenderChapterGrid();
     void RenderVerseList();
     void RenderEditModal();
+enum class JumpKind { None, Chapter, Verse };
 
+// Salto rapido de capitulo/versiculo (tap de Ctrl / Alt)
+void UpdateModifierTaps();
+void OpenJump(JumpKind kind);
+void CloseJump();
+void UpdateJumpOverlay();
+void RenderJumpOverlay();
+void ConfirmJump();
+
+JumpKind    m_JumpMode = JumpKind::None;
+std::string m_JumpBuffer;
+std::string m_JumpStatus;
+ImVec2      m_JumpCardMin = {};
+ImVec2      m_JumpCardMax = {};
+
+double m_CtrlDownSince  = -1.0;
+bool   m_CtrlComboFired = false;
+double m_AltDownSince   = -1.0;
+bool   m_AltComboFired  = false;
     // Aplica la seleccion confirmada del buscador rapido (biblia/BibleQuickNav)
     void HandleQuickNavConfirm();
 

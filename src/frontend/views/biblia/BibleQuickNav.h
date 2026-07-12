@@ -53,6 +53,11 @@ public:
     // Cierra el overlay sin confirmar ninguna seleccion.
     void Close();
     bool IsOpen() const { return m_Open; }
+// Rectángulo de la tarjeta (actualizado en Render(), leído en Update()
+// para detectar clics fuera de la tarjeta).
+ImVec2 m_CardMin = {};
+ImVec2 m_CardMax = {};
+int    m_OpenedFrame = -1;   // frame en que se llamo Open(), para no auto-cerrarse el mismo frame
 
     // Debe llamarse todos los frames (no hace nada si esta cerrado). Captura
     // el teclado del paso actual y avanza/retrocede segun corresponda.

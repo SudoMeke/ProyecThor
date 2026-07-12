@@ -358,10 +358,10 @@ void PresentationCore::SetOverlayMedia(const std::string& path) {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.overlayPath = path;
-        ++m_State.transitionTrigger;   // NUEVO
     }
     if (m_Impl) m_Impl->overlay.PlayOverlay(path);
 }
+
 void PresentationCore::SetBackgroundTransitionProgress(float progress) {
     if (m_Impl) m_Impl->background.SetTransitionProgress(progress);
 }
@@ -369,7 +369,6 @@ void PresentationCore::StopOverlayMedia() {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.overlayPath = "";
-        ++m_State.transitionTrigger;   // NUEVO
     }
     if (m_Impl) m_Impl->overlay.StopOverlay();
 }
@@ -410,7 +409,6 @@ void PresentationCore::SetLayer2_Text(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
-    ++m_State.transitionTrigger;   // NUEVO
     ++m_StreamVersion;
 }
 
@@ -418,7 +416,6 @@ void PresentationCore::ClearLayer2() {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = "";
     m_State.showText    = false;
-    ++m_State.transitionTrigger;   // NUEVO
     ++m_StreamVersion;
 }
 
@@ -1060,7 +1057,8 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
         glViewport(0, 0, w, h);
-
+outRGB.resize(static_cast<size_t>(w) * h * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
         {
             std::lock_guard<std::mutex> lk(m_Mutex);
             glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
@@ -1079,14 +1077,22 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, 0);
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[nextIndex]);
-        GLubyte* ptr = static_cast<GLubyte*>(
-            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-        if (ptr)
-        {
-            std::memcpy(outRGB.data(), ptr, static_cast<size_t>(w) * h * 3);
-            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-        }
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+GLubyte* ptr = static_cast<GLubyte*>(
+    glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+if (ptr)
+{
+    // glReadPixels entrega fila 0 = abajo de la pantalla. JPEG/PNG
+    // esperan fila 0 = arriba. Invertimos filas aca, una sola vez,
+    // antes de que el buffer salga hacia el compresor JPEG.
+    const size_t rowBytes = static_cast<size_t>(w) * 3;
+    for (int row = 0; row < h; ++row)
+    {
+        const GLubyte* srcRow = ptr + static_cast<size_t>(row) * rowBytes;
+        uint8_t* dstRow = outRGB.data() + static_cast<size_t>(h - 1 - row) * rowBytes;
+        std::memcpy(dstRow, srcRow, rowBytes);
+    }
+    glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+}
 
         m_PBOIndex = nextIndex;
 

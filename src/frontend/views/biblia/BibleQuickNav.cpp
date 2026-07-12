@@ -41,6 +41,7 @@ void BibleQuickNav::Open() {
     m_Open          = true;
     m_Step          = QuickNavStep::Book;
     m_OpenSince     = ImGui::GetTime();
+    m_OpenedFrame   = ImGui::GetFrameCount();
     m_ClosingUntil  = -1.0;
 
     m_BookBuffer.clear();
@@ -112,7 +113,13 @@ void BibleQuickNav::Render(const BibleData& bible) {
         ImGuiWindowFlags_NoNav      | ImGuiWindowFlags_NoScrollbar;
 
     ImGui::Begin("##QuickNavCard", nullptr, kFlags);
-
+    m_CardMin = ImGui::GetWindowPos();
+ImVec2 winSize = ImGui::GetWindowSize();
+m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
+{
+    ImVec2 winSize = ImGui::GetWindowSize();
+    m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
+}
     // ── Cabecera: breadcrumb con lo ya confirmado ─────────────────────
     if (m_Resolution.hasBook) {
         std::string crumb = bible.books[m_Resolution.bookIdx].name;
@@ -189,8 +196,8 @@ void BibleQuickNav::Render(const BibleData& bible) {
     ImGui::Spacing();
 
     DrawHint(m_Step == QuickNavStep::Book
-        ? "Enter: confirmar libro    Esc: cancelar"
-        : "Enter: confirmar    Backspace (vacio) / Esc: paso anterior");
+    ? "Enter: confirmar libro    Ctrl+F o clic afuera: cerrar"
+    : "Enter: confirmar    Backspace (vacio): paso anterior    Ctrl+F: cerrar");
 
     ImGui::End();
     ImGui::PopStyleVar(4); // Rounding, Padding, BorderSize, Alpha
@@ -336,15 +343,30 @@ void BibleQuickNav::GoBackStep(const BibleData& bible) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Update
 // ─────────────────────────────────────────────────────────────────────────────
-
 bool BibleQuickNav::Update(const BibleData& bible) {
-    if (!m_Open) return false;
-
     ImGuiIO& io = ImGui::GetIO();
+    bool hotkeyPressed = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
 
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-        if (m_Step == QuickNavStep::Book) Close();
-        else GoBackStep(bible);
+    if (!m_Open) {
+        if (hotkeyPressed && !bible.books.empty())
+            Open();
+        return false;
+    }
+
+    // Si este es el mismo frame en que se abrio, ignoramos el toggle de
+    // cierre: es el mismo Ctrl+F que lo abrio, no debe volver a cerrarlo.
+    bool justOpenedThisFrame = (ImGui::GetFrameCount() == m_OpenedFrame);
+
+    bool clickOutside = false;
+    if (!justOpenedThisFrame && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        ImVec2 mp = io.MousePos;
+        bool insideCard = mp.x >= m_CardMin.x && mp.x <= m_CardMax.x &&
+                          mp.y >= m_CardMin.y && mp.y <= m_CardMax.y;
+        if (!insideCard) clickOutside = true;
+    }
+
+    if ((hotkeyPressed && !justOpenedThisFrame) || clickOutside) {
+        Close();
         return false;
     }
 

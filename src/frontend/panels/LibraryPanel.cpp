@@ -362,8 +362,8 @@ void LibraryPanel::RenderFileInUseToast()
     ImVec2   displaySize = io.DisplaySize;
 
     ImFont* font = ImGui::GetFont();
-   // Usamos ImGui::GetFontSize() en lugar de intentar obtenerlo del objeto font
-ImVec2 textSize = font->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, 0.0f, message.c_str());
+    // Usamos ImGui::GetFontSize() en lugar de intentar obtenerlo del objeto font
+    ImVec2 textSize = font->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, 0.0f, message.c_str());
 
     const float padX = 16.0f;
     const float padY = 10.0f;
@@ -403,7 +403,27 @@ void LibraryPanel::Render()
         m_AudioSelectionSet = false;
         m_PrevCategory      = m_CurrentCategory;
     }
-
+    
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyShift) // Solo si Shift está presionado
+    {
+        // Revisamos teclas del 1 al 6 (código ASCII '1' a '6')
+        for (int i = 0; i < 6; ++i)
+        {
+            // FIX: Casteamos el entero resultante de vuelta a ImGuiKey
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + i)))
+            {
+                // Convertimos el índice 0-5 a tu enum LibraryCategory
+                m_CurrentCategory = static_cast<LibraryCategory>(i);
+                
+                // Opcional: limpiar selección o refrescar al cambiar
+                m_SelectedIndex = -1;
+                RefreshList();
+                break;
+            }
+        }
+    }
+    
     bool visible = false;
 
     if (m_UIManagerRef)
@@ -465,7 +485,7 @@ void LibraryPanel::Render()
     }
     ImGui::SameLine(0.f, 1.0f);
 
-// ── Panel de contenido derecho ─────────────────────────────────────────
+    // ── Panel de contenido derecho ─────────────────────────────────────────
     // Margen unificado para TODAS las categorias (Canciones, Video, Documentos,
     // Audio). Centralizado aca para que ningun sub-panel (por ejemplo el grid
     // de Canciones/Playlists, que resetea su propio WindowPadding a 0 para

@@ -17,6 +17,7 @@
 #include "Version.h"
 #include "DesignSystem.h"
 #include "HubTheme.h"
+#include "SongPlayStats.h"
 
 extern GLuint LoadTextureFromFile(const char* filename);
 
@@ -46,6 +47,12 @@ struct UpdateVersionInfo {
 // anadir una nueva linea a esta lista con su archivo de imagen.
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
         {
+        5, "0.3.4",
+        " NUEVA VERSION ", "ACTUALIZACION",
+        "splash_bg2.png",
+        "Dashboard de estadísticas locales, historial de FPS y etiquetas de biblioteca mejoradas."
+    },
+    {
         4, "0.3.3",
         " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
         "splash_bg5.png",
@@ -228,6 +235,17 @@ bool Hub::Render() {
     dt = std::min(dt, 0.05f);
 
     m_Time += dt;
+
+    static int fpsFrames = 0;
+    static float fpsAccum = 0.0f;
+    fpsFrames++;
+    fpsAccum += dt;
+    if (fpsAccum >= 0.5f) {
+        const int fps = std::max(1, static_cast<int>(fpsFrames / fpsAccum));
+        ProyecThor::UI::RecordPerformanceSample(fps);
+        fpsFrames = 0;
+        fpsAccum = 0.0f;
+    }
 
     UpdateAnimations(dt);
 
@@ -489,7 +507,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 4; // id de kUpdateRegistry (4 = v0.3.3, 3 = v0.3.2, 1 = v0.3.1, 2 = v0.3.0)
+    static int    selectedUpdateVer = 5; // id de kUpdateRegistry (5 = v0.3.4)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -654,6 +672,80 @@ void Hub::RenderMainContent(float w, float h) {
     ImGui::SameLine(0.0f, spacingX);
     ImGui::BeginGroup();
 
+    ImGui::SetWindowFontScale(1.25f);
+    ImGui::Text("Resumen local");
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+    const auto topSongs = ProyecThor::UI::GetTopSongPlayStats(5);
+    const int totalProjections = ProyecThor::UI::GetTotalSongProjections();
+    const auto perfSummary = ProyecThor::UI::GetPerformanceSummary();
+    const auto perfHistory = ProyecThor::UI::GetRecentPerformanceHistory(8);
+
+    auto DrawMetricCard = [&](const char* label, const std::string& value, const char* hint, ImU32 color) {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(14, 14, 20, 230));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+        ImGui::BeginChild(label, ImVec2(rightColWidth - 8.0f, 70.0f), false);
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+        ImGui::TextUnformatted(value.c_str());
+        ImGui::PopStyleColor();
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted(label);
+        ImGui::TextDisabled("%s", hint);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    };
+
+    DrawMetricCard("Proyecciones totales", std::to_string(totalProjections), "Cuentas locales registradas", IM_COL32(115, 244, 205, 255));
+    DrawMetricCard("FPS promedio", std::to_string(perfSummary.first), "Últimos registros del Hub", IM_COL32(91, 188, 255, 255));
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(12, 12, 18, 220));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+    ImGui::BeginChild("##SongStats", ImVec2(rightColWidth, 240.0f), false);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+    ImGui::Text("Canciones más proyectadas");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    if (topSongs.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextWrapped("Aún no hay estadísticas locales. Proyecta 2 versos o más de una canción para empezar.");
+        ImGui::PopStyleColor();
+    } else {
+        for (size_t i = 0; i < topSongs.size(); ++i) {
+            const auto& [title, count] = topSongs[i];
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(20, 20, 28, 220));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+            ImGui::BeginChild((std::string("##songStat") + std::to_string(i)).c_str(), ImVec2(rightColWidth - 10.0f, 48.0f), false);
+
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+            ImGui::TextUnformatted(title.c_str());
+            ImGui::PopStyleColor();
+            ImGui::SameLine(rightColWidth - 90.0f);
+            ImGui::Text("%d", count);
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+            ImGui::TextDisabled("proyecciones");
+            ImGui::PopStyleColor();
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+            if (i + 1 < topSongs.size()) {
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+            }
+        }
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
     ImGui::EndGroup();
     ImGui::EndChild();
 
@@ -781,6 +873,7 @@ void Hub::RenderMainContent(float w, float h) {
            if (selectedUpdateVer == 4) { // v0.3.3
                 Cat("Biblioteca renovada");
                 Bul("Nueva biblioteca con listas y playlists más prácticas.");
+                Bul("Nuevas teclas rapidas en la navegacion, biblia: ctrl + f abre el buscador de libro, capitulo biblia. Ctrl abre el buscador de capitulos y Alt abre el buscador de versiculos");
                 Bul("Mejoramos la sección de biblioteca y la navegación entre canciones.");
                 Bul("Se agregaron iconos nuevos en la Biblia y la búsqueda ahora muestra resultados más claros.");
                 Bul("Solucionamos el refresco de la biblioteca y la carga de contenidos al actualizar la lista.");
@@ -794,6 +887,7 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Red local y streaming");
+                Bul("Arreglo que impedia a LAN capturar la imagen correctamente.");
                 Bul("Mejor estabilidad LAN y menos cortes en la transmisión local.");
                 Bul("Se corrigieron problemas de marcas de agua y fuentes en el stream LAN.");
                 Bul("Ajustes del servidor de red para manejar mejor conexiones, estado y reconexiones.");
@@ -809,7 +903,30 @@ void Hub::RenderMainContent(float w, float h) {
                 Bul("Solucionamos fallos de reproducción y mejoramos el manejo de audio del backend.");
                 Bul("Arreglamos el botón de refresh y la sincronización de estado entre vistas.");
                 Bul("Refinamos la estabilidad general en el sistema multimonitor y de streaming.");
-            } else if (selectedUpdateVer == 3) { // v0.3.2
+            } else if (selectedUpdateVer == 5) { // v0.3.4
+                Cat("Estadísticas locales");
+                Bul("Nuevo panel de resumen local en el Hub con métricas que se recogen dentro de la app.");
+                Bul("Se muestra el total de proyecciones, FPS promedio y canciones más proyectadas.");
+                Bul("Historial de FPS recientes ahora documenta la estabilidad de la aplicación.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca y etiquetas");
+                Bul("Vista renovada con pestañas «Canciones» y «Etiquetas» para navegar rápido.");
+                Bul("Etiquetas se renderizan como grupos tipo carpeta con fondo de color.");
+                Bul("Se corrigió la asignación de etiquetas por clic derecho para evitar popups inconsistentes.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("UI y experiencia");
+                Bul("El Hub ya no muestra tarjetas de Peak FPS o Informe general innecesarias.");
+                Bul("El botón «Nueva playlist» ya no se corta en el pie del panel de playlists.");
+                Bul("Se mejoró el comportamiento y visual de los popups y menús contextuales.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Calidad y estabilidad");
+                Bul("Se mejoró la consistencia de IDs de ImGui para evitar conflictos en listas y paneles.");
+                Bul("Refinamos la carga de la biblioteca y el renderizado del Hub.");
+                Bul("Se corrigieron problemas de estabilidad en la gestión de etiquetas y la UI de búsqueda.");
+            } else if (selectedUpdateVer == 4) { // v0.3.3
     Cat("Soporte para Linux");
     Bul("ProyecThor ahora corre de forma nativa en Linux, con build propio via CMake.");
     Bul("Pruebas realizadas en Arch Linux (y derivados como CachyOS), incluyendo el flujo completo de instalacion via paquete.");

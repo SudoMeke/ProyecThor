@@ -223,15 +223,21 @@ void SetGlobalMute(bool mute);
         bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
         NetworkStreamServer* GetNetworkServer() { return m_NetworkServer.get(); }
 
-        void PushFrame(std::vector<uint8_t> jpegData)
-        {
-            {
-                std::lock_guard<std::mutex> lk(m_FrameMutex);
-                m_LatestFrame = std::move(jpegData);
-            }
-            m_FrameProviderActive.store(true);
-            ++m_StreamVersion;
-        }
+       void PushFrame(std::vector<uint8_t> jpegData)
+{
+    // Un jpegData vacio significa que no hay frame real disponible
+    // (fallo de captura/compresion). En ese caso hasFrame debe quedar
+    // en false para que el cliente muestre el color solido de fondo
+    // en vez de un JPEG corrupto. Si trae datos, hasFrame pasa a true.
+    bool hasRealFrame = !jpegData.empty();
+
+    {
+        std::lock_guard<std::mutex> lk(m_FrameMutex);
+        m_LatestFrame = std::move(jpegData);
+    }
+    m_FrameProviderActive.store(hasRealFrame);
+    ++m_StreamVersion;
+}
 
         void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio = true);
 

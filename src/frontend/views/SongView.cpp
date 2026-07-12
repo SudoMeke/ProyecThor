@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <cstdlib>
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "frontend/ui/SongPlayStats.h"
 
 // Windows headers para SHGetKnownFolderPath
 #ifdef _WIN32
@@ -82,6 +83,7 @@ static std::filesystem::path GetLegacyAuthorFilePath(const std::filesystem::path
 SongView::SongView()
     : m_CurrentSongTitle("")
     , m_ActiveStanzaIndex(-1)
+    , m_HasRecordedCurrentSongProjection(false)
     , m_ShowEditor(false)
     , m_OpenEditorPopup(false)
     , m_EditingFilePath("")
@@ -439,6 +441,7 @@ void SongView::Render()
         m_CurrentSongTitle  = selection.title;
         m_ActiveStanzaIndex = -1;
         m_SaveSuccess       = false;
+        m_HasRecordedCurrentSongProjection = false;
     }
 
     auto presentState = core.GetState();
@@ -446,6 +449,16 @@ void SongView::Render()
     int  vAlign       = presentState.songVAlignment;
 ImFont* styleFont = core.GetImGuiFont(presentState.selectedFont, presentState.textSize);
 if (!styleFont) styleFont = ImGui::GetFont();
+
+    auto TryRecordProjection = [&](bool userInitiated) {
+        if (!userInitiated) return;
+        if (selection.title.empty() || selection.contentData.size() < 2) return;
+        if (m_ActiveStanzaIndex < 0) return;
+        if (m_HasRecordedCurrentSongProjection) return;
+        ProyecThor::UI::RecordSongProjection(selection.title, (int)selection.contentData.size());
+        m_HasRecordedCurrentSongProjection = true;
+    };
+
     // ── Navegacion con teclado ────────────────────────────────────────────────
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
         !selection.contentData.empty())
@@ -458,6 +471,8 @@ if (!styleFont) styleFont = ImGui::GetFont();
         core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
         if (core.IsProjecting())
             core.SetProjecting(true);
+
+        TryRecordProjection(true);
     }
 }
 if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
@@ -468,6 +483,8 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
         core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
         if (core.IsProjecting())
             core.SetProjecting(true);
+
+        TryRecordProjection(true);
     }
 }
     }
@@ -489,6 +506,7 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
     {
         core.ClearLayer2();
         m_ActiveStanzaIndex = -1;
+        m_HasRecordedCurrentSongProjection = false;
     }
     ImGui::PopStyleColor(3);
     ImGui::Separator();
@@ -513,12 +531,13 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
             ImVec2 p_max    = ImVec2(p_min.x + cardSize.x, p_min.y + cardSize.y);
 
             if (ImGui::InvisibleButton("##select_btn", cardSize))
-{
-    m_ActiveStanzaIndex = (int)i;
-    core.SetLayer2_Text(stanza);
-    if (core.IsProjecting())
-        core.SetProjecting(true);
-}
+            {
+                m_ActiveStanzaIndex = (int)i;
+                core.SetLayer2_Text(stanza);
+                if (core.IsProjecting())
+                    core.SetProjecting(true);
+                TryRecordProjection(true);
+            }
 
             bool isHovered = ImGui::IsItemHovered();
 
@@ -534,6 +553,8 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
                     core.SetLayer2_Text(stanza);
                     if (core.IsProjecting())
                         core.SetProjecting(true);
+
+                    TryRecordProjection(true);
                 }
 
                 ImGui::Separator();

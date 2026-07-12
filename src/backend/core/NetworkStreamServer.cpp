@@ -553,7 +553,6 @@ std::string NetworkStreamServer::BuildHTMLPage()
 <body>
 <div id="screen">
   <div id="viewport">
-   <div id="idle-overlay">
     <!-- Fondo capturado (JPEG polling o MJPEG) -->
     <img id="bg-frame" src="" alt="" aria-hidden="true">
 
@@ -561,6 +560,10 @@ std::string NetworkStreamServer::BuildHTMLPage()
     <div id="text-container">
       <div id="main-text"></div>
     </div>
+
+    <!-- Placeholder de "esperando contenido" — ahora independiente,
+         no tapa el fondo ni el texto cuando hay algo proyectándose -->
+    <div id="idle-overlay"></div>
   </div>
 </div>
 

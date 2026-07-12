@@ -16,6 +16,7 @@ namespace ProyecThor::UI {
     private:
         std::string m_CurrentSongTitle;
         int         m_ActiveStanzaIndex;
+        bool        m_HasRecordedCurrentSongProjection;
 
         bool        m_ShowEditor;
         bool        m_OpenEditorPopup;   // Flag diferido: abre el popup en el nivel raiz
