@@ -257,6 +257,10 @@ if (m_HubMode)
 
     for (auto& panel : m_Panels)
         panel->Render();
+if (m_FocusControlNextFrame) {
+        ImGui::SetWindowFocus(str.control);
+        m_FocusControlNextFrame = false;
+    }
 
     // ── Proyector ────────────────────────────────────────────────────────────
     auto state = Core::PresentationCore::Get().GetState();
@@ -917,18 +921,21 @@ void UIManager::BeginDockspace()
 
         ImGuiID dock_main_top, dock_main_bottom;
         ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
-
-        ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
-        ImGui::DockBuilderDockWindow("Transiciones",       dock_right_bottom);
-        ImGui::DockBuilderDockWindow(str.quickNotesTitle,  dock_main_top);
-        ImGui::DockBuilderDockWindow(str.preview,          dock_main_top);
-        ImGui::DockBuilderDockWindow(str.oclockTitle,      dock_main_top);
-        ImGui::DockBuilderDockWindow("Anuncios",           dock_main_top);
-        ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right_top);
-        ImGui::DockBuilderDockWindow("Estilos",            dock_right_bottom);
-        ImGui::DockBuilderDockWindow("Captura",            dock_main_top);
-        ImGui::DockBuilderDockWindow(str.control,          dock_right_bottom);
-        ImGui::DockBuilderDockWindow("Fondos",             dock_right_bottom);
+ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
+ImGui::DockBuilderDockWindow(str.quickNotesTitle,  dock_main_top);
+ImGui::DockBuilderDockWindow(str.preview,          dock_main_top);
+ImGui::DockBuilderDockWindow(str.oclockTitle,      dock_main_top);
+ImGui::DockBuilderDockWindow("Anuncios",           dock_main_top);
+ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right_top);
+ImGui::DockBuilderDockWindow("Captura",            dock_main_top);
+// Control se registra PRIMERO en dock_right_bottom, para que sea la
+// pestaña que abre por defecto sin depender solo del override manual
+// de abajo (rightBottomNode->SelectedTabId). Estilos/Fondos/Transiciones
+// van despues, sin ninguna prioridad implicita entre ellas.
+ImGui::DockBuilderDockWindow(str.control,          dock_right_bottom);
+ImGui::DockBuilderDockWindow("Estilos",            dock_right_bottom);
+ImGui::DockBuilderDockWindow("Fondos",             dock_right_bottom);
+ImGui::DockBuilderDockWindow("Transiciones",       dock_right_bottom);
         ImGui::DockBuilderDockWindow("Transmisión en Red", dock_main_top);
 
         ImGui::DockBuilderFinish(dockspace_id);

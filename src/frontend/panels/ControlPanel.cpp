@@ -12,12 +12,14 @@
 #include <iostream>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <algorithm>
 #include <functional>
 
 #include "backend/core/PresentationCore.h"
+#include "stb_image_write.h"
 
 namespace ProyecThor::UI {
 
@@ -171,14 +173,49 @@ static void EndCard()
 }
 
 // =============================================================================
-//  MonitorSelector
+//  DetectCurrentMonitorIndex — que pantalla fisica ocupa la ventana principal
+//  (la que corre esta app). Sirve para marcar "(este monitor)" en los
+//  selectores y asi evitar que el usuario elija por error la misma pantalla
+//  donde ve el panel de control como destino publico o de stage.
 // =============================================================================
-static void MonitorSelector(const char* idPrefix, int& selected,
+static int DetectCurrentMonitorIndex()
+{
+    GLFWwindow* win = glfwGetCurrentContext();
+    if (!win) return -1;
+
+    int wx, wy, ww, wh;
+    glfwGetWindowPos(win, &wx, &wy);
+    glfwGetWindowSize(win, &ww, &wh);
+    const int cx = wx + ww / 2;
+    const int cy = wy + wh / 2;
+
+    int monitorCount = 0;
+    GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+
+    for (int i = 0; i < monitorCount; i++) {
+        int mx, my;
+        glfwGetMonitorPos(monitors[i], &mx, &my);
+        if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[i])) {
+            if (cx >= mx && cx < mx + vm->width && cy >= my && cy < my + vm->height)
+                return i;
+        }
+    }
+    return -1;
+}
+
+// =============================================================================
+//  MonitorSelector
+//  includeLAN: agrega una entrada final "Red (LAN)"; al elegirla, onPick
+//  recibe el sentinela `monitorCount` (fuera de rango de pantallas fisicas).
+// =============================================================================
+static void MonitorSelector(const char* idPrefix, int selected, int monitorCountOverride,
+                             bool includeLAN, int currentAppMonitor,
                              std::function<void(int)> onCycle,
                              std::function<void(int)> onPick)
 {
     int monitorCount = 0;
     GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+    if (monitorCountOverride >= 0) monitorCount = std::min(monitorCount, monitorCountOverride);
 
     float rowW = ImGui::GetContentRegionAvail().x;
     const float comboW = rowW - 2.0f * (kArrowBtnSize + 6.0f);
@@ -187,7 +224,7 @@ static void MonitorSelector(const char* idPrefix, int& selected,
     std::string nextId = std::string(idPrefix) + "Next";
     std::string comboId = std::string("##") + idPrefix + "sel";
 
-    if (ThemeIconButton(prevId.c_str(), "arrow_back", "<", "Pantalla anterior",
+    if (ThemeIconButton(prevId.c_str(), "arrow_back", "<", "Opcion anterior",
                         ImVec2(kArrowBtnSize, kArrowBtnSize),
                         ControlTheme::ComboBg, Brighten(ControlTheme::ComboBg, 0.05f), Brighten(ControlTheme::ComboBg, 0.1f), ControlTheme::TextDim))
     {
@@ -199,27 +236,37 @@ static void MonitorSelector(const char* idPrefix, int& selected,
     static thread_local std::vector<std::string> labels;
     static thread_local std::vector<const char*> ptrs;
     labels.clear(); ptrs.clear();
-    for (int i = 0; i < monitorCount; i++)
-        labels.push_back("Pantalla " + std::to_string(i + 1) + ": " + glfwGetMonitorName(monitors[i]));
+    for (int i = 0; i < monitorCount; i++) {
+        std::string l = "Pantalla " + std::to_string(i + 1) + ": " + glfwGetMonitorName(monitors[i]);
+        if (i == currentAppMonitor) l += " (este monitor)";
+        labels.push_back(std::move(l));
+    }
+    if (includeLAN)
+        labels.push_back("Red (LAN) - navegador/celular");
     for (const auto& l : labels) ptrs.push_back(l.c_str());
 
-    int sel = std::clamp(selected, 0, std::max(0, monitorCount - 1));
+    const int totalItems = (int)ptrs.size();
+    int sel = std::clamp(selected, 0, std::max(0, totalItems - 1));
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        ControlTheme::ComboBg);
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ControlTheme::ComboBgHover);
     ImGui::PushStyleColor(ImGuiCol_PopupBg,        ControlTheme::ComboPopupBg);
     ImGui::PushStyleColor(ImGuiCol_Border,         ControlTheme::Divider);
-    
+
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.frameRounding);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 6.0f));
 
     ImGui::SetNextItemWidth(comboW);
-    if (ImGui::Combo(comboId.c_str(), &sel, ptrs.data(), (int)ptrs.size()))
+    if (ImGui::Combo(comboId.c_str(), &sel, ptrs.data(), totalItems))
         onPick(sel);
 
-    if (ImGui::IsItemHovered() && monitorCount > 0) {
-        if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[sel]))
-            ImGui::SetTooltip("%dx%d", vm->width, vm->height);
+    if (ImGui::IsItemHovered()) {
+        if (sel < monitorCount) {
+            if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[sel]))
+                ImGui::SetTooltip("%dx%d", vm->width, vm->height);
+        } else if (includeLAN) {
+            ImGui::SetTooltip("Cualquier dispositivo en la misma red WiFi podra verlo desde su navegador.");
+        }
     }
 
     ImGui::PopStyleVar(2);
@@ -227,7 +274,7 @@ static void MonitorSelector(const char* idPrefix, int& selected,
 
     ImGui::SameLine(0.0f, 6.0f);
 
-    if (ThemeIconButton(nextId.c_str(), "arrow_forward", ">", "Pantalla siguiente",
+    if (ThemeIconButton(nextId.c_str(), "arrow_forward", ">", "Opcion siguiente",
                         ImVec2(kArrowBtnSize, kArrowBtnSize),
                         ControlTheme::ComboBg, Brighten(ControlTheme::ComboBg, 0.05f), Brighten(ControlTheme::ComboBg, 0.1f), ControlTheme::TextDim))
     {
@@ -267,7 +314,7 @@ void ControlPanel::Render() {
         return;
     }
 
-    if (m_isProjecting)
+    if (Core::PresentationCore::Get().IsProjecting())
         m_PulseTime += dt * kPulseSpeed;
     else
         m_PulseTime = std::fmod(m_PulseTime + dt * 0.5f, 6.2831853f);
@@ -309,9 +356,18 @@ void ControlPanel::RenderMonitorInfo() {
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
     auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+    int currentAppMonitor = DetectCurrentMonitorIndex();
 
-    BeginCard("ProjCard", 120.0f);
-    ImGui::TextUnformatted("Monitor público");
+    int  sel = -1;
+    bool sameAsControl = false;
+    if (monitorCount >= 2) {
+        int tgt = settings.projection.targetMonitor;
+        sel = std::clamp(tgt < 0 ? 1 : tgt, 0, monitorCount - 1);
+        sameAsControl = (sel == currentAppMonitor);
+    }
+
+    BeginCard("ProjCard", sameAsControl ? 156.0f : 120.0f);
+    ImGui::TextUnformatted("Pantalla pública (lo que ve la audiencia)");
     ImGui::TextDisabled("Monitores detectados: ");
     ImGui::SameLine();
     ImGui::TextColored(ControlTheme::TextPrimary, "%d", monitorCount);
@@ -322,82 +378,159 @@ void ControlPanel::RenderMonitorInfo() {
         ImGui::Text("Se necesita una segunda pantalla para proyectar.");
         ImGui::PopStyleColor();
     } else {
-        int tgt = settings.projection.targetMonitor;
-        int sel = std::clamp(tgt < 0 ? 1 : tgt, 0, monitorCount - 1);
-
-        MonitorSelector("mon", sel,
+        MonitorSelector("mon", sel, monitorCount, /*includeLAN*/false, currentAppMonitor,
             [this](int dir) { CycleTargetMonitor(dir); },
             [this, &settings](int newSel) {
                 settings.projection.targetMonitor = newSel;
                 ProyecThor::Settings::SettingsManager::Get().Save();
-                if (m_isProjecting) {
-                    auto& core = Core::PresentationCore::Get();
-                    if (core.IsProjectorWindowActive()) {
-                        core.DestroyProjectorWindow();
-                        core.CreateProjectorWindow(newSel);
-                    }
+                auto& core = Core::PresentationCore::Get();
+                if (core.IsProjectorWindowActive()) {
+                    core.DestroyProjectorWindow();
+                    core.CreateProjectorWindow(newSel);
                 }
             });
+
+        if (sameAsControl) {
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, ControlTheme::NoMonitorText);
+            ImGui::TextWrapped("Atención: elegiste la misma pantalla donde se ve este panel de control como destino público.");
+            ImGui::PopStyleColor();
+        }
     }
     EndCard();
 }
 
 void ControlPanel::RenderStageSection(float dt) {
     (void)dt;
+    auto& core = Core::PresentationCore::Get();
+
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
+    const bool hasPhysicalOption = monitorCount >= 2;
+    const int  currentAppMonitor = DetectCurrentMonitorIndex();
 
-    BeginCard("StageCard", 150.0f);
-    if (monitorCount < 2) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ControlTheme::NoMonitorText);
-        ImGui::Text("Requiere una pantalla adicional para el monitor de control.");
+    // Sin segunda pantalla fisica, LAN es la unica opcion posible para el
+    // monitor de control — no tiene sentido dejarlo "apagado" por eleccion.
+    if (!hasPhysicalOption) m_StageUseLAN = true;
+    if (hasPhysicalOption)  m_StageMonitorIndex = std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
+
+    // El estado real de "activo" se consulta a la fuente correspondiente en
+    // vez de fiarse solo del booleano local: si el usuario tambien controla
+    // la transmision LAN desde el panel "Transmisión en Red", este panel debe
+    // reflejar eso igual (evita que ambos paneles queden desincronizados).
+    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : m_isStageActive;
+
+    const int  lanItemIndex = hasPhysicalOption ? monitorCount : 0;
+    const int  sel          = m_StageUseLAN ? lanItemIndex : m_StageMonitorIndex;
+    const bool showLanPanel = m_StageUseLAN && stageActive;
+
+    BeginCard("StageCard", showLanPanel ? 226.0f : (hasPhysicalOption ? 190.0f : 168.0f));
+
+    ImGui::TextUnformatted(stageActive ? "Stage activo" : "Stage inactivo");
+    ImGui::TextDisabled("Monitor de confianza: ");
+    ImGui::SameLine();
+    if (m_StageUseLAN)
+        ImGui::TextColored(ControlTheme::TextPrimary, "Red (LAN)");
+    else
+        ImGui::TextColored(ControlTheme::TextPrimary, "Pantalla %d", m_StageMonitorIndex + 1);
+    ImGui::Spacing();
+
+    if (!hasPhysicalOption) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ControlTheme::TextDim);
+        ImGui::TextWrapped(
+            "No se detectó una segunda pantalla física: el monitor de control "
+            "estará disponible solo por LAN. Cualquier celular o tablet en la "
+            "misma red WiFi podrá verlo desde su navegador.");
         ImGui::PopStyleColor();
     } else {
-        m_StageMonitorIndex = std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
-        int sel = m_StageMonitorIndex;
-
-        ImGui::TextUnformatted(m_isStageActive ? "Stage activo" : "Stage inactivo");
-        ImGui::TextDisabled("Monitor de confianza: ");
-        ImGui::SameLine();
-        ImGui::TextColored(ControlTheme::TextPrimary, "Pantalla %d", sel + 1);
-        ImGui::Spacing();
-
-        MonitorSelector("stage", sel,
+        MonitorSelector("stage", sel, -1, /*includeLAN*/true, currentAppMonitor,
             [this](int dir) { CycleStageMonitor(dir); },
-            [this](int newSel) {
-                m_StageMonitorIndex = newSel;
-                if (m_isStageActive) {
-                    auto& core = Core::PresentationCore::Get();
-                    core.DestroyStageWindow();
-                    core.CreateStageWindow(m_StageMonitorIndex);
+            [this, stageActive](int newSel) {
+                int mc = 0;
+                glfwGetMonitors(&mc);
+                const bool wantLAN = (newSel >= mc);
+                auto& core = Core::PresentationCore::Get();
+
+                if (stageActive) {
+                    if (m_StageUseLAN) core.ToggleNetworkStream(false);
+                    else               core.DestroyStageWindow();
+                }
+
+                m_StageUseLAN = wantLAN;
+                if (!wantLAN) m_StageMonitorIndex = newSel;
+
+                if (stageActive) {
+                    if (wantLAN) core.ToggleNetworkStream(true, m_LANPort);
+                    else         core.CreateStageWindow(m_StageMonitorIndex);
                 }
             });
 
         ImGui::Spacing();
-        ImGui::TextDisabled("El monitor de control muestra el contenido en vivo a un segundo público.");
-        ImGui::Spacing();
-
-        const char* buttonText = m_isStageActive ? "DETENER STAGE" : "ACTIVAR STAGE";
-        ImVec4 btnColor = m_isStageActive ? ControlTheme::StageBtnLive : ControlTheme::StageBtnIdle;
-        ImVec4 hoverColor = Brighten(btnColor, 0.06f);
-        ImVec4 activeColor = Brighten(btnColor, -0.06f);
-        ImVec4 tintCol  = m_isStageActive ? ControlTheme::StageIconOn  : ControlTheme::StageIconOff;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, btnColor);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, activeColor);
-        ImGui::PushStyleColor(ImGuiCol_Text, tintCol);
-
-        if (ImGui::Button(buttonText, ImVec2(-1.0f, 44.0f))) {
-            m_isStageActive = !m_isStageActive;
-            ToggleStageDisplay(m_isStageActive);
-        }
-
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar();
+        ImGui::TextDisabled("Muestra el contenido en vivo a un segundo público (músicos, camarógrafos, etc).");
     }
+    ImGui::Spacing();
+
+    if (showLanPanel) {
+        auto state = core.GetState();
+
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ControlTheme::ComboBg);
+        ImGui::PushStyleColor(ImGuiCol_Border,  ControlTheme::Divider);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.frameRounding);
+
+        char urlBuf[256];
+        std::strncpy(urlBuf, state.networkURL.c_str(), sizeof(urlBuf) - 1);
+        urlBuf[sizeof(urlBuf) - 1] = '\0';
+
+        const float btnW   = 90.0f;
+        const float gap    = 8.0f;
+        const float fieldW = ImGui::GetContentRegionAvail().x - btnW - gap;
+
+        ImGui::SetNextItemWidth(fieldW);
+        ImGui::InputText("##lanurl", urlBuf, sizeof(urlBuf), ImGuiInputTextFlags_ReadOnly);
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+
+        ImGui::SameLine(0.0f, gap);
+        if (ImGui::Button("Copiar Link", ImVec2(btnW, 0.0f)))
+            ImGui::SetClipboardText(state.networkURL.c_str());
+
+        ImGui::TextDisabled("Más opciones de calidad/resolución en el panel \"Transmisión en Red\".");
+        ImGui::Spacing();
+    }
+
+    const char* buttonText = stageActive ? "DETENER STAGE" : "ACTIVAR STAGE";
+    ImVec4 btnColor = stageActive ? ControlTheme::StageBtnLive : ControlTheme::StageBtnIdle;
+    ImVec4 hoverColor = Brighten(btnColor, 0.06f);
+    ImVec4 activeColor = Brighten(btnColor, -0.06f);
+    ImVec4 tintCol  = stageActive ? ControlTheme::StageIconOn  : ControlTheme::StageIconOff;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button, btnColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, activeColor);
+    ImGui::PushStyleColor(ImGuiCol_Text, tintCol);
+
+    if (ImGui::Button(buttonText, ImVec2(-1.0f, 44.0f))) {
+        m_isStageActive = !stageActive;
+        ToggleStageDisplay(m_isStageActive);
+    }
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar();
+
     EndCard();
+
+    // Si el monitor de control se sirve por LAN, este panel es responsable de
+    // alimentar el servidor con frames de video (igual que hace StreamingPanel
+    // cuando esta abierto), para que el mirror funcione aunque el usuario nunca
+    // haya abierto el panel "Transmisión en Red".
+    if (showLanPanel) {
+        double now = ImGui::GetTime();
+        if (now - m_LANLastCaptureTime >= (1.0 / 8.0)) {
+            m_LANLastCaptureTime = now;
+            CaptureAndPushLANFrame(1280, 720, 80);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -527,22 +660,47 @@ void ControlPanel::CycleTargetMonitor(int direction) {
 void ControlPanel::CycleStageMonitor(int direction) {
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
-    if (monitorCount < 2)
-        return;
+    const bool hasPhysicalOption = monitorCount >= 2;
 
-    m_StageMonitorIndex = std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
-    m_StageMonitorIndex = (m_StageMonitorIndex + direction + monitorCount) % monitorCount;
+    const int totalItems = (hasPhysicalOption ? monitorCount : 0) + 1;
+    if (totalItems <= 1)
+        return; // sin pantallas fisicas, LAN es la unica opcion: nada que ciclar
+
+    const int lanItemIndex = totalItems - 1;
+    const int current = m_StageUseLAN ? lanItemIndex : std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
+    const int next     = (current + direction + totalItems) % totalItems;
+    const bool wantLAN = (next == lanItemIndex);
 
     auto& core = Core::PresentationCore::Get();
-    if (m_isStageActive) {
-        core.DestroyStageWindow();
-        core.CreateStageWindow(m_StageMonitorIndex);
+    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : m_isStageActive;
+
+    if (stageActive) {
+        if (m_StageUseLAN) core.ToggleNetworkStream(false);
+        else                core.DestroyStageWindow();
+    }
+
+    m_StageUseLAN = wantLAN;
+    if (!wantLAN) m_StageMonitorIndex = next;
+
+    if (stageActive) {
+        if (wantLAN) core.ToggleNetworkStream(true, m_LANPort);
+        else          core.CreateStageWindow(m_StageMonitorIndex);
     }
 }
 
 void ControlPanel::ToggleStageDisplay(bool active) {
     auto& core = Core::PresentationCore::Get();
     if (active) {
+        if (m_StageUseLAN) {
+            core.ToggleNetworkStream(true, m_LANPort);
+            if (core.IsStreamingNet())
+                std::cout << "[ControlPanel] Monitor de control (LAN) iniciado en puerto " << m_LANPort << ".\n";
+            else
+                std::cerr << "[ControlPanel] No se pudo iniciar el monitor de control por LAN (puerto "
+                          << m_LANPort << " en uso?).\n";
+            return;
+        }
+
         int monitorCount = 0;
         glfwGetMonitors(&monitorCount);
         if (monitorCount < 2) {
@@ -556,9 +714,34 @@ void ControlPanel::ToggleStageDisplay(bool active) {
         else
             std::cerr << "[ControlPanel] No se pudo crear el monitor de control.\n";
     } else {
-        core.DestroyStageWindow();
-        std::cout << "[ControlPanel] Monitor de control detenido.\n";
+        if (m_StageUseLAN) {
+            core.ToggleNetworkStream(false);
+            std::cout << "[ControlPanel] Monitor de control (LAN) detenido.\n";
+        } else {
+            core.DestroyStageWindow();
+            std::cout << "[ControlPanel] Monitor de control detenido.\n";
+        }
     }
+}
+
+void ControlPanel::CaptureAndPushLANFrame(int w, int h, int quality) {
+    if (w <= 0 || h <= 0) return;
+
+    auto& core = Core::PresentationCore::Get();
+    std::vector<uint8_t> rgb;
+    if (!core.RenderProjectorToFBO(w, h, rgb)) return;
+
+    std::vector<uint8_t> jpeg;
+    jpeg.reserve(static_cast<size_t>(w) * h / 4);
+
+    auto stbCb = [](void* ctx, void* data, int size) {
+        auto* buf = static_cast<std::vector<uint8_t>*>(ctx);
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        buf->insert(buf->end(), p, p + size);
+    };
+    stbi_write_jpg_to_func(stbCb, &jpeg, w, h, 3, rgb.data(), quality);
+
+    core.PushFrame(std::move(jpeg));
 }
 
 void ControlPanel::ToggleSecondaryDisplay(bool active) {
