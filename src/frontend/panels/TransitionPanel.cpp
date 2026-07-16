@@ -111,9 +111,16 @@ float TransitionPanel::GetOutgoingAlpha() const
         case TransitionType::Fade:
         case TransitionType::ZoomIn:
         case TransitionType::ZoomOut:
-            return 1.0f - m_Progress; // Se desvanece
+            // Salida y entrada SECUENCIAL, no simultanea. Primera mitad
+            // de la transicion (progress 0 -> 0.5): el texto saliente se
+            // desvanece de 1 a 0. Segunda mitad: ya esta invisible.
+            // Antes ambas capas se dibujaban semitransparentes al mismo
+            // tiempo en el mismo lugar (offset 0,0), lo que con alpha
+            // secuencial de dos capas identicas producia un dip visual
+            // de opacidad a mitad de camino en vez de un crossfade limpio.
+            return std::max(0.0f, 1.0f - (m_Progress / 0.5f));
         default:
-            return 1.0f;              // Totalmente opaco
+            return 1.0f;
     }
 }
 
@@ -123,9 +130,12 @@ float TransitionPanel::GetIncomingAlpha() const
         case TransitionType::Fade:
         case TransitionType::ZoomIn:
         case TransitionType::ZoomOut:
-            return m_Progress;        // Aparece gradualmente
+            // Segunda mitad de la transicion (progress 0.5 -> 1): el
+            // texto entrante aparece de 0 a 1. Durante la primera mitad
+            // permanece invisible, mientras el saliente termina de irse.
+            return std::max(0.0f, (m_Progress - 0.5f) / 0.5f);
         default:
-            return 1.0f;              // Totalmente opaco
+            return 1.0f;
     }
 }
 

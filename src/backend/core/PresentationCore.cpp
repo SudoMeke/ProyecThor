@@ -61,22 +61,24 @@ LibrarySelection PresentationCore::GetSelection() {
         return m_CurrentSelection;
     }
 
-    void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.currentText   = text;
-        m_State.showText      = !text.empty();
-        m_State.showQuickNote = true;
-        m_State.isProjecting  = true;
-        ++m_StreamVersion;
-    }
+void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.currentText   = text;
+    m_State.showText      = !text.empty();
+    m_State.showQuickNote = true;
+    m_State.isProjecting  = true;
+    ++m_State.transitionTrigger; 
+    ++m_StreamVersion;
+}
 
-    void PresentationCore::ClearQuickNote() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.currentText   = "";
-        m_State.showText      = false;
-        m_State.showQuickNote = false;
-        ++m_StreamVersion;
-    }
+void PresentationCore::ClearQuickNote() {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.currentText   = "";
+    m_State.showText      = false;
+    m_State.showQuickNote = false;
+    ++m_State.transitionTrigger;   // NUEVO
+    ++m_StreamVersion;
+}
 
     void PresentationCore::SetLiveQuickNoteLAN(const std::string& text, const float* /*colorOverride*/) {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -409,6 +411,7 @@ void PresentationCore::SetLayer2_Text(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
+    ++m_State.transitionTrigger;
     ++m_StreamVersion;
 }
 
@@ -416,6 +419,7 @@ void PresentationCore::ClearLayer2() {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = "";
     m_State.showText    = false;
+    ++m_State.transitionTrigger;   // NUEVO
     ++m_StreamVersion;
 }
 
