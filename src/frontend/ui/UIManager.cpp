@@ -1049,7 +1049,20 @@ ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right_top);
 ImGui::DockBuilderDockWindow(str.control,          dock_right_bottom);
         ImGui::DockBuilderDockWindow("Diseño",              dock_main_bottom);
 
-        ImGui::DockBuilderFinish(dockspace_id);
+{
+    ImGuiID leafNodes[] = {
+        dock_left_top, dock_left_bottom,
+        dock_main_top, dock_main_bottom,
+        dock_right_top, dock_right_bottom
+    };
+    for (ImGuiID nodeId : leafNodes)
+    {
+        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
+            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+    }
+}
+
+ImGui::DockBuilderFinish(dockspace_id);
 
         m_FocusControlNextFrame = true;
         ImGuiDockNode* rightBottomNode = ImGui::DockBuilderGetNode(dock_right_bottom);

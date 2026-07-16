@@ -27,13 +27,14 @@ void StylesHubPanel::Render()
         return;
     }
 
-    constexpr float railW  = kIconRailVerticalSize;
-    const float     totalH = ImGui::GetContentRegionAvail().y;
+    constexpr float railH   = kIconRailHorizontalSize;
+    const float     totalW  = ImGui::GetContentRegionAvail().x;
+    const float     totalH  = ImGui::GetContentRegionAvail().y;
 
-    // ── Rail de iconos a la izquierda ────────────────────────────────────────
+    // ── Rail de iconos arriba ────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-    ImGui::BeginChild("##stylesRail", ImVec2(railW, totalH), false,
+    ImGui::BeginChild("##stylesRail", ImVec2(totalW, railH), false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
@@ -46,32 +47,31 @@ void StylesHubPanel::Render()
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Vertical, hubSettings.categoryColor);
+        RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (StylesSection)currentIndex;
     }
 
     ImGui::EndChild();
 
-    // ── Divisor vertical con gradiente ──────────────────────────────────────
-    ImGui::SameLine(0.f, 0.f);
+    // ── Divisor horizontal con gradiente ────────────────────────────────────
     {
         ImVec2      p  = ImGui::GetCursorScreenPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImU32 colTop   = IM_COL32(60, 80, 160,  0);
+        ImU32 colLeft  = IM_COL32(60, 80, 160,  0);
         ImU32 colMid   = IM_COL32(60, 80, 160, 80);
-        ImU32 colBot   = IM_COL32(60, 80, 160,  0);
-        float midY     = p.y + totalH * 0.5f;
-        dl->AddRectFilledMultiColor(p, { p.x + 1.f, midY }, colTop, colTop, colMid, colMid);
-        dl->AddRectFilledMultiColor({ p.x, midY }, { p.x + 1.f, p.y + totalH }, colMid, colMid, colBot, colBot);
+        ImU32 colRight = IM_COL32(60, 80, 160,  0);
+        float midX     = p.x + totalW * 0.5f;
+        dl->AddRectFilledMultiColor(p, { midX, p.y + 1.f }, colLeft, colMid, colMid, colLeft);
+        dl->AddRectFilledMultiColor({ midX, p.y }, { p.x + totalW, p.y + 1.f }, colMid, colRight, colRight, colMid);
+        ImGui::Dummy(ImVec2(totalW, 1.0f));
     }
-    ImGui::SameLine(0.f, 1.0f);
 
     // ── Contenido de la seccion activa ───────────────────────────────────────
     constexpr float kContentMarginX = 18.0f;
     constexpr float kContentMarginY = 16.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kContentMarginX, kContentMarginY));
-    ImGui::BeginChild("##stylesContent", ImVec2(0.f, totalH),
+    ImGui::BeginChild("##stylesContent", ImVec2(0.f, 0.f),
                       ImGuiChildFlags_AlwaysUseWindowPadding);
     ImGui::PopStyleVar();
 
