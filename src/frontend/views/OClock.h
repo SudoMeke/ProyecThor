@@ -19,7 +19,7 @@ enum class OClockTransmitMode {
     Both
 };
 
-// Sentido del conteo.
+// Sentido del conteo (solo aplica en OClockMode::Timer).
 //   CountUp   -> cronómetro clásico: 00:00 -> objetivo (y sigue ascendiendo en overtime).
 //   CountDown -> cuenta regresiva: objetivo -> 00:00 (y sigue ascendiendo el excedente, con signo "-").
 // El cruce de "final" (m_IsOvertime) es el mismo evento en ambos casos: elapsed >= target.
@@ -29,9 +29,33 @@ enum class OClockDirection {
     CountDown
 };
 
+// Modo de operacion general del widget.
+//   Timer     -> cronometro/cuenta regresiva con objetivo (comportamiento original).
+//   WallClock -> muestra la hora actual del dispositivo (reloj de pared), sin
+//                objetivo ni concepto de overtime.
+enum class OClockMode {
+    Timer,
+    WallClock
+};
+
 class OClock {
 public:
     OClock();
+
+    // Recalcula el tiempo interno (si esta en modo Timer y corriendo) y
+    // sincroniza la transmision hacia el proyector/LAN via SyncTransmission().
+    //
+    // IMPORTANTE: esto debe llamarse UNA VEZ POR FRAME desde el tick global
+    // de la aplicacion (junto a las demas actualizaciones "de fondo", ej.
+    // PresentationCore::Get().Update()), SIN IMPORTAR si la pestaña/panel de
+    // OClock esta actualmente visible o no. Render() tambien lo llama
+    // internamente para que el numero mostrado en pantalla este siempre
+    // fresco mientras el panel esta abierto, pero eso NO alcanza por si
+    // solo: si esta llamada global falta, la transmision hacia el publico
+    // se congela apenas el usuario cambia de pestaña, aunque el tiempo
+    // interno siga corriendo bien.
+    void Update();
+
     void Render(GlassRenderer& glass);
 
 private:
@@ -41,15 +65,20 @@ private:
     void ApplyPreset(int minutes);
 
     std::string GetFormattedTime() const;
-    float       GetProgressRatio() const; // 0..1 hasta el objetivo (clamped)
+    float       GetProgressRatio() const; // 0..1 hasta el objetivo (clamped). Solo Timer.
     void        SyncTransmission(const std::string& timeStr);
     void        RenderStyleSelector();
+    void        RenderModeSelector();
     void        RenderDirectionSelector();
+    void        RenderWallClockOptions();
     void        RenderTitleSection();
 
     // ── Título / mensaje sobre el reloj ──────────────────────────────────
     std::string GetCurrentTitle() const;
     void        AdvanceTitle();
+
+    // ── Modo de operacion ─────────────────────────────────────────────────
+    OClockMode m_Mode = OClockMode::Timer;
 
     // ── Lógica de tiempo (cuenta con objetivo, ascendente o descendente) ──
     bool m_IsRunning  = false;
@@ -61,11 +90,15 @@ private:
 
     OClockDirection m_Direction = OClockDirection::CountUp;
 
-    // ── Inputs de usuario ────────────────────────────────────────────────
+    // ── Inputs de usuario (modo Timer) ───────────────────────────────────
     int m_InputMin = 5;
     int m_InputSec = 0;
 
-    // ── Opciones de visualización ───────────────────────────────────────
+    // ── Opciones de formato (modo WallClock) ─────────────────────────────
+    bool m_WallClock24h        = true;
+    bool m_WallClockShowSeconds = true;
+
+    // ── Opciones de visualización (modo Timer) ───────────────────────────
     bool m_ShowProgressBar = true;
     bool m_ShowSignPrefix  = false; // "+45:01" (CountUp) o "-00:15" (CountDown) durante overtime
 
