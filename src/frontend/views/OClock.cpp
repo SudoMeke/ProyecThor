@@ -497,14 +497,9 @@ void OClock::Render(GlassRenderer& glass) {
     // del sistema, nunca se incrementa nada.
     Update();
 
+    (void)glass;
     std::string timeStr = GetFormattedTime();
     float       t       = static_cast<float>(ImGui::GetTime());
-
-    // ── Ventana de vidrio ────────────────────────────────────────────────
-    if (!DS::BeginGlassPanel(str.oclockTitle, glass)) {
-        DS::EndGlassPanel();
-        return;
-    }
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.157f, 0.784f, 0.847f, 1.0f)); // acento cian
     ImGui::TextUnformatted(str.oclockTitle);
@@ -789,8 +784,6 @@ void OClock::Render(GlassRenderer& glass) {
         ImGui::TextUnformatted(str.liveIndicator);
         ImGui::PopStyleColor();
     }
-
-    DS::EndGlassPanel();
 }
 
 } // namespace ProyecThor::UI

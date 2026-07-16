@@ -142,13 +142,65 @@ namespace ProyecThor::Settings {
         };
     };
 
+    // ── Sidebar de Biblioteca (Letra/Video/Imagen/Biblia/Doc/Audio) ──────
+    // Un color de identidad por categoria; el resto del look (fondo activo,
+    // barra lateral, tinte de icono/label) se deriva de este en tiempo real
+    // (ver LibrarySidebar.cpp). Los valores por defecto son los mismos tonos
+    // que ya se usaban hardcodeados, para no cambiar nada hasta que el
+    // usuario decida personalizar.
+    struct LibrarySidebarSettings {
+        float categoryColor[6][4] = {
+            { 0.31f, 0.55f, 1.00f, 1.0f }, // Letra
+            { 0.86f, 0.24f, 0.24f, 1.0f }, // Video
+            { 0.24f, 0.86f, 0.39f, 1.0f }, // Imagen
+            { 0.86f, 0.67f, 0.16f, 1.0f }, // Biblia
+            { 0.65f, 0.31f, 0.94f, 1.0f }, // Documentos
+            { 0.16f, 0.75f, 0.75f, 1.0f }, // Audio
+        };
+    };
+
+    // ── Sidebar de Home (Home/Reloj/Anuncios/Notas/Captura/Transmision) ──
+    // Mismo mecanismo que LibrarySidebarSettings: un color de identidad por
+    // seccion, ver HomeSidebar.cpp.
+    struct HomeSidebarSettings {
+        float categoryColor[6][4] = {
+            { 0.55f, 0.60f, 0.68f, 1.0f }, // Home
+            { 0.95f, 0.75f, 0.20f, 1.0f }, // Reloj y Contadores
+            { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
+            { 0.35f, 0.80f, 0.55f, 1.0f }, // Notas Rapidas
+            { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura
+            { 0.30f, 0.80f, 0.85f, 1.0f }, // Transmision en Red
+        };
+    };
+
+    // ── Sidebar del hub de Control (Control/Stage Display) ───────────────
+    struct ControlHubSettings {
+        float categoryColor[2][4] = {
+            { 0.40f, 0.55f, 0.95f, 1.0f }, // Control
+            { 0.90f, 0.55f, 0.20f, 1.0f }, // Stage Display
+        };
+    };
+
+    // ── Sidebar del hub de Diseño (Fondos/Estilos/Transiciones) ──────────
+    struct StylesHubSettings {
+        float categoryColor[3][4] = {
+            { 0.35f, 0.80f, 0.55f, 1.0f }, // Fondos
+            { 0.65f, 0.31f, 0.94f, 1.0f }, // Estilos
+            { 0.90f, 0.35f, 0.45f, 1.0f }, // Transiciones
+        };
+    };
+
     struct AppSettings {
-        ProjectionSettings    projection;
-        AudioSettings         audio;
-        GeneralSettings       general;
-        ThemeSettings         theme;
-        UpdatesSettings       updates;
-        StageDisplaySettings  stageDisplay;
+        ProjectionSettings     projection;
+        AudioSettings          audio;
+        GeneralSettings        general;
+        ThemeSettings          theme;
+        UpdatesSettings        updates;
+        StageDisplaySettings   stageDisplay;
+        LibrarySidebarSettings librarySidebar;
+        HomeSidebarSettings    homeSidebar;
+        ControlHubSettings     controlHub;
+        StylesHubSettings      stylesHub;
     };
 
     class SettingsManager {

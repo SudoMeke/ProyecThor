@@ -1,6 +1,7 @@
 #include "Announcements.h"
 #include "backend/core/PresentationCore.h"
 #include "frontend/ui/UIStrings.h"
+#include "frontend/ui/DesignSystem.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -10,42 +11,41 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Nota de integración
 //
-//  1. En PreviewPanel.h agrega:
-//       #include "../panels/Announcements.h"
-//       bool          m_ShowAnnouncements = true;
-//       Announcements m_Announcements;
+//  Render(GlassRenderer&) ya NO abre su propia ventana — es contenido de la
+//  sección "Anuncios" del sidebar de HomePanel (ver HomePanel.h/.cpp,
+//  m_Announcements, dispatch en HomePanel::Render()).
 //
-//  2. En PreviewPanel::Render():
-//       if (m_ShowAnnouncements) m_Announcements.Render();
-//
-//  3. En UIManager::RenderAll(), bloque ProjectorLive, antes de ImGui::End():
-//       if (previewPanel && previewPanel->m_Announcements.IsLive()) {
-//           static auto lastTime = std::chrono::steady_clock::now();
-//           auto now = std::chrono::steady_clock::now();
-//           float dt = std::chrono::duration<float>(now - lastTime).count();
-//           lastTime = now;
-//           previewPanel->m_Announcements.RenderOnProjector(
-//               ImGui::GetWindowDrawList(),
-//               (float)mx, (float)my,
-//               (float)mode->width, (float)mode->height, dt);
+//  La salida real al proyector sigue siendo independiente de esto: en
+//  UIManager::RenderAll(), bloque ProjectorLive, se busca el panel "Home" en
+//  m_Panels, se castea a HomePanel* y se llama incondicionalmente (sin
+//  importar que sección del sidebar este activa):
+//       if (homePanel->m_Announcements.IsLive()) {
+//           ... RenderOnProjector(ImGui::GetWindowDrawList(), mx, my, mode->width, mode->height, dt);
 //       }
-//
-//  4. En UIManager::BeginDockspace(), menú Vista:
-//       ImGui::MenuItem("Anuncios", NULL, &previewPanel->m_ShowAnnouncements);
-//
-//  5. En UIManager::BeginDockspace(), DockBuilder:
-//       ImGui::DockBuilderDockWindow("Anuncios", dock_right_bottom);
-//
 // ─────────────────────────────────────────────────────────────────────────────
 
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helpers locales
+//  Helpers locales — mismo patron que ControlPanel.cpp: todos los colores
+//  salen de DS:: (DesignSystem), sincronizado con el tema activo.
 // ─────────────────────────────────────────────────────────────────────────────
 
 static ImU32 AnnColU32(float r, float g, float b, float a = 1.0f) {
     return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, a));
+}
+static ImVec4 ToVec4(ImU32 col) {
+    return ImGui::ColorConvertU32ToFloat4(col);
+}
+static ImU32 ColA(ImU32 col, int a) {
+    return (col & 0x00FFFFFFu) | (static_cast<ImU32>(std::clamp(a, 0, 255)) << 24);
+}
+static ImVec4 Brighten(const ImVec4& c, float amount) {
+    return ImVec4(
+        std::clamp(c.x + amount, 0.0f, 1.0f),
+        std::clamp(c.y + amount, 0.0f, 1.0f),
+        std::clamp(c.z + amount, 0.0f, 1.0f),
+        c.w);
 }
 
 static bool SmallIconButton(const char* label, ImVec2 size,
@@ -246,7 +246,7 @@ void Announcements::RenderOnProjector(void* drawListPtr,
 //  Render  —  panel de control (ImGui)
 // ─────────────────────────────────────────────────────────────────────────────
 
-void Announcements::Render() {
+void Announcements::Render(GlassRenderer& glass) {
     auto& core = Core::PresentationCore::Get();
 
     // ── Delta time interno ─────────────────────────────────────────────────
@@ -259,11 +259,19 @@ void Announcements::Render() {
     m_FirstFrame    = false;
     m_LastFrameTime = std::chrono::steady_clock::now();
 
-    // ── Ventana ────────────────────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
-    ImGui::Begin("Anuncios");
+    // Tokens compartidos con el resto de la app (DS::), sincronizados desde
+    // el tema activo — mismo patron que ControlPanel.cpp.
+    const ImVec4 fillBase    = ToVec4(DS::BtnDefaultFill);
+    const ImVec4 fillHover   = ToVec4(DS::BtnHoverFill);
+    const ImVec4 textSection = ToVec4(DS::TextSecondary);
+    const ImVec4 textSub     = ToVec4(DS::TextHint);
+    const ImVec4 accent      = ToVec4(DS::AccentColor);
+    const ImVec4 accentDim   = ToVec4(DS::AccentColorDim);
+    const ImVec4 danger      = ToVec4(DS::DangerColor);
+    const ImVec4 success     = ToVec4(DS::SuccessColor);
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.60f, 1.0f, 1.0f));
+    (void)glass;
+    ImGui::PushStyleColor(ImGuiCol_Text, accent);
     ImGui::TextUnformatted("Anuncios");
     ImGui::PopStyleColor();
     ImGui::Separator();
@@ -288,9 +296,7 @@ void Announcements::Render() {
         dl->AddRect(
             previewPos,
             ImVec2(previewPos.x + panelW, previewPos.y + previewH),
-            m_IsLive
-                ? AnnColU32(0.35f, 0.50f, 1.0f, 0.7f)
-                : AnnColU32(0.20f, 0.22f, 0.30f, 0.5f),
+            m_IsLive ? ColA(DS::AccentColor, 179) : DS::GlassBorder,
             6.0f, 0, 1.5f);
 
         dl->PushClipRect(
@@ -326,9 +332,7 @@ void Announcements::Render() {
             float textX      = previewPos.x + scrollFrac * panelW;
             float textY      = previewPos.y + (previewH - textSize.y) * 0.5f;
 
-            ImU32 previewTextCol = m_IsLive
-                ? IM_COL32(200, 220, 255, 255)
-                : IM_COL32(130, 140, 160, 255);
+            ImU32 previewTextCol = m_IsLive ? DS::TextPrimary : DS::TextSecondary;
 
             if (m_StyleMode == 1) {
                 previewTextCol = ImGui::ColorConvertFloat4ToU32(
@@ -345,7 +349,7 @@ void Announcements::Render() {
             dl->AddText(
                 ImVec2(previewPos.x + (panelW - phSize.x) * 0.5f,
                        previewPos.y + (previewH - phSize.y) * 0.5f),
-                IM_COL32(80, 85, 100, 200),
+                DS::TextHint,
                 "Sin mensajes habilitados");
         }
 
@@ -361,7 +365,7 @@ void Announcements::Render() {
     //  SECCIÓN: Lista de mensajes
     // ─────────────────────────────────────────────────────────────────────
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.70f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, textSection);
     ImGui::TextUnformatted("Mensajes");
     ImGui::PopStyleColor();
     ImGui::Spacing();
@@ -369,7 +373,7 @@ void Announcements::Render() {
     float listH = std::min(160.0f, (float)m_Messages.size() * 36.0f + 8.0f);
     listH       = std::max(listH, 44.0f);
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.070f, 0.095f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ToVec4(DS::GlassFillBot));
     ImGui::BeginChild("##ann_list", ImVec2(0, listH), true, ImGuiWindowFlags_None);
 
     int toDelete = -1;
@@ -380,9 +384,9 @@ void Announcements::Render() {
 
         bool isActive = (i == m_ActiveIndex);
         if (isActive && m_IsLive) {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.16f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Brighten(accentDim, 0.05f));
         } else {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, fillBase);
         }
 
         ImGui::Checkbox("##en", &m_Messages[i].enabled);
@@ -397,9 +401,7 @@ void Announcements::Render() {
 
         if (i > 0) {
             if (SmallIconButton("^", ImVec2(22, 22),
-                ImVec4(0.14f, 0.15f, 0.22f, 1.0f),
-                ImVec4(0.20f, 0.22f, 0.32f, 1.0f),
-                ImVec4(0.28f, 0.32f, 0.50f, 1.0f))) {
+                fillBase, fillHover, Brighten(fillHover, 0.08f))) {
                 toMoveUp = i;
             }
         } else {
@@ -409,9 +411,7 @@ void Announcements::Render() {
         ImGui::SameLine(0, 4);
 
         if (SmallIconButton("x", ImVec2(22, 22),
-            ImVec4(0.30f, 0.10f, 0.10f, 1.0f),
-            ImVec4(0.50f, 0.15f, 0.15f, 1.0f),
-            ImVec4(0.65f, 0.10f, 0.10f, 1.0f))) {
+            ToVec4(ColA(DS::DangerColor, 77)), ToVec4(ColA(DS::DangerColor, 128)), ToVec4(ColA(DS::DangerColor, 166)))) {
             toDelete = i;
         }
 
@@ -435,10 +435,10 @@ void Announcements::Render() {
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.16f, 0.28f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.22f, 0.38f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.25f, 0.32f, 0.55f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.08f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.08f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
     if (ImGui::Button("+ Agregar mensaje", ImVec2(ImGui::GetContentRegionAvail().x, 28.0f))) {
         Message nm;
@@ -457,14 +457,14 @@ void Announcements::Render() {
     //  SECCIÓN: Animación
     // ─────────────────────────────────────────────────────────────────────
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.70f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, textSection);
     ImGui::TextUnformatted("Animacion");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        fillBase);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, fillHover);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
     int dir = (int)m_Direction;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
@@ -489,7 +489,7 @@ void Announcements::Render() {
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.45f, 0.60f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_CheckMark, accent);
     ImGui::Checkbox("Pausar animacion", &m_Paused);
     ImGui::PopStyleColor();
 
@@ -501,14 +501,14 @@ void Announcements::Render() {
     //  SECCIÓN: Posición y apariencia del banner
     // ─────────────────────────────────────────────────────────────────────
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.70f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, textSection);
     ImGui::TextUnformatted("Posicion y apariencia");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        fillBase);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, fillHover);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     ImGui::Combo("##vpos", &m_VPosition, "Arriba\0Centro\0Abajo\0");
@@ -526,7 +526,7 @@ void Announcements::Render() {
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.45f, 0.60f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_CheckMark, accent);
     ImGui::Checkbox("Mostrar fondo", &m_ShowBg);
     ImGui::PopStyleColor();
 
@@ -552,7 +552,7 @@ void Announcements::Render() {
     //  SECCIÓN: Estilo de texto
     // ─────────────────────────────────────────────────────────────────────
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.70f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, textSection);
     ImGui::TextUnformatted("Estilo de texto");
     ImGui::PopStyleColor();
     ImGui::Spacing();
@@ -564,18 +564,15 @@ void Announcements::Render() {
 
         auto ModeButton = [&](const char* label, int modeValue) {
             bool   active = (m_StyleMode == modeValue);
-            ImVec4 bg     = active ? ImVec4(0.18f, 0.24f, 0.48f, 1.0f)
-                                   : ImVec4(0.10f, 0.11f, 0.15f, 1.0f);
-            ImVec4 bgH    = active ? ImVec4(0.22f, 0.30f, 0.55f, 1.0f)
-                                   : ImVec4(0.14f, 0.15f, 0.21f, 1.0f);
-            ImVec4 textC  = active ? ImVec4(0.55f, 0.75f, 1.0f, 1.0f)
-                                   : ImVec4(0.50f, 0.52f, 0.62f, 1.0f);
+            ImVec4 bg     = active ? accentDim : fillBase;
+            ImVec4 bgH    = active ? Brighten(accentDim, 0.06f) : fillHover;
+            ImVec4 textC  = active ? accent : textSub;
 
             ImGui::PushStyleColor(ImGuiCol_Button,        bg);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bgH);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.28f, 0.36f, 0.65f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.06f));
             ImGui::PushStyleColor(ImGuiCol_Text,          textC);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
             if (ImGui::Button(label, ImVec2(modeW, modeH)))
                 m_StyleMode = modeValue;
@@ -598,7 +595,7 @@ void Announcements::Render() {
         std::vector<std::string> styleNames = core.GetSavedStyleNames();
 
         if (styleNames.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.40f, 0.40f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, Brighten(danger, -0.15f));
             ImGui::TextWrapped("No hay estilos guardados. Usa 'Editar estilo' para crear uno.");
             ImGui::PopStyleColor();
         } else {
@@ -617,9 +614,9 @@ void Announcements::Render() {
             }
             comboItems += '\0';
 
-            ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,        fillBase);
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, fillHover);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 
             if (ImGui::Combo("##stylesel", &currentIdx, comboItems.c_str())) {
@@ -649,7 +646,7 @@ void Announcements::Render() {
                 Core::SavedStyle preview;
                 if (core.GetSavedStyle(std::string(m_AssignedStyleName), preview)) {
                     ImGui::Spacing();
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.60f, 1.0f, 0.8f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(ColA(DS::AccentColor, 204)));
                     ImGui::Text("Estilo: %s  |  %.0f px  |  %s",
                         m_AssignedStyleName, preview.size, preview.fontName.c_str());
                     ImGui::PopStyleColor();
@@ -663,10 +660,10 @@ void Announcements::Render() {
     // ─────────────────────────────────────────────────────────────────────
     else {
         // ── Botón recargar fuentes ────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.20f, 0.22f, 0.30f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        fillBase);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fillHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(fillHover, 0.08f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
         if (ImGui::Button("Recargar fuentes##ann", ImVec2(ImGui::GetContentRegionAvail().x, 24.0f))) {
             SyncFontList();
         }
@@ -676,7 +673,7 @@ void Announcements::Render() {
         ImGui::Spacing();
 
         // ── Fuente ────────────────────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.58f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, textSub);
         ImGui::TextUnformatted("Fuente");
         ImGui::PopStyleColor();
 
@@ -690,15 +687,15 @@ void Announcements::Render() {
             }
             fontComboItems += '\0';
 
-            ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,        fillBase);
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, fillHover);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
             ImGui::Combo("##fontsel", &m_SelectedFontIndex, fontComboItems.c_str());
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(2);
         } else {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.40f, 0.40f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, Brighten(danger, -0.15f));
             ImGui::TextUnformatted("No hay fuentes cargadas. Presiona 'Recargar fuentes'.");
             ImGui::PopStyleColor();
         }
@@ -706,7 +703,7 @@ void Announcements::Render() {
         ImGui::Spacing();
 
         // ── Tamaño de fuente ──────────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.58f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, textSub);
         ImGui::TextUnformatted("Tamanio (px a 1920px de ancho)");
         ImGui::PopStyleColor();
 
@@ -715,11 +712,11 @@ void Announcements::Render() {
             float sliderW = availW * 0.70f - 4.0f;
             float inputW  = availW * 0.30f - 4.0f;
 
-            ImGui::PushStyleColor(ImGuiCol_FrameBg,          ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,   ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_SliderGrab,       ImVec4(0.35f, 0.50f, 1.0f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.45f, 0.60f, 1.0f, 1.00f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,          fillBase);
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,   fillHover);
+            ImGui::PushStyleColor(ImGuiCol_SliderGrab,       accent);
+            ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Brighten(accent, 0.08f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
             ImGui::SetNextItemWidth(sliderW);
             ImGui::SliderFloat("##fontSize", &m_FontSize, 12.0f, 300.0f, "%.0f px");
@@ -735,7 +732,7 @@ void Announcements::Render() {
         ImGui::Spacing();
 
         // ── Color del texto ───────────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.58f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, textSub);
         ImGui::TextUnformatted("Color del texto");
         ImGui::PopStyleColor();
 
@@ -747,10 +744,10 @@ void Announcements::Render() {
         ImGui::Spacing();
 
         // ── Botón guardar este estilo con nombre ──────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.22f, 0.40f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.28f, 0.52f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.10f, 0.18f, 0.32f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.08f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.08f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
         if (ImGui::Button("Guardar como estilo...##annSave",
                           ImVec2(ImGui::GetContentRegionAvail().x, 28.0f))) {
@@ -767,14 +764,14 @@ void Announcements::Render() {
         // ── Popup de guardado ──────────────────────────────────────────────
         ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_Always);
         if (ImGui::BeginPopup("##ann_save_popup")) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.70f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, textSection);
             ImGui::TextUnformatted("Nombre del estilo:");
             ImGui::PopStyleColor();
             ImGui::Spacing();
 
-            ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.10f, 0.11f, 0.15f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.15f, 0.21f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,        fillBase);
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, fillHover);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
             ImGui::SetNextItemWidth(300.0f);
             ImGui::InputText("##annSaveName", m_SaveStyleName, sizeof(m_SaveStyleName));
             ImGui::PopStyleVar();
@@ -787,10 +784,10 @@ void Announcements::Render() {
             if (!nameOk)
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.45f);
 
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.22f, 0.55f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.30f, 0.70f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.10f, 0.16f, 0.42f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.1f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.1f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
             if (ImGui::Button("Guardar##annSaveBtn", ImVec2(144.0f, 28.0f)) && nameOk) {
                 // Construir el SavedStyle con los valores inline actuales.
@@ -832,10 +829,10 @@ void Announcements::Render() {
 
             ImGui::SameLine(0, 8);
 
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.14f, 0.15f, 0.20f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.22f, 0.30f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.10f, 0.11f, 0.16f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button,        fillBase);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fillHover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(fillHover, -0.05f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
             if (ImGui::Button("Cancelar##annCancelBtn", ImVec2(144.0f, 28.0f)))
                 ImGui::CloseCurrentPopup();
@@ -858,12 +855,12 @@ void Announcements::Render() {
     float btnW = ImGui::GetContentRegionAvail().x;
     float btnH = 38.0f;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
 
     if (!m_IsLive) {
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.22f, 0.55f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.30f, 0.70f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.10f, 0.16f, 0.42f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.1f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.1f));
 
         if (ImGui::Button("Transmitir anuncios", ImVec2(btnW, btnH))) {
             m_IsLive       = true;
@@ -882,9 +879,9 @@ void Announcements::Render() {
     } else {
         float halfBtn = (btnW - 8.0f) * 0.5f;
 
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.15f, 0.15f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.20f, 0.20f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.42f, 0.10f, 0.10f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        Brighten(danger, -0.1f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(danger, 0.05f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(danger, -0.2f));
 
         if (ImGui::Button("Detener", ImVec2(halfBtn, btnH))) {
             m_IsLive = false;
@@ -894,6 +891,9 @@ void Announcements::Render() {
         ImGui::PopStyleColor(3);
         ImGui::SameLine(0, 8);
 
+        // "Pausar"/"Reanudar" son indicadores tipo semaforo (ambar/verde) —
+        // se mantienen literales a proposito, igual que el boton de Mute en
+        // ControlPanel, en vez de derivarse del acento del tema.
         if (!m_Paused) {
             ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.50f, 0.38f, 0.08f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.50f, 0.10f, 1.0f));
@@ -901,26 +901,26 @@ void Announcements::Render() {
             if (ImGui::Button("Pausar", ImVec2(halfBtn, btnH))) m_Paused = true;
             ImGui::PopStyleColor(3);
         } else {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.35f, 0.18f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.48f, 0.24f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.08f, 0.26f, 0.12f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button,        Brighten(success, -0.25f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(success, -0.1f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(success, -0.35f));
             if (ImGui::Button("Reanudar", ImVec2(halfBtn, btnH))) m_Paused = false;
             ImGui::PopStyleColor(3);
         }
 
         ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.30f, 0.30f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, danger);
         ImGui::TextUnformatted("●");
         ImGui::PopStyleColor();
         ImGui::SameLine(0, 4);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.88f, 0.95f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextPrimary));
         ImGui::TextUnformatted(m_Paused ? "EN PAUSA" : "EN VIVO");
         ImGui::PopStyleColor();
 
         const std::string& currentMsg = GetCurrentMessage();
         if (!currentMsg.empty()) {
             ImGui::SameLine(0, 12);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.50f, 0.65f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, textSub);
             std::string display = currentMsg.size() > 28
                                   ? currentMsg.substr(0, 25) + "..."
                                   : currentMsg;
@@ -930,9 +930,6 @@ void Announcements::Render() {
     }
 
     ImGui::PopStyleVar();
-
-    ImGui::End();
-    ImGui::PopStyleColor();
 }
 
 } // namespace ProyecThor::UI

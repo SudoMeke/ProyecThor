@@ -40,10 +40,7 @@ static bool TemplateButton(const char* id, const char* label, bool active, float
     return clicked;
 }
 
-void StageDisplayPanel::Render() {
-    bool open = ImGui::Begin(GetName().c_str());
-    if (!open) { ImGui::End(); return; }
-
+void StageDisplayPanel::RenderContent() {
     ImGui::TextDisabled("Configura que ve el equipo en el escenario a traves del Monitor de Control.");
     ImGui::Spacing();
     ImGui::Separator();
@@ -54,8 +51,6 @@ void StageDisplayPanel::Render() {
     RenderCellPreview();
     ImGui::Spacing();
     RenderCellAssignments();
-
-    ImGui::End();
 }
 
 void StageDisplayPanel::RenderTemplateSelector() {

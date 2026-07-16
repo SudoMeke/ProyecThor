@@ -160,9 +160,6 @@ void QuickNotes::Render() {
         }
     }
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
-    ImGui::Begin(str.quickNotesTitle);
-
     bool isLive = (m_TransmitMode != QuickNoteTransmitMode::Off);
 
     if (isLive) {
@@ -223,9 +220,6 @@ void QuickNotes::Render() {
 
     if (textChanged || forceUpdate)
         SyncTransmission();
-
-    ImGui::End();
-    ImGui::PopStyleColor(); // WindowBg
 }
 
 } // namespace ProyecThor::UI

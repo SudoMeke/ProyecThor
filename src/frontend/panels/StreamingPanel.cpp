@@ -188,7 +188,7 @@ static int DesiredCaptureFPS(const Core::StreamConfig& cfg)
     }
 }
 
-void StreamingPanel::Render()
+void StreamingPanel::Update()
 {
     auto& core  = Core::PresentationCore::Get();
     auto  state = core.GetState();
@@ -208,28 +208,23 @@ void StreamingPanel::Render()
         RebuildQRTexture(state.networkURL);
     else if (!m_QRCachedURL.empty())
         RebuildQRTexture("");
+}
 
+void StreamingPanel::RenderContent()
+{
+    auto& core  = Core::PresentationCore::Get();
+    auto  state = core.GetState();
 
-    // Configuración limpia del contenedor principal sin forzar espaciados rotos
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, kSurface);
+    // Activamos la región del Child permitiendo scroll automático
     ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0,0,0,0));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ColA(kGrayText, 0.2f));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ColA(kAccent, 0.5f));
-
-    bool open = ImGui::Begin("Transmisión en Red", nullptr, ImGuiWindowFlags_NoCollapse);
-    ImGui::PopStyleColor(4);
-
-    if (!open) { ImGui::End(); return; }
-
-    // Aplicamos el padding de forma nativa a la subregión de Scroll
-    const float PAD = 24.0f;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(PAD, PAD));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(10.0f, 10.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6.0f);
 
-    // Activamos la región del Child permitiendo scroll automático
     ImGui::BeginChild("##scroll_area", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None);
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(3);
 
     RenderServerControl();
     RenderLayerSelector();
@@ -241,7 +236,6 @@ void StreamingPanel::Render()
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f)); // Espacio final respiratorio
     ImGui::EndChild();
-    ImGui::End();
 }
 
 // ── RenderServerControl ───────────────────────────────────────────────────────

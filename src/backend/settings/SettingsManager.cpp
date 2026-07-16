@@ -8,7 +8,6 @@
 #include <cstdlib>
 #include "MonitorTheme.h" 
 #include "HubTheme.h"
-#include "ControlTheme.h"
 
 using json = nlohmann::json;
 
@@ -342,9 +341,8 @@ void SettingsManager::ApplyTheme() {
     }
 
     ProyecThor::UI::DS::SyncFromTheme(t);
-    ProyecThor::UI::MonitorTheme::Sync(t); 
-     ProyecThor::UI::HubTheme::Sync(t); 
-     ProyecThor::UI::ControlTheme::Sync(t);
+    ProyecThor::UI::MonitorTheme::Sync(t);
+     ProyecThor::UI::HubTheme::Sync(t);
 }
 
 // ── Persistencia ─────────────────────────────────────────────────────────
@@ -380,6 +378,26 @@ void SettingsManager::SaveSettings() {
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
     for (int i = 0; i < kStageMaxCells; i++)
         j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
+
+    const auto& lsb = m_Settings.librarySidebar;
+    for (int i = 0; i < 6; i++)
+        for (int c = 0; c < 4; c++)
+            j["librarySidebar"]["categoryColor"][i][c] = lsb.categoryColor[i][c];
+
+    const auto& hsb = m_Settings.homeSidebar;
+    for (int i = 0; i < 6; i++)
+        for (int c = 0; c < 4; c++)
+            j["homeSidebar"]["categoryColor"][i][c] = hsb.categoryColor[i][c];
+
+    const auto& chs = m_Settings.controlHub;
+    for (int i = 0; i < 2; i++)
+        for (int c = 0; c < 4; c++)
+            j["controlHub"]["categoryColor"][i][c] = chs.categoryColor[i][c];
+
+    const auto& shs = m_Settings.stylesHub;
+    for (int i = 0; i < 3; i++)
+        for (int c = 0; c < 4; c++)
+            j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -478,6 +496,50 @@ void SettingsManager::LoadSettings() {
                 const auto& arr = jsd["cellWidget"];
                 for (int i = 0; i < kStageMaxCells && i < (int)arr.size(); i++)
                     sd.cellWidget[i] = arr[i].get<int>();
+            }
+        }
+
+        if (j.contains("librarySidebar")) {
+            auto& lsb = m_Settings.librarySidebar;
+            const auto& jlsb = j["librarySidebar"];
+            if (jlsb.contains("categoryColor") && jlsb["categoryColor"].is_array()) {
+                const auto& arr = jlsb["categoryColor"];
+                for (int i = 0; i < 6 && i < (int)arr.size(); i++)
+                    for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
+                        lsb.categoryColor[i][c] = arr[i][c].get<float>();
+            }
+        }
+
+        if (j.contains("homeSidebar")) {
+            auto& hsb = m_Settings.homeSidebar;
+            const auto& jhsb = j["homeSidebar"];
+            if (jhsb.contains("categoryColor") && jhsb["categoryColor"].is_array()) {
+                const auto& arr = jhsb["categoryColor"];
+                for (int i = 0; i < 6 && i < (int)arr.size(); i++)
+                    for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
+                        hsb.categoryColor[i][c] = arr[i][c].get<float>();
+            }
+        }
+
+        if (j.contains("controlHub")) {
+            auto& chs = m_Settings.controlHub;
+            const auto& jchs = j["controlHub"];
+            if (jchs.contains("categoryColor") && jchs["categoryColor"].is_array()) {
+                const auto& arr = jchs["categoryColor"];
+                for (int i = 0; i < 2 && i < (int)arr.size(); i++)
+                    for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
+                        chs.categoryColor[i][c] = arr[i][c].get<float>();
+            }
+        }
+
+        if (j.contains("stylesHub")) {
+            auto& shs = m_Settings.stylesHub;
+            const auto& jshs = j["stylesHub"];
+            if (jshs.contains("categoryColor") && jshs["categoryColor"].is_array()) {
+                const auto& arr = jshs["categoryColor"];
+                for (int i = 0; i < 3 && i < (int)arr.size(); i++)
+                    for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
+                        shs.categoryColor[i][c] = arr[i][c].get<float>();
             }
         }
 

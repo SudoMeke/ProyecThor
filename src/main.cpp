@@ -1,4 +1,3 @@
-#include "StreamingPanel.h"
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #endif
@@ -32,14 +31,11 @@
 #include "PresentationCore.h"
 #include "ui/UIManager.h"
 #include "frontend/panels/LibraryPanel.h"
-#include "frontend/panels/PreviewPanel.h"
+#include "frontend/panels/HomePanel.h"
 #include "frontend/panels/ControlPanel.h"
-#include "frontend/panels/StageDisplayPanel.h"
-#include "frontend/panels/capture/CapturePanel.h"
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
-#include "frontend/panels/BackgroundsPanel.h"
-#include "frontend/panels/CanvasStylesPanel.h"
+#include "frontend/panels/StylesHubPanel.h"
 
 #ifdef _WIN32
     #pragma comment(lib, "dwmapi.lib")
@@ -705,22 +701,20 @@ ImGui::StyleColorsDark();
     }
     std::cerr << "[DIAG] uiManager.Initialize() OK\n";
 
-    auto previewPanel = std::make_shared<ProyecThor::UI::PreviewPanel>();
+    auto homePanel    = std::make_shared<ProyecThor::UI::HomePanel>();
     auto libraryPanel = std::make_shared<ProyecThor::UI::LibraryPanel>();
-previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
-    previewPanel->m_UIManagerRef = &uiManager;
+homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
+    homePanel->m_UIManagerRef = &uiManager;
     libraryPanel->SetUIManager(&uiManager);
 
     uiManager.AddPanel(libraryPanel);
-    uiManager.AddPanel(previewPanel);
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::CapturePanel>());
+    uiManager.AddPanel(homePanel);
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::ControlPanel>(&uiManager));
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::StageDisplayPanel>());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::BackgroundsPanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::CanvasStylesPanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::StreamingPanel>());
-    uiManager.AddPanel(uiManager.GetTransitionPanelOwned());
+
+    auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
+    stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
+    uiManager.AddPanel(stylesHub);
     std::cerr << "[DIAG] Todos los paneles agregados OK\n";
 
     {

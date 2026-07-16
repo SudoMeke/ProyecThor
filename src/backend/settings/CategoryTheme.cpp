@@ -1,6 +1,7 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include <imgui.h>
+#include <string>
 
 namespace ProyecThor::UI::Settings {
 
@@ -118,6 +119,86 @@ void SettingsPanel::RenderCategoryTheme() {
     if (changed) {
         theme.preset = ThemePreset::Custom;
         ProyecThor::Settings::SettingsManager::Get().ApplyTheme(); // preview en vivo
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 15.0f));
+
+    // ── Colores de categorías (sidebar de Biblioteca) ───────────────────────
+    // Independiente del tema general: solo afecta el color de identidad de
+    // cada categoría en el sidebar izquierdo de la Biblioteca (Letra/Video/
+    // Imagen/Biblia/Documentos/Audio). Ver LibrarySidebar.cpp.
+    SectionTitle("Colores de categorías (Biblioteca)");
+    ImGui::TextDisabled("Color de identidad de cada categoría en el sidebar de la Biblioteca.");
+    ImGui::Spacing();
+
+    auto& sidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+    static const char* kCatLabels[6] = { "Letra", "Video", "Imagen", "Biblia", "Documentos", "Audio" };
+    bool sidebarChanged = false;
+    for (int i = 0; i < 6; i++) {
+        std::string id = std::string(kCatLabels[i]) + "##libcat" + std::to_string(i);
+        sidebarChanged |= ImGui::ColorEdit4(id.c_str(), sidebar.categoryColor[i], flags);
+    }
+    if (sidebarChanged) {
+        ProyecThor::Settings::SettingsManager::Get().Save();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 15.0f));
+
+    // ── Colores de categorías (sidebar de Home) ─────────────────────────────
+    // Independiente del tema general: solo afecta el color de identidad de
+    // cada sección en el sidebar de Home (Home/Reloj/Anuncios/Notas/Captura/
+    // Transmisión). Ver HomeSidebar.cpp.
+    SectionTitle("Colores de categorías (Home)");
+    ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Home.");
+    ImGui::Spacing();
+
+    auto& homeSidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().homeSidebar;
+    static const char* kHomeCatLabels[6] = {
+        "Home", "Reloj y Contadores", "Anuncios", "Notas Rápidas", "Captura", "Transmisión en Red"
+    };
+    bool homeSidebarChanged = false;
+    for (int i = 0; i < 6; i++) {
+        std::string id = std::string(kHomeCatLabels[i]) + "##homecat" + std::to_string(i);
+        homeSidebarChanged |= ImGui::ColorEdit4(id.c_str(), homeSidebar.categoryColor[i], flags);
+    }
+    if (homeSidebarChanged) {
+        ProyecThor::Settings::SettingsManager::Get().Save();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 15.0f));
+
+    // ── Colores de categorías (hub de Control) ──────────────────────────────
+    SectionTitle("Colores de categorías (Control)");
+    ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Control.");
+    ImGui::Spacing();
+
+    auto& controlHub = ProyecThor::Settings::SettingsManager::Get().GetSettings().controlHub;
+    static const char* kControlCatLabels[2] = { "Control", "Stage Display" };
+    bool controlHubChanged = false;
+    for (int i = 0; i < 2; i++) {
+        std::string id = std::string(kControlCatLabels[i]) + "##controlcat" + std::to_string(i);
+        controlHubChanged |= ImGui::ColorEdit4(id.c_str(), controlHub.categoryColor[i], flags);
+    }
+    if (controlHubChanged) {
+        ProyecThor::Settings::SettingsManager::Get().Save();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 15.0f));
+
+    // ── Colores de categorías (hub de Diseño) ───────────────────────────────
+    SectionTitle("Colores de categorías (Diseño)");
+    ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Diseño.");
+    ImGui::Spacing();
+
+    auto& stylesHub = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
+    static const char* kStylesCatLabels[3] = { "Fondos", "Estilos", "Transiciones" };
+    bool stylesHubChanged = false;
+    for (int i = 0; i < 3; i++) {
+        std::string id = std::string(kStylesCatLabels[i]) + "##stylescat" + std::to_string(i);
+        stylesHubChanged |= ImGui::ColorEdit4(id.c_str(), stylesHub.categoryColor[i], flags);
+    }
+    if (stylesHubChanged) {
+        ProyecThor::Settings::SettingsManager::Get().Save();
     }
 }
 

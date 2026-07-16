@@ -5,11 +5,13 @@
 
 namespace ProyecThor::UI {
 
+class GlassRenderer; // fwd decl (ver GlassRenderer.h)
+
 class Announcements {
 public:
     Announcements();
 
-    void Render();
+    void Render(GlassRenderer& glass);
 
     void RenderOnProjector(void* drawList,
                            float screenX, float screenY,

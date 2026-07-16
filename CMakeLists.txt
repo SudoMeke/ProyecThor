@@ -74,6 +74,7 @@ file(GLOB PREVIEW_DOC_SOURCES       CONFIGURE_DEPENDS "src/frontend/views/docume
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/preview/monitors/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_image_write_impl.cpp")
 file(GLOB FRONTEND_BIBLIO_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/biblio/*.cpp")
+file(GLOB FRONTEND_HOME_SOURCES     CONFIGURE_DEPENDS "src/frontend/panels/home/*.cpp")
 # -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -114,6 +115,7 @@ if(WIN32)
     add_executable(ProyecThor WIN32
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
+        ${FRONTEND_HOME_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -143,6 +145,7 @@ else()
     add_executable(ProyecThor
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
+        ${FRONTEND_HOME_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -216,6 +219,7 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/toolbar"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/biblio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/home"
     # EXTERNAS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/external/tools"
     "${IMGUI_DIR}"

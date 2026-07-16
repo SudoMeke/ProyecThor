@@ -838,18 +838,7 @@ void CapturePanel::RenderProjectButton() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Render principal
 // ─────────────────────────────────────────────────────────────────────────────
-void CapturePanel::Render() {
-    if (!m_ShowCapture) return;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 14.0f));
-    bool open = ImGui::Begin("Captura", &m_ShowCapture);
-    ImGui::PopStyleVar();
-
-    if (!open) {
-        ImGui::End();
-        return;
-    }
-
+void CapturePanel::RenderContent() {
     // ── Cabecera con botón de actualizar ─────────────────────────────────
     DS::GlassSectionHeader("FUENTE DE CAPTURA");
     ImGui::SameLine();
@@ -867,7 +856,5 @@ void CapturePanel::Render() {
 
     RenderControls();
     RenderProjectButton();
-
-    ImGui::End();
 }
 } // namespace ProyecThor::UI

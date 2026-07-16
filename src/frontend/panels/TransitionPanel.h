@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../IPanel.h"
 #include <string>
 
 namespace ProyecThor::UI {
@@ -25,13 +24,17 @@ enum class TransitionType
     UncoverDown     // El anterior sale hacia abajo revelando el nuevo
 };
 
-class TransitionPanel : public IPanel {
+// Ya no es un IPanel independiente: vive como seccion del sidebar del hub de
+// Diseño (ver StylesHubPanel.h/.cpp). El ciclo de vida real (Update/Trigger,
+// llamados incondicionalmente cada frame para el crossfade del proyector)
+// sigue viviendo en UIManager, sin cambios — ver UIManager.h/.cpp.
+class TransitionPanel {
 public:
     TransitionPanel() = default;
-    ~TransitionPanel() override = default;
+    ~TransitionPanel() = default;
 
-    std::string GetName() const override { return "Transiciones"; }
-    void Render() override;
+    std::string GetName() const { return "Transiciones"; }
+    void RenderContent();
 
     float GetDuration() const { return m_Duration; }
 

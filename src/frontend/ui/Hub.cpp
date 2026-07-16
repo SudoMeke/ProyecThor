@@ -50,7 +50,7 @@ struct UpdateVersionInfo {
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         6, "0.3.5",
-        " ACTUALIZACION MAYOR ", "ACTUALIZACION MAYOR",
+        " ACTUALIZACION ", "ACTUALIZACION",
         "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
         "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
         "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "

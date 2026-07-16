@@ -1,5 +1,4 @@
 #pragma once
-#include "IPanel.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -16,13 +15,15 @@ struct BgEntry {
 
 class LayersBgTab; // Tu clase original que renderiza los fondos
 
-class BackgroundsPanel : public IPanel {
+// Ya no es un IPanel independiente: vive como seccion del sidebar del hub de
+// Diseño (ver StylesHubPanel.h/.cpp).
+class BackgroundsPanel {
 public:
     BackgroundsPanel();
-    ~BackgroundsPanel() override;
+    ~BackgroundsPanel();
 
-    void Render() override;
-    std::string GetName() const override { return "Fondos"; }
+    void RenderContent();
+    std::string GetName() const { return "Fondos"; }
 
 private:
     std::unique_ptr<LayersBgTab> m_BgTab;

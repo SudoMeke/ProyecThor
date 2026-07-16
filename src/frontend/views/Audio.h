@@ -62,7 +62,7 @@ public:
     // Vista de biblioteca (lista de pistas + header)
     void RenderLibraryList();
 
-    // Vista del reproductor (disco, controles, EQ) — se usa en PreviewPanel
+    // Vista del reproductor (disco, controles, EQ) — se usa en HomePanel
     void RenderPlayerView();
 
     // ── Proyeccion en pantalla completa ──────────────────────────────────

@@ -204,10 +204,8 @@ namespace {
 struct TypeOption { TransitionType type; const char* label; const char* desc; };
 struct TransitionCategory { const char* title; std::vector<TypeOption> options; };
 
-void TransitionPanel::Render()
+void TransitionPanel::RenderContent()
 {
-    ImGui::Begin(GetName().c_str());
-
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     // ── Titulo ────────────────────────────────────────────────────────────
@@ -432,8 +430,6 @@ void TransitionPanel::Render()
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(kTextFaint));
     ImGui::TextWrapped("%s", str.transTip);
     ImGui::PopStyleColor();
-
-    ImGui::End();
 }
 
 } // namespace ProyecThor::UI

@@ -1,5 +1,4 @@
 #pragma once
-#include "../IPanel.h"
 #include "backend/core/NetworkStreamServer.h"
 #include <string>
 #include <vector>
@@ -8,13 +7,23 @@
 
 namespace ProyecThor::UI {
 
-class StreamingPanel : public IPanel {
+// Ya no es un IPanel independiente: ahora vive como contenido de una de las
+// secciones del sidebar de HomePanel ("Transmisión en Red"). Ver HomePanel.cpp.
+class StreamingPanel {
 public:
     StreamingPanel()  = default;
-    ~StreamingPanel() override = default;
+    ~StreamingPanel() = default;
 
-    void        Render() override;
-    std::string GetName() const override { return "Transmisión en Red"; }
+    // Debe llamarse UNA VEZ POR FRAME sin importar que seccion de Home este
+    // activa: mantiene vivo el envio de frames/QR al stream LAN aunque el
+    // operador este mirando otra pestaña (ver captura de estado en el plan).
+    void Update();
+
+    // Dibuja los controles (solo cuando la seccion "Transmisión en Red" esta
+    // activa). Ya no abre su propia ventana — HomePanel es dueño de esa.
+    void RenderContent();
+
+    std::string GetName() const { return "Transmisión en Red"; }
 
 private:
     void RenderServerControl();

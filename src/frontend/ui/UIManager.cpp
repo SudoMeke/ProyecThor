@@ -2,7 +2,7 @@
 #include "UIManager.h"
 #include "backend/core/PresentationCore.h"
 #include "../toolbar/ConfigPanel.h"
-#include "panels/PreviewPanel.h"
+#include "panels/HomePanel.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -13,8 +13,6 @@
 #include "UIStrings.h"
 #include "frontend/views/Announcements.h"
 #include "Hub.h"
-#include "panels/BackgroundsPanel.h"
-#include "panels/CanvasStylesPanel.h"
 #include "frontend/panels/StreamingPanel.h"
 #include "qrcodegen.hpp"
 #include "backend/settings/SettingsManager.h"
@@ -565,32 +563,26 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                     annDt = std::min(annDt, 0.1f);
 
                     for (auto& p : m_Panels) {
-                        if (p->GetName() == "PreviewPanel") {
-                            auto* previewPanel =
-                                static_cast<ProyecThor::UI::PreviewPanel*>(p.get());
+                        if (p->GetName() == "Home") {
+                            auto* homePanel =
+                                static_cast<ProyecThor::UI::HomePanel*>(p.get());
 
-                            if (previewPanel->m_Announcements.IsLive()) {
-                                previewPanel->m_Announcements.RenderOnProjector(
+                            if (homePanel->m_Announcements.IsLive()) {
+                                homePanel->m_Announcements.RenderOnProjector(
                                     drawList,
                                     (float)mx, (float)my,
                                     (float)mode->width, (float)mode->height,
                                     annDt);
                             }
+
+                            // CapturePanel ya no es un IPanel propio: vive
+                            // adentro de HomePanel (seccion "Captura").
+                            homePanel->GetCapturePanel().RenderOnProjector(
+                                drawList,
+                                (float)mx, (float)my,
+                                (float)mode->width, (float)mode->height);
                             break;
                         }
-                    }
-                }
-
-                // CapturePanel
-                for (auto& p : m_Panels) {
-                    if (p->GetName() == "CapturePanel") {
-                        auto* capturePanel =
-                            static_cast<ProyecThor::UI::CapturePanel*>(p.get());
-                        capturePanel->RenderOnProjector(
-                            drawList,
-                            (float)mx, (float)my,
-                            (float)mode->width, (float)mode->height);
-                        break;
                     }
                 }
 
@@ -921,21 +913,6 @@ ImGui::Spacing();
                 OpenHub();
 
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
-            ImGui::Separator();
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-
-            for (auto& panel : m_Panels) {
-                if (panel->GetName() == "PreviewPanel") {
-                    auto* previewPanel = static_cast<ProyecThor::UI::PreviewPanel*>(panel.get());
-                    ImGui::MenuItem(str.oclockTitle,     NULL, &previewPanel->m_ShowOClock);
-                    ImGui::MenuItem(str.quickNotesTitle, NULL, &previewPanel->m_ShowQuickNotes);
-                    ImGui::MenuItem("Anuncios",           NULL, &previewPanel->m_ShowAnnouncements);
-                    break;
-                }
-            }
-            ImGui::Spacing();
             ImGui::EndMenu();
         }
 
@@ -1059,22 +1036,18 @@ void UIManager::BeginDockspace()
         ImGuiID dock_main_top, dock_main_bottom;
         ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
 ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
-ImGui::DockBuilderDockWindow(str.quickNotesTitle,  dock_main_top);
-ImGui::DockBuilderDockWindow(str.preview,          dock_main_top);
-ImGui::DockBuilderDockWindow(str.oclockTitle,      dock_main_top);
-ImGui::DockBuilderDockWindow("Anuncios",           dock_main_top);
+// Home reemplaza a los 6 paneles sueltos que antes vivian aca como pestañas
+// nativas de ImGui (Preview/OClock/Anuncios/Notas Rapidas/Captura/
+// Transmision en Red) — ahora son secciones de un sidebar de iconos dentro
+// de un unico panel "Home" (ver HomePanel.cpp).
+ImGui::DockBuilderDockWindow("Home",               dock_main_top);
 ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right_top);
-ImGui::DockBuilderDockWindow("Captura",            dock_main_top);
-// Control se registra PRIMERO en dock_right_bottom, para que sea la
-// pestaña que abre por defecto sin depender solo del override manual
-// de abajo (rightBottomNode->SelectedTabId). Estilos/Fondos/Transiciones
-// van despues, sin ninguna prioridad implicita entre ellas.
+// Control ahora es el hub de Control + Stage Display (rail de iconos a la
+// derecha, ver ControlPanel.cpp), y "Diseño" el hub de Fondos + Estilos +
+// Transiciones (rail a la izquierda, ver StylesHubPanel.cpp) — cada grupo
+// que antes eran pestañas nativas de ImGui separadas ahora es un único panel.
 ImGui::DockBuilderDockWindow(str.control,          dock_right_bottom);
-ImGui::DockBuilderDockWindow("Estilos",            dock_right_bottom);
-ImGui::DockBuilderDockWindow("Fondos",             dock_right_bottom);
-ImGui::DockBuilderDockWindow("Transiciones",       dock_right_bottom);
-        ImGui::DockBuilderDockWindow("Transmisión en Red", dock_main_top);
-        ImGui::DockBuilderDockWindow("Stage Display",      dock_main_top);
+        ImGui::DockBuilderDockWindow("Diseño",              dock_main_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
 

@@ -1,6 +1,5 @@
 #pragma once
-#include <imgui.h>  
-#include "../IPanel.h"
+#include <imgui.h>
 #include <string>
 #include <vector>
 #include <memory>
@@ -29,14 +28,17 @@ struct CaptureSource {
 // ─────────────────────────────────────────────────────────────────────────────
 //  CapturePanel
 // ─────────────────────────────────────────────────────────────────────────────
-class CapturePanel : public IPanel {
+// Ya no es un IPanel independiente: vive como la sección "Captura" del
+// sidebar de HomePanel. Ver HomePanel.cpp.
+class CapturePanel {
 public:
     CapturePanel();
-    ~CapturePanel() override;
+    ~CapturePanel();
 
-    // ── IPanel ───────────────────────────────────────────────────────────────
-    void        Render()   override;
-    std::string GetName()  const override { return "CapturePanel"; }
+    // Dibuja los controles (solo cuando la seccion "Captura" esta activa).
+    // Ya no abre su propia ventana — HomePanel es dueño de esa.
+    void        RenderContent();
+    std::string GetName()  const { return "Captura"; }
 
     // ── Control público ──────────────────────────────────────────────────────
 
@@ -47,9 +49,6 @@ public:
                                   float pw, float ph);
 
     bool        IsLive()   const { return m_IsCapturing; }
-
-    // ── Visibilidad ──────────────────────────────────────────────────────────
-    bool m_ShowCapture = true;
 
 private:
     // ── Enumeración de fuentes ───────────────────────────────────────────────
