@@ -600,9 +600,14 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
     }
 
     // ── Stage Display (Monitor de Control) ────────────────────────────────────
-    if (Core::PresentationCore::Get().IsStageWindowActive())
+    // Nota: el Stage fisico ya NO usa la ventana secundaria cruda
+    // (CreateStageWindow/RenderStageContent, que solo pintaba gris) — este
+    // viewport ImGui es la unica ventana real para el Stage, gateado por
+    // state.isStaging/state.stageMonitorIndex en vez de IsStageWindowActive(),
+    // para no competir por z-order con ninguna otra ventana sobre el mismo monitor.
+    if (state.isStaging)
     {
-        int stageMonitorIdx = Core::PresentationCore::Get().GetSecondaryWindowMonitor("stage");
+        int stageMonitorIdx = state.stageMonitorIndex;
         int stageMonitorCount = 0;
         GLFWmonitor** stageMonitors = glfwGetMonitors(&stageMonitorCount);
 
@@ -1069,6 +1074,7 @@ ImGui::DockBuilderDockWindow("Estilos",            dock_right_bottom);
 ImGui::DockBuilderDockWindow("Fondos",             dock_right_bottom);
 ImGui::DockBuilderDockWindow("Transiciones",       dock_right_bottom);
         ImGui::DockBuilderDockWindow("Transmisión en Red", dock_main_top);
+        ImGui::DockBuilderDockWindow("Stage Display",      dock_main_top);
 
         ImGui::DockBuilderFinish(dockspace_id);
 

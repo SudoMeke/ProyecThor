@@ -470,7 +470,7 @@ void ControlPanel::RenderStageSection(float dt) {
     // vez de fiarse solo del booleano local: si el usuario tambien controla
     // la transmision LAN desde el panel "Transmisión en Red", este panel debe
     // reflejar eso igual (evita que ambos paneles queden desincronizados).
-    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : m_isStageActive;
+    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : core.IsStaging();
 
     const int  lanItemIndex = hasPhysicalOption ? monitorCount : 0;
     const int  sel          = m_StageUseLAN ? lanItemIndex : m_StageMonitorIndex;
@@ -505,7 +505,7 @@ void ControlPanel::RenderStageSection(float dt) {
 
                 if (stageActive) {
                     if (m_StageUseLAN) core.ToggleNetworkStream(false);
-                    else               core.DestroyStageWindow();
+                    else               core.SetStaging(false);
                 }
 
                 m_StageUseLAN = wantLAN;
@@ -513,7 +513,7 @@ void ControlPanel::RenderStageSection(float dt) {
 
                 if (stageActive) {
                     if (wantLAN) core.ToggleNetworkStream(true, m_LANPort);
-                    else         core.CreateStageWindow(m_StageMonitorIndex);
+                    else         core.SetStaging(true, m_StageMonitorIndex);
                 }
             });
 
@@ -563,8 +563,7 @@ void ControlPanel::RenderStageSection(float dt) {
     ImGui::PushStyleColor(ImGuiCol_Text, tintCol);
 
     if (ImGui::Button(buttonText, ImVec2(-1.0f, 44.0f))) {
-        m_isStageActive = !stageActive;
-        ToggleStageDisplay(m_isStageActive);
+        ToggleStageDisplay(!stageActive);
     }
 
     ImGui::PopStyleColor(4);
@@ -724,11 +723,11 @@ void ControlPanel::CycleStageMonitor(int direction) {
     const bool wantLAN = (next == lanItemIndex);
 
     auto& core = Core::PresentationCore::Get();
-    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : m_isStageActive;
+    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : core.IsStaging();
 
     if (stageActive) {
         if (m_StageUseLAN) core.ToggleNetworkStream(false);
-        else                core.DestroyStageWindow();
+        else                core.SetStaging(false);
     }
 
     m_StageUseLAN = wantLAN;
@@ -736,7 +735,7 @@ void ControlPanel::CycleStageMonitor(int direction) {
 
     if (stageActive) {
         if (wantLAN) core.ToggleNetworkStream(true, m_LANPort);
-        else          core.CreateStageWindow(m_StageMonitorIndex);
+        else          core.SetStaging(true, m_StageMonitorIndex);
     }
 }
 
@@ -761,16 +760,14 @@ void ControlPanel::ToggleStageDisplay(bool active) {
         }
 
         m_StageMonitorIndex = std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
-        if (core.CreateStageWindow(m_StageMonitorIndex))
-            std::cout << "[ControlPanel] Monitor de control iniciado en monitor " << m_StageMonitorIndex << ".\n";
-        else
-            std::cerr << "[ControlPanel] No se pudo crear el monitor de control.\n";
+        core.SetStaging(true, m_StageMonitorIndex);
+        std::cout << "[ControlPanel] Monitor de control iniciado en monitor " << m_StageMonitorIndex << ".\n";
     } else {
         if (m_StageUseLAN) {
             core.ToggleNetworkStream(false);
             std::cout << "[ControlPanel] Monitor de control (LAN) detenido.\n";
         } else {
-            core.DestroyStageWindow();
+            core.SetStaging(false);
             std::cout << "[ControlPanel] Monitor de control detenido.\n";
         }
     }

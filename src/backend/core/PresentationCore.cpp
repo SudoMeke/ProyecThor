@@ -220,15 +220,6 @@ bool PresentationCore::GetGlobalMute() const {
         return it != m_SecondaryWindows.end() && it->second.window.IsActive();
     }
 
-    int PresentationCore::GetSecondaryWindowMonitor(const std::string& id) const
-    {
-        std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
-        auto it = m_SecondaryWindows.find(id);
-        if (it == m_SecondaryWindows.end() || !it->second.window.IsActive())
-            return -1;
-        return it->second.window.GetMonitorIndex();
-    }
-
     void PresentationCore::RenderAllSecondaryWindows()
     {
         // Copia de punteros bajo lock, render fuera del lock: RenderFrame
@@ -288,32 +279,6 @@ bool PresentationCore::GetGlobalMute() const {
         return (it != m_SecondaryWindows.end()) ? it->second.window.GetWindow() : nullptr;
     }
 
-    // ── Atajos con nombre fijo: Stage ─────────────────────────────────────
-    bool PresentationCore::CreateStageWindow(int monitorIndex)
-    {
-        return CreateSecondaryWindow(kStageId, monitorIndex, "ProyecThor - Stage",
-            [this](int w, int h) { RenderStageContent(w, h); });
-    }
-
-    void PresentationCore::DestroyStageWindow()
-    {
-        DestroySecondaryWindow(kStageId);
-    }
-
-    bool PresentationCore::IsStageWindowActive() const
-    {
-        return IsSecondaryWindowActive(kStageId);
-    }
-void PresentationCore::RenderStageContent(int w, int h)
-    {
-        // Placeholder temporal: contenido real del Stage (texto en vivo,
-        // reloj, FPS, estado LAN) todavia no implementado. Sin esto la
-        // ventana del Stage queda con basura de memoria de video sin
-        // inicializar en vez de un fondo solido.
-        glClearColor(0.05f, 0.05f, 0.06f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        (void)w; (void)h;
-    }
 void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -452,6 +417,19 @@ void PresentationCore::SetNextText(const std::string& text) {
     void PresentationCore::SetTargetMonitor(int index) {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.targetMonitorIndex = index;
+    }
+
+    void PresentationCore::SetStaging(bool active, int monitorIndex) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.isStaging = active;
+        if (monitorIndex >= 0)
+            m_State.stageMonitorIndex = monitorIndex;
+        ++m_StreamVersion;
+    }
+
+    bool PresentationCore::IsStaging() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_State.isStaging;
     }
 
     void PresentationCore::SetProjectorSize(int w, int h) {

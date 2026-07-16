@@ -45,6 +45,11 @@ namespace ProyecThor::Core {
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
 
+        // Monitor de Control (Stage Display). Independiente de isProjecting:
+        // el Stage puede estar activo con o sin proyeccion publica.
+        bool isStaging          = false;
+        int  stageMonitorIndex  = 0;
+
         std::string currentText;
         bool  showText          = false;
 
@@ -164,6 +169,11 @@ void SetGlobalMute(bool mute);
         void        SetTargetMonitor(int index);
         void        SetProjectorSize(int w, int h);
 
+        // Monitor de Control (Stage Display). El contenido real se dibuja en
+        // el viewport ImGui "StageLive" de UIManager.cpp, leyendo estos campos.
+        void        SetStaging(bool active, int monitorIndex = -1);
+        bool        IsStaging() const;
+
         // ── Ventana principal ────────────────────────────────────────────
         // Necesaria para poder crear ventanas secundarias con contexto GL
         // compartido (texturas/shaders/buffers; VAO/FBO no se comparten,
@@ -183,7 +193,6 @@ void SetGlobalMute(bool mute);
         void DestroySecondaryWindow(const std::string& id);
         void DestroyAllSecondaryWindows();
         bool IsSecondaryWindowActive(const std::string& id) const;
-        int  GetSecondaryWindowMonitor(const std::string& id) const; // -1 si no existe/inactiva
 
         // Llamar UNA VEZ POR FRAME desde main(), DESPUES de core.Update(),
         // para refrescar todas las ventanas secundarias activas.
@@ -194,10 +203,6 @@ void SetGlobalMute(bool mute);
         void        DestroyProjectorWindow();
         bool        IsProjectorWindowActive() const;
         GLFWwindow* GetProjectorWindow() const;
-
-        bool CreateStageWindow(int monitorIndex);
-        void DestroyStageWindow();
-        bool IsStageWindowActive() const;
 
         float GetLivePosition();
         void  SetLivePosition(float pos);
@@ -250,7 +255,6 @@ void SetGlobalMute(bool mute);
         void RenderDefaultStyleCombo();
         void EnsureFBO(int w, int h);
         void DestroyFBO();
-        void RenderStageContent(int w, int h); // contenido visual del Stage (siguiente entrega)
 
         std::string ResolveFontFilePath(const std::string& fontName) const;
 bool m_GlobalMuted = false;
@@ -289,7 +293,6 @@ bool m_GlobalMuted = false;
         mutable std::mutex m_SecondaryWindowsMutex;
 
         static constexpr const char* kProjectorId = "projector";
-        static constexpr const char* kStageId     = "stage";
 
         // ── Streaming en red local ───────────────────────────────────────
         std::unique_ptr<NetworkStreamServer> m_NetworkServer;

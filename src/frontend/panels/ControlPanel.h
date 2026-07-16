@@ -22,7 +22,9 @@ namespace ProyecThor::UI {
         float      m_PulseTime       = 0.0f;
 
         // ── Estado del monitor de control (Stage / monitor de confianza) ─────
-        bool       m_isStageActive     = false;
+        // El "activo" fisico ahora vive en PresentationCore (SetStaging/IsStaging),
+        // no en un bool local — asi este panel y el nuevo viewport StageLive de
+        // UIManager.cpp siempre coinciden.
         int        m_StageMonitorIndex = 0;
         bool       m_StageUseLAN       = false;  // el monitor de control se sirve por LAN en vez de pantalla fisica
         int        m_LANPort           = 8080;
