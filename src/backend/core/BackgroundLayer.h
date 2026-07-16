@@ -3,6 +3,7 @@
 #include "backend/media/VLCBasePlayer.h"
 #include "backend/shaders/PostProcessorFSR.h"
 #include <string>
+#include <vector>
 #include <algorithm>
 
 namespace ProyecThor::Core {
@@ -18,7 +19,8 @@ namespace ProyecThor::Core {
 
         int  m_TargetVolume = 100;
         bool m_TargetMuted  = true;
-    float m_TransitionProgress = 1.0f;
+        float m_TransitionProgress = 1.0f;
+
         // Gate real de audio al publico. Solo cuando esta en true el
         // player activo puede sonar de verdad (ver SetPubliclyLive). Sin
         // esto, cargar un video de fondo (SetVideo) o mover el doble
@@ -33,6 +35,14 @@ namespace ProyecThor::Core {
         // false -> viene de "Fondos" (BackgroundsPanel/LayersBgTab), NUNCA
         //          suena sin importar el estado de m_IsLiveToPublic.
         bool m_ContentAllowsAudio = true;
+
+        // Dispositivo de salida de audio seleccionado por el operador
+        // (vacio o "default" = predeterminado del sistema). Se aplica a
+        // AMBOS players (m_PlayerA y m_PlayerB) apenas se selecciona, para
+        // que no importe cual este activo hoy ni cual pase a estarlo tras
+        // un swap: el audio siempre sale por este dispositivo.
+        std::string m_AudioDeviceId;
+
 #ifdef _WIN32
     bool m_FlipVideoY = false;
 #else
@@ -59,8 +69,10 @@ namespace ProyecThor::Core {
         // toque.
         explicit BackgroundLayer(bool forceSilentAudio = false);
         ~BackgroundLayer() = default;
-void SetFlipVideoY(bool flip) { m_FlipVideoY = flip; }
-    bool GetFlipVideoY() const { return m_FlipVideoY; }
+
+        void SetFlipVideoY(bool flip) { m_FlipVideoY = flip; }
+        bool GetFlipVideoY() const { return m_FlipVideoY; }
+
         void Update();
         void Render(int outputW, int outputH);
 
@@ -75,7 +87,9 @@ void SetFlipVideoY(bool flip) { m_FlipVideoY = flip; }
         void* GetTextureID();
 
         VLCBasePlayer* GetPlayer();
-void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
+
+        void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
+
         // allowAudio=false para fondos decorativos (BackgroundsPanel):
         // estructuralmente no podran sonar aunque se este "al aire".
         void SetVideo(const std::string& path, bool allowAudio = true);
@@ -91,6 +105,20 @@ void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f,
 
         void SetLiveVolume(int volume0to200);
         void SetLiveMute(bool mute);
+
+        // ── Dispositivo de salida de audio ───────────────────────────────
+        // Enumera los dispositivos de audio disponibles en el sistema
+        // (altavoces, HDMI, interfaces USB, etc.) para mostrarlos en un
+        // combo/selector de UI.
+        std::vector<VLCBasePlayer::AudioDevice> GetAvailableAudioDevices();
+
+        // Selecciona el dispositivo por el que debe salir el audio del
+        // fondo. deviceId vacio o "default" usa el dispositivo
+        // predeterminado del sistema. Se aplica de inmediato a ambos
+        // players internos (activo y standby), asi que el cambio tiene
+        // efecto sin importar que este sonando en este momento.
+        void SetAudioOutputDevice(const std::string& deviceId);
+        std::string GetAudioOutputDevice() const { return m_AudioDeviceId; }
 
         void BlockPath(const std::string& path);
         void UnblockPath();

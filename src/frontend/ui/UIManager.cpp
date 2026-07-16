@@ -196,6 +196,22 @@ void UIManager::RequestSettings()
 // ---------------------------------------------------------------------------
 void UIManager::RenderAll()
 {
+
+     {
+        ImGuiIO& io = ImGui::GetIO();
+
+        // F1 — abrir documentacion (misma URL que el menu Ayuda > Documentacion)
+        if (ImGui::IsKeyPressed(ImGuiKey_F1, false))
+            ProyecThor::External::OpenURL("https://proyecthor.web.app/");
+
+        // Ctrl + P — abrir Preferencias
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false))
+            m_ShowConfig = true;
+
+        // Alt + F4 — cerrar ProyecThor
+        if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_F4, false))
+            glfwSetWindowShouldClose(m_Window, true);
+    }
     // ── Hub de inicio ────────────────────────────────────────────────────────
 if (m_HubMode)
     {

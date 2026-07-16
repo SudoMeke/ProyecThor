@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.3.4
+    VERSION 0.3.5
     LANGUAGES C CXX
 )
 
@@ -476,7 +476,11 @@ exec ./ProyecThor \"\$@\"
     else()
         message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
     endif()
-
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    target_link_libraries(ProyecThor PRIVATE ${X11_LIBRARIES})
+    target_include_directories(ProyecThor PRIVATE ${X11_INCLUDE_DIR})
+endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps

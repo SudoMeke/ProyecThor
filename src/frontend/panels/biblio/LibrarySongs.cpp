@@ -10,6 +10,7 @@
 #include "backend/core/PresentationCore.h"
 #include "UIStrings.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "LibraryTags.h"
 
 #include "LibraryPlaylists.h"
 #include <filesystem>
@@ -34,6 +35,10 @@ static constexpr int kCat_Bibles    = 3;
 static constexpr int kCat_Documents = 4;
 
 namespace ProyecThor::Library {
+
+static void SelectLibraryItem(LibraryContext& ctx,
+                              const std::vector<std::string>& filteredItems,
+                              int n);
 
 // =============================================================================
 //  GlassIconButton — boton con icono de StyleGeneralApp (fallback a glifo corto)
@@ -265,126 +270,6 @@ void SetSongTags(const std::string& filename, const std::vector<std::string>& ta
     for (const auto& [k, v] : map)
         f << k << "=" << v << "\n";
 }
-
-// =============================================================================
-//  Etiquetas / grupos (carpetas) de canciones
-// =============================================================================
-struct SongTagGroup {
-    std::string id;
-    std::string name;
-    ImVec4 color = ImVec4(0.35f, 0.55f, 0.95f, 1.0f);
-};
-
-static std::string SongTagGroupsFilePath()
-{
-    return GetAssetsPath() + "/../song_tag_groups.ini";
-}
-
-static std::string NormalizeTagId(const std::string& raw)
-{
-    std::string out;
-    out.reserve(raw.size());
-    for (unsigned char ch : raw) {
-        if (std::isalnum(ch)) out.push_back((char)std::tolower(ch));
-        else if (ch == ' ' || ch == '_' || ch == '-' || ch == '/' || ch == '\\') {
-            if (!out.empty() && out.back() != '_') out.push_back('_');
-        }
-    }
-    if (out.empty()) out = "tag";
-    return out;
-}
-
-static std::vector<SongTagGroup> LoadSongTagGroups()
-{
-    std::vector<SongTagGroup> groups;
-    std::ifstream f(U8Path(SongTagGroupsFilePath()));
-    if (!f.is_open()) return groups;
-
-    std::string line;
-    while (std::getline(f, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        auto sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        const std::string id = line.substr(0, sep);
-        const std::string payload = line.substr(sep + 1);
-        auto pipe = payload.find('|');
-        SongTagGroup group;
-        group.id = id;
-        if (pipe != std::string::npos) {
-            group.name = payload.substr(0, pipe);
-            std::string rgb = payload.substr(pipe + 1);
-            std::stringstream ss(rgb);
-            std::string part;
-            std::vector<float> values;
-            while (std::getline(ss, part, ',')) {
-                if (!part.empty()) values.push_back(std::stof(part));
-            }
-            if (values.size() >= 3) {
-                group.color = ImVec4(values[0], values[1], values[2], 1.0f);
-            }
-        } else {
-            group.name = payload;
-        }
-        groups.push_back(group);
-    }
-
-    std::sort(groups.begin(), groups.end(), [](const SongTagGroup& a, const SongTagGroup& b) {
-        return a.name < b.name;
-    });
-    return groups;
-}
-
-static void SaveSongTagGroups(const std::vector<SongTagGroup>& groups)
-{
-    std::ofstream f(U8Path(SongTagGroupsFilePath()));
-    if (!f.is_open()) return;
-    for (const auto& g : groups) {
-        f << g.id << "=" << g.name << "|"
-          << g.color.x << "," << g.color.y << "," << g.color.z << "\n";
-    }
-}
-
-static void DeleteSongTagGroup(const std::string& id)
-{
-    auto groups = LoadSongTagGroups();
-    groups.erase(std::remove_if(groups.begin(), groups.end(),
-        [&](const SongTagGroup& g){ return g.id == id; }), groups.end());
-    SaveSongTagGroups(groups);
-}
-
-static SongTagGroup FindSongTagGroup(const std::string& id)
-{
-    SongTagGroup fallback;
-    fallback.id = id;
-    fallback.name = id;
-    auto groups = LoadSongTagGroups();
-    for (const auto& g : groups) {
-        if (g.id == id) return g;
-    }
-    return fallback;
-}
-
-static bool SongHasTag(const std::string& filename, const std::string& tagId)
-{
-    auto tags = GetSongTags(filename);
-    return std::find(tags.begin(), tags.end(), tagId) != tags.end();
-}
-
-void ApplySongSelection(LibraryContext& ctx, const std::string& filename)
-{
-    Core::LibrarySelection s;
-    s.title       = filename;
-    s.type        = Core::ItemType::Song;
-    s.contentData = ctx.loadSongVerses(filename);
-
-    Core::PresentationCore::Get().SetSelection(s);
-    ApplyDefaultStyleIfSet(ctx);
-
-    auto it = std::find(ctx.items.begin(), ctx.items.end(), filename);
-    if (it != ctx.items.end())
-        ctx.selectedIndex = (int)std::distance(ctx.items.begin(), it);
-}
-
 // =============================================================================
 //  RenderPaneHeader
 //  Titulo discreto de columna del grid (Canciones / Playlists), con un
@@ -398,6 +283,82 @@ static void RenderPaneHeader(const char* label, int count)
     else            ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
     ImGui::Spacing();
+}
+// =============================================================================
+//  SongListRow
+//  Fila de lista para canciones, igual a DS::GlassListRow pero con soporte
+//  para pintar el fondo con el color de la etiqueta asignada a la cancion.
+//  Esto es lo que reemplaza a la vieja pestaña "Etiquetas": ahora la
+//  etiqueta se ve DIRECTAMENTE en la lista de canciones, sin tener que
+//  cambiar de pestaña para diferenciarlas.
+// =============================================================================
+// Pequeño helper porque DS::RadiusSmall * 0.5f se repite; evita magic number
+// suelto en la funcion de abajo.
+static inline float RadiusSmallLocal() { return DS::RadiusSmall * 0.5f; }
+
+static bool SongListRow(const char* label, bool selected,
+                        ImVec4 tagColor, bool hasTag,
+                        float indent = 14.0f, float height = DS::RowHeight)
+{
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    float  rowW   = ImGui::GetContentRegionAvail().x;
+
+    ImGui::PushID(label);
+    bool clicked = ImGui::InvisibleButton("##row", ImVec2(rowW, height));
+    bool hovered = ImGui::IsItemHovered();
+    ImGui::PopID();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 rMin = cursor;
+    ImVec2 rMax = ImVec2(cursor.x + rowW, cursor.y + height);
+
+    // ── Tinte de etiqueta (si tiene) ────────────────────────────────────────
+    // Se dibuja PRIMERO, como base, para que la seleccion/hover puedan
+    // superponerse encima sin perder la referencia de color.
+    if (hasTag) {
+        float alpha = selected ? 0.38f : (hovered ? 0.30f : 0.20f);
+        ImU32 tagBg = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(tagColor.x, tagColor.y, tagColor.z, alpha));
+        dl->AddRectFilled(rMin, rMax, tagBg, RadiusSmallLocal());
+
+        // Barra lateral con el color solido de la etiqueta: se nota incluso
+        // cuando el fondo de seleccion/hover queda encima.
+        dl->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y),
+                          ImGui::ColorConvertFloat4ToU32(tagColor), 1.5f);
+    }
+
+    // ── Fondo de seleccion / hover (igual que GlassListRow) ─────────────────
+    if (selected) {
+        dl->AddRectFilledMultiColor(rMin, rMax,
+            IM_COL32( 99, 112, 255, 55), IM_COL32( 99, 112, 255, 38),
+            IM_COL32( 99, 112, 255, 30), IM_COL32( 99, 112, 255, 46));
+
+        dl->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y), DS::RowSelectedBar, 1.5f);
+
+        dl->AddLine(
+            ImVec2(rMin.x + 4.0f, rMax.y - 0.5f),
+            ImVec2(rMax.x,        rMax.y - 0.5f),
+            IM_COL32(99, 112, 255, 40), 1.0f);
+    } else if (hovered && !hasTag) {
+        // Si ya hay un tinte de etiqueta, el hover no dibuja encima (para no
+        // ensuciar el color); el resaltado ya se nota por el aumento de
+        // alpha del tinte de arriba.
+        dl->AddRectFilled(rMin, rMax, DS::RowHoverFill, DS::RadiusSmall * 0.5f);
+        dl->AddRect(rMin, rMax, IM_COL32(255, 255, 255, 18), DS::RadiusSmall * 0.5f, 0, 0.5f);
+    }
+
+    // ── Texto ────────────────────────────────────────────────────────────────
+    ImFont* font   = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize();
+    ImVec2 textSz  = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label);
+
+    float textX = rMin.x + indent;
+    float textY = rMin.y + std::floor((height - textSz.y) * 0.5f);
+
+    ImU32 textCol = selected ? DS::TextPrimary : DS::TextSecondary;
+    dl->AddText(ImVec2(textX, textY), textCol, label);
+
+    return clicked;
 }
 
 // =============================================================================
@@ -714,26 +675,68 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         ImGui::EndPopup();
     }
 
-    // ── Modal agregar canciones ───────────────────────────────────────────
-    if (showAddSongsModal) ImGui::OpenPopup("AgregarCancionesModal##lib");
+   // ── Modal agregar canciones ───────────────────────────────────────────
+    static char addSongsSearchBuffer[256] = {};
+
+    if (showAddSongsModal) {
+        ImGui::OpenPopup("AgregarCancionesModal##lib");
+        memset(addSongsSearchBuffer, 0, sizeof(addSongsSearchBuffer));
+    }
     if (ImGui::BeginPopupModal("AgregarCancionesModal##lib", &showAddSongsModal,
                                ImGuiWindowFlags_NoSavedSettings))
     {
-        ImGui::SetWindowSize({ 420.f, 480.f }, ImGuiCond_Appearing);
-        ImGui::TextUnformatted("Toca una cancion para agregarla");
+        ImGui::SetWindowSize({ 420.f, 520.f }, ImGuiCond_Appearing);
+
+        // ── Buscador ─────────────────────────────────────────────────────
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        ImGui::InputTextWithHint("##addSongsSearch", "Buscar por titulo o autor...",
+                                 addSongsSearchBuffer, sizeof(addSongsSearchBuffer));
+
+        ImGui::Spacing();
         ImGui::Separator();
+
+        // ── Lista filtrada ───────────────────────────────────────────────
+        std::string q(addSongsSearchBuffer);
+        std::transform(q.begin(), q.end(), q.begin(), [](unsigned char c){ return (char)::tolower(c); });
 
         if (ImGui::BeginChild("AddSongsList", { 0.f, -50.f }))
         {
             auto currentSongs = ctx.loadPlaylistSongs(openPlaylist);
+            int shown = 0;
+
             for (const auto& item : ctx.items)
             {
+                if (!q.empty())
+                {
+                    std::string title = StripExtension(item);
+                    std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
+
+                    bool match = title.find(q) != std::string::npos;
+
+                    if (!match) {
+                        std::string author = GetSongAuthor(item);
+                        std::transform(author.begin(), author.end(), author.begin(), [](unsigned char c){ return (char)::tolower(c); });
+                        match = author.find(q) != std::string::npos;
+                    }
+
+                    if (!match) continue;
+                }
+
                 bool already = std::find(currentSongs.begin(), currentSongs.end(), item) != currentSongs.end();
                 ImGui::PushStyleColor(ImGuiCol_Text, already
                     ? ImVec4(0.4f, 0.7f, 0.4f, 1.0f) : ImVec4(0.85f, 0.87f, 0.95f, 1.0f));
                 std::string label = StripExtension(item) + (already ? "  (ya agregada)" : "");
-                if (ImGui::Selectable(label.c_str()) && !already)
+                if (ImGui::Selectable((label + "##add_" + item).c_str()) && !already)
                     ctx.addSongToPlaylist(openPlaylist, item);
+                ImGui::PopStyleColor();
+                shown++;
+            }
+
+            if (shown == 0) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.62f, 1.0f));
+                ImGui::TextUnformatted("Sin resultados");
                 ImGui::PopStyleColor();
             }
         }
@@ -746,56 +749,12 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         ImGui::EndPopup();
     }
 }
-
-// =============================================================================
-//  DrawSegmentedTabs
-//  Segmented control de ancho 100% flexible (nunca fijo), estilo minimalista
-//  tipo ProPresenter: una sola pastilla de fondo con el segmento activo
-//  resaltado, sin botones independientes que puedan desbordarse en paneles
-//  angostos.
-// =============================================================================
-static void DrawSegmentedTabs(int& activeTab, const char* labelA, const char* labelB)
-{
-    const float totalW = ImGui::GetContentRegionAvail().x;
-    const float h      = 30.0f;
-
-    ImVec2 p0 = ImGui::GetCursorScreenPos();
-    ImVec2 p1 = { p0.x + totalW, p0.y + h };
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-
-    dl->AddRectFilled(p0, p1, IM_COL32(14, 15, 24, 255), h * 0.5f);
-
-    const float halfW = totalW * 0.5f;
-    ImVec2 selMin = { p0.x + (activeTab == 0 ? 0.f : halfW), p0.y };
-    ImVec2 selMax = { selMin.x + halfW, p1.y };
-    dl->AddRectFilled(selMin, selMax, IM_COL32(70, 110, 230, 200), h * 0.5f);
-
-    ImGui::PushID("segtabs");
-    ImGui::InvisibleButton("segA", { halfW, h });
-    if (ImGui::IsItemClicked()) activeTab = 0;
-    ImGui::SameLine(0.f, 0.f);
-    ImGui::InvisibleButton("segB", { totalW - halfW, h });
-    if (ImGui::IsItemClicked()) activeTab = 1;
-    ImGui::PopID();
-
-    auto drawLabel = [&](const char* text, float cx, bool active) {
-        ImVec2 ts  = ImGui::CalcTextSize(text);
-        ImU32  col = active ? IM_COL32(240, 242, 255, 255) : IM_COL32(140, 146, 180, 255);
-        dl->AddText({ cx - ts.x * 0.5f, p0.y + (h - ts.y) * 0.5f }, col, text);
-    };
-    drawLabel(labelA, p0.x + halfW * 0.5f, activeTab == 0);
-    drawLabel(labelB, p0.x + halfW + (totalW - halfW) * 0.5f, activeTab == 1);
-
-    ImGui::SetCursorScreenPos({ p0.x, p1.y });
-    ImGui::Dummy({ totalW, h });
-}
-
 // =============================================================================
 //  RenderItemsListPane
 //  Lista con scroll + footer de acciones (Nuevo / Importar / Eliminar) para
-//  la categoria activa (Canciones, Video, Imagen, Biblia, Documentos,
-//  Audio). Se usa tanto para la columna izquierda del grid de Canciones
-//  como para el resto de categorias en pantalla completa.
+//  la categoria activa. Para Canciones, cada fila se pinta con el color de
+//  la primera etiqueta asignada (si tiene). Soporta navegacion con flechas
+//  arriba/abajo cuando el panel de Biblioteca tiene el foco.
 // =============================================================================
 static void RenderItemsListPane(LibraryContext& ctx)
 {
@@ -803,14 +762,8 @@ static void RenderItemsListPane(LibraryContext& ctx)
     const float btnRowH   = DS::ButtonHeight;
     const float reservedH = btnRowH + itemSpY * 2.0f + 10.0f;
 
-    static bool showTagEditor = false;
-    static std::string editTagId;
-    static char tagNameBuffer[128] = {};
-    static ImVec4 tagColorBuffer = ImVec4(0.35f, 0.55f, 0.95f, 1.0f);
     static std::vector<std::string> filteredItems;
     static std::string lastSearch;
-    static int activeLibraryTab = 0; // 0: Canciones, 1: Etiquetas
-    static std::string selectedTagGroup;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.f, 0.f, 0.f, 0.f));
     ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.f, 1.f, 1.f, 0.06f));
@@ -818,9 +771,13 @@ static void RenderItemsListPane(LibraryContext& ctx)
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   DS::RadiusMedium);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(10.f, 8.f));
 
-    if (ImGui::BeginChild("ListChild", { 0.f, -reservedH }, true))
+    if (ImGui::BeginChild("ListChild", { 0.f, -reservedH }, true,
+                          ImGuiWindowFlags_NoNavInputs))
     {
+        // Etiquetas cargadas una vez por frame (no por fila), asi el lookup
+        // de color por cancion es solo una busqueda en memoria.
         auto tagGroups = LoadSongTagGroups();
+
         std::string cur(ctx.searchBuffer);
         std::transform(cur.begin(), cur.end(), cur.begin(), [](unsigned char c){ return (char)::tolower(c); });
 
@@ -862,254 +819,141 @@ static void RenderItemsListPane(LibraryContext& ctx)
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 4.f));
 
-        // Segmented control: ocupa el 100% del ancho disponible, nunca se
-        // corta sin importar que tan angosto sea el panel.
-        DrawSegmentedTabs(activeLibraryTab, "Canciones", "Etiquetas");
-        ImGui::Spacing();
+        if (filteredItems.empty()) {
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            ImGui::SetCursorPos({
+                ImGui::GetCursorPosX() + std::floor(avail.x * 0.5f - 55.f),
+                ImGui::GetCursorPosY() + std::floor(avail.y * 0.5f - 10.f) });
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.55f, 1.0f));
+            ImGui::TextUnformatted("Sin resultados");
+            ImGui::PopStyleColor();
+        }
 
-        if (activeLibraryTab == 1)
+        // ── Navegacion con flechas arriba/abajo ──────────────────────────────
+        // Se activa solo cuando la ventana raiz del panel de Biblioteca tiene
+        // el foco y no hay ningun campo de texto activo (buscador, renombrar,
+        // etc.), para no robarle las flechas a esos inputs.
+        static int s_PendingScrollIdx = -1;
+        if (!filteredItems.empty() &&
+            ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow) &&
+            !ImGui::IsAnyItemActive())
         {
-            // ── Pestaña Etiquetas ────────────────────────────────────────────
-            if (tagGroups.empty()) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.60f, 0.80f, 1.0f));
-                ImGui::TextUnformatted("No hay etiquetas todavía");
-                ImGui::PopStyleColor();
-                ImGui::Spacing();
-            } else {
-                for (const auto& group : tagGroups) {
-                    const bool selected = (selectedTagGroup == group.id);
-                    ImVec4 bg = ImVec4(group.color.x, group.color.y, group.color.z, 0.18f);
-                    ImVec4 bgHover = ImVec4(group.color.x, group.color.y, group.color.z, 0.28f);
-                    ImGui::PushStyleColor(ImGuiCol_Header, bg);
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, bgHover);
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, bgHover);
-                    ImGui::PushStyleColor(ImGuiCol_Text, selected ? ImVec4(1.f, 1.f, 1.f, 1.f) : ImVec4(0.88f, 0.90f, 0.95f, 1.f));
-
-                    // Dos espacios al inicio del label para reservar el
-                    // hueco donde va el punto de color, asi el texto ya no
-                    // queda tapado por el circulo (antes se veian pegados
-                    // y el nombre se leia como un glifo cortado).
-                    std::string label = "  " + group.name + " (" + std::to_string(std::count_if(filteredItems.begin(), filteredItems.end(), [&](const std::string& item){ return SongHasTag(item, group.id); })) + ")";
-                    if (ImGui::Selectable((label + "##group_" + group.id).c_str(), selected, ImGuiSelectableFlags_SpanAvailWidth)) {
-                        selectedTagGroup = group.id;
-                    }
-                    ImGui::PopStyleColor(4);
-
-                    // Punto de color del grupo, dentro del hueco reservado
-                    // por los dos espacios iniciales del label.
-                    {
-                        ImVec2 rMin = ImGui::GetItemRectMin();
-                        ImVec2 rMax = ImGui::GetItemRectMax();
-                        float  cy   = (rMin.y + rMax.y) * 0.5f;
-                        ImGui::GetWindowDrawList()->AddCircleFilled(
-                            { rMin.x + 10.f, cy }, 4.0f,
-                            ImGui::ColorConvertFloat4ToU32(ImVec4(group.color.x, group.color.y, group.color.z, 1.0f)));
-                    }
-
-                    // Editar / Eliminar ahora viven en el menu contextual
-                    // (click derecho), igual que playlists y canciones, en
-                    // vez de un boton "Editar" incrustado en la fila que se
-                    // rompia en paneles angostos.
-                    if (ImGui::BeginPopupContextItem(("##ctx_tag" + group.id).c_str())) {
-                        if (ImGui::MenuItem("Editar")) {
-                            showTagEditor = true;
-                            editTagId = group.id;
-                            memset(tagNameBuffer, 0, sizeof(tagNameBuffer));
-                            strncpy(tagNameBuffer, group.name.c_str(), sizeof(tagNameBuffer) - 1);
-                            tagColorBuffer = group.color;
-                        }
-                        ImGui::Separator();
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
-                        if (ImGui::MenuItem("Eliminar")) {
-                            DeleteSongTagGroup(group.id);
-                            if (selectedTagGroup == group.id) selectedTagGroup.clear();
-                        }
-                        ImGui::PopStyleColor();
-                        ImGui::EndPopup();
-                    }
-                }
-                ImGui::Spacing();
+            int curFilteredIdx = -1;
+            if (ctx.selectedIndex >= 0 && ctx.selectedIndex < (int)ctx.items.size()) {
+                auto fIt = std::find(filteredItems.begin(), filteredItems.end(), ctx.items[ctx.selectedIndex]);
+                if (fIt != filteredItems.end())
+                    curFilteredIdx = (int)std::distance(filteredItems.begin(), fIt);
             }
 
-            if (ImGui::Button("+ Nueva etiqueta", ImVec2(-1, 0))) {
-                showTagEditor = true;
-                editTagId.clear();
-                memset(tagNameBuffer, 0, sizeof(tagNameBuffer));
-                tagColorBuffer = ImVec4(0.35f, 0.55f, 0.95f, 1.0f);
-            }
-            ImGui::Spacing();
+            int delta = 0;
+            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) delta = 1;
+            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))   delta = -1;
 
-            if (!selectedTagGroup.empty()) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.88f, 1.0f, 1.0f));
-                ImGui::Text("Canciones en etiqueta");
-                ImGui::PopStyleColor();
-                ImGui::Separator();
-                std::vector<std::string> taggedSongs;
-                for (const auto& item : filteredItems) {
-                    if (SongHasTag(item, selectedTagGroup)) taggedSongs.push_back(item);
-                }
-                if (taggedSongs.empty()) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.60f, 0.80f, 1.0f));
-                    ImGui::TextUnformatted("No hay canciones en esta etiqueta aún");
-                    ImGui::PopStyleColor();
-                } else {
-                    for (const auto& item : taggedSongs) {
-                        auto it = std::find(ctx.items.begin(), ctx.items.end(), item);
-                        int origIdx = (it != ctx.items.end()) ? (int)std::distance(ctx.items.begin(), it) : -1;
-                        const bool sel = (ctx.selectedIndex == origIdx);
-                        std::string disp = StripExtension(item);
-                        std::string author = GetSongAuthor(item);
-                        if (!author.empty()) disp += "  —  " + author;
-                        ImGui::PushID(item.c_str());
-                        bool clicked = DS::GlassListRow(disp.c_str(), sel);
-                        if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
-                            if (ImGui::BeginMenu("Asignar etiqueta")) {
-                                for (const auto& group : tagGroups) {
-                                    const bool assigned = SongHasTag(item, group.id);
-                                    if (ImGui::MenuItem(group.name.c_str(), nullptr, assigned)) {
-                                        auto tags = ctx.getSongTags(item);
-                                        auto tagIt = std::find(tags.begin(), tags.end(), group.id);
-                                        if (assigned) tags.erase(tagIt); else tags.push_back(group.id);
-                                        ctx.setSongTags(item, tags);
-                                        ForceListUpdate() = true;
-                                    }
-                                }
-                                ImGui::EndMenu();
-                            }
-                            ImGui::Separator();
-                            if (ImGui::MenuItem("Quitar etiquetas")) {
-                                ctx.setSongTags(item, {});
-                                ForceListUpdate() = true;
-                            }
-                            ImGui::EndPopup();
-                        }
-                        ImGui::PopID();
-                        if (clicked) {
-                            ctx.selectedIndex = origIdx;
-                            Core::LibrarySelection s; s.title = item; s.type = Core::ItemType::Song; s.contentData = ctx.loadSongVerses(item);
-                            Core::PresentationCore::Get().SetSelection(s);
-                            ApplyDefaultStyleIfSet(ctx);
-                        }
-                    }
-                }
+            if (delta != 0) {
+                int newIdx = (curFilteredIdx < 0)
+                    ? (delta > 0 ? 0 : (int)filteredItems.size() - 1)
+                    : std::clamp(curFilteredIdx + delta, 0, (int)filteredItems.size() - 1);
+
+                SelectLibraryItem(ctx, filteredItems, newIdx);
+                s_PendingScrollIdx = newIdx;
             }
         }
-        else
+
+        for (int n = 0; n < (int)filteredItems.size(); ++n)
         {
-            // ── Pestaña Canciones ────────────────────────────────────────────
-            if (filteredItems.empty()) {
-                ImVec2 avail = ImGui::GetContentRegionAvail();
-                ImGui::SetCursorPos({
-                    ImGui::GetCursorPosX() + std::floor(avail.x * 0.5f - 55.f),
-                    ImGui::GetCursorPosY() + std::floor(avail.y * 0.5f - 10.f) });
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.55f, 1.0f));
-                ImGui::TextUnformatted("Sin resultados");
-                ImGui::PopStyleColor();
+            auto it = std::find(ctx.items.begin(), ctx.items.end(), filteredItems[n]);
+            int origIdx = (it != ctx.items.end())
+                ? (int)std::distance(ctx.items.begin(), it) : -1;
+
+            const bool sel   = (ctx.selectedIndex == origIdx);
+            std::string disp = StripExtension(filteredItems[n]);
+
+            if (ctx.currentCategoryInt == kCat_Songs)
+            {
+                std::string author = GetSongAuthor(filteredItems[n]);
+                if (!author.empty())
+                    disp += "  —  " + author;
             }
 
-            for (int n = 0; n < (int)filteredItems.size(); ++n)
-            {
-                auto it = std::find(ctx.items.begin(), ctx.items.end(), filteredItems[n]);
-                int origIdx = (it != ctx.items.end())
-                    ? (int)std::distance(ctx.items.begin(), it) : -1;
-
-                const bool sel   = (ctx.selectedIndex == origIdx);
-                std::string disp = StripExtension(filteredItems[n]);
-
-                if (ctx.currentCategoryInt == kCat_Songs)
-                {
-                    std::string author = GetSongAuthor(filteredItems[n]);
-                    if (!author.empty())
-                        disp += "  —  " + author;
+            // ── Color de fondo por etiqueta ──────────────────────────────────
+            ImVec4 tagColor(0.f, 0.f, 0.f, 0.f);
+            bool   hasTag = false;
+            if (ctx.currentCategoryInt == kCat_Songs) {
+                auto songTags = ctx.getSongTags(filteredItems[n]);
+                if (!songTags.empty()) {
+                    auto grpIt = std::find_if(tagGroups.begin(), tagGroups.end(),
+                        [&](const SongTagGroup& g){ return g.id == songTags[0]; });
+                    if (grpIt != tagGroups.end()) {
+                        tagColor = grpIt->color;
+                        hasTag   = true;
+                    }
                 }
+            }
 
-                ImGui::PushID(n);
-                bool clicked = DS::GlassListRow(disp.c_str(), sel);
+            ImGui::PushID(n);
+            bool clicked = SongListRow(disp.c_str(), sel, tagColor, hasTag);
 
-                if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
-                    if (ctx.currentCategoryInt == kCat_Songs) {
-                        if (ImGui::BeginMenu("Asignar etiqueta")) {
-                            if (tagGroups.empty()) {
-                                if (ImGui::MenuItem("Crear nueva etiqueta...")) {
-                                    showTagEditor = true;
-                                    editTagId.clear();
-                                    memset(tagNameBuffer, 0, sizeof(tagNameBuffer));
-                                    tagColorBuffer = ImVec4(0.35f, 0.55f, 0.95f, 1.0f);
-                                }
-                            } else {
-                                for (const auto& group : tagGroups) {
-                                    const bool assigned = SongHasTag(filteredItems[n], group.id);
-                                    if (ImGui::MenuItem(group.name.c_str(), nullptr, assigned)) {
-                                        auto tags = ctx.getSongTags(filteredItems[n]);
-                                        auto tagIt = std::find(tags.begin(), tags.end(), group.id);
-                                        if (assigned) tags.erase(tagIt); else tags.push_back(group.id);
-                                        ctx.setSongTags(filteredItems[n], tags);
-                                        ForceListUpdate() = true;
-                                    }
+            if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
+                if (ctx.currentCategoryInt == kCat_Songs) {
+                    if (ImGui::BeginMenu("Asignar etiqueta")) {
+                        if (tagGroups.empty()) {
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.72f, 1.0f));
+                            ImGui::TextUnformatted("Crea etiquetas en");
+                            ImGui::TextUnformatted("Ajustes > Canciones");
+                            ImGui::PopStyleColor();
+                        } else {
+                            for (const auto& group : tagGroups) {
+                                const bool assigned = SongHasTag(filteredItems[n], group.id);
+                                if (ImGui::MenuItem(group.name.c_str(), nullptr, assigned)) {
+                                    auto tags = ctx.getSongTags(filteredItems[n]);
+                                    auto tagIt = std::find(tags.begin(), tags.end(), group.id);
+                                    if (assigned) tags.erase(tagIt); else tags.push_back(group.id);
+                                    ctx.setSongTags(filteredItems[n], tags);
+                                    ForceListUpdate() = true;
                                 }
                             }
-                            ImGui::EndMenu();
+                            ImGui::Separator();
+                            if (ImGui::MenuItem("Quitar todas las etiquetas")) {
+                                ctx.setSongTags(filteredItems[n], {});
+                                ForceListUpdate() = true;
+                            }
                         }
-                        ImGui::Separator();
-                    }
-                    if (ImGui::MenuItem("Renombrar")) {
-                        ctx.renameOldName  = filteredItems[n];
-                        ctx.renameIsURL    = false;
-                        ctx.renameURLIndex = -1;
-                        ctx.selectedIndex  = origIdx;
-                        std::string stem = SplitExtension(filteredItems[n], ctx.renameExtension);
-                        memset(ctx.renameBuffer, 0, 512);
-                        strncpy(ctx.renameBuffer, stem.c_str(), 511);
-                        ctx.showRenameModal = true;
+                        ImGui::EndMenu();
                     }
                     ImGui::Separator();
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
-                    if (ImGui::MenuItem("Eliminar")) {
-                        ImGui::PopStyleColor();
-                        ctx.selectedIndex = origIdx;
-                        ImGui::CloseCurrentPopup();
-                        ctx.deleteSelectedItem();
-                        ImGui::PopID();
-                        break;
-                    }
+                }
+                if (ImGui::MenuItem("Renombrar")) {
+                    ctx.renameOldName  = filteredItems[n];
+                    ctx.renameIsURL    = false;
+                    ctx.renameURLIndex = -1;
+                    ctx.selectedIndex  = origIdx;
+                    std::string stem = SplitExtension(filteredItems[n], ctx.renameExtension);
+                    memset(ctx.renameBuffer, 0, 512);
+                    strncpy(ctx.renameBuffer, stem.c_str(), 511);
+                    ctx.showRenameModal = true;
+                }
+                ImGui::Separator();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
+                if (ImGui::MenuItem("Eliminar")) {
                     ImGui::PopStyleColor();
-                    ImGui::EndPopup();
-                }
-                ImGui::PopID();
-
-                if (clicked)
-                {
                     ctx.selectedIndex = origIdx;
-
-                    Core::LibrarySelection s;
-                    s.title = filteredItems[n];
-                    switch (ctx.currentCategoryInt) {
-                        case kCat_Songs:     s.type = Core::ItemType::Song;      break;
-                        case kCat_Videos:    s.type = Core::ItemType::Video;     break;
-                        case kCat_Images:    s.type = Core::ItemType::Image;     break;
-                        case kCat_Bibles:    s.type = Core::ItemType::Bible;     break;
-                        case kCat_Documents: s.type = Core::ItemType::Documents; break;
-                        default:             s.type = Core::ItemType::None;      break;
-                    }
-                    if (ctx.currentCategoryInt == kCat_Songs)
-                        s.contentData = ctx.loadSongVerses(filteredItems[n]);
-                    else if (ctx.currentCategoryInt == kCat_Documents) {
-                        fs::path docDir =
-                            U8Path(GetAssetsPath() + "/documents") / U8Path(filteredItems[n]);
-                        if (fs::exists(docDir) && fs::is_directory(docDir)) {
-                            std::vector<std::string> pages;
-                            for (const auto& pe : fs::directory_iterator(docDir))
-                                if (pe.is_regular_file())
-                                    pages.push_back(ProyecThor::Library::PathToUtf8(pe.path()));
-                            std::sort(pages.begin(), pages.end());
-                            s.contentData = pages;
-                        }
-                    }
-
-                    Core::PresentationCore::Get().SetSelection(s);
-                    ApplyDefaultStyleIfSet(ctx);
+                    ImGui::CloseCurrentPopup();
+                    ctx.deleteSelectedItem();
+                    ImGui::PopID();
+                    break;
                 }
+                ImGui::PopStyleColor();
+                ImGui::EndPopup();
             }
+            ImGui::PopID();
+
+            if (n == s_PendingScrollIdx) {
+                ImGui::SetScrollHereY(0.5f);
+                s_PendingScrollIdx = -1;
+            }
+
+            if (clicked)
+                SelectLibraryItem(ctx, filteredItems, n);
         }
 
         ImGui::PopStyleVar(); // ItemSpacing
@@ -1119,40 +963,6 @@ static void RenderItemsListPane(LibraryContext& ctx)
     ImGui::PopStyleColor(2);
 
     ImGui::Spacing();
-
-    if (showTagEditor) {
-        ImGui::OpenPopup("TagGroupEditor##lib");
-        showTagEditor = false;
-    }
-    if (ImGui::BeginPopupModal("TagGroupEditor##lib", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
-        ImGui::TextUnformatted("Nombre del grupo");
-        ImGui::SetNextItemWidth(260.f);
-        ImGui::InputText("##tagName", tagNameBuffer, sizeof(tagNameBuffer));
-        ImGui::Spacing();
-        ImGui::TextUnformatted("Color");
-        ImGui::ColorEdit4("##tagColor", (float*)&tagColorBuffer, ImGuiColorEditFlags_NoAlpha);
-        ImGui::Spacing();
-        if (ImGui::Button("Guardar", ImVec2(120.f, 0))) {
-            std::vector<SongTagGroup> groups = LoadSongTagGroups();
-            SongTagGroup g;
-            g.id = editTagId.empty() ? NormalizeTagId(tagNameBuffer) : editTagId;
-            g.name = tagNameBuffer;
-            g.color = tagColorBuffer;
-            if (g.name.empty()) g.name = g.id;
-            auto it = std::find_if(groups.begin(), groups.end(), [&](const SongTagGroup& x){ return x.id == g.id; });
-            if (it != groups.end()) *it = g; else groups.push_back(g);
-            SaveSongTagGroups(groups);
-            editTagId.clear();
-            ImGui::CloseCurrentPopup();
-            ForceListUpdate() = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancelar", ImVec2(120.f, 0))) {
-            editTagId.clear();
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
 
     {
         const float avail = ImGui::GetContentRegionAvail().x;
@@ -1376,6 +1186,53 @@ void RenderSideList(LibraryContext& ctx)
     ImGui::EndChild();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+}
+
+// =============================================================================
+//  SelectLibraryItem
+//  Logica de seleccion compartida entre click en la lista y navegacion con
+//  flechas arriba/abajo. Recibe el indice DENTRO de filteredItems (no el
+//  indice original en ctx.items).
+// =============================================================================
+static void SelectLibraryItem(LibraryContext& ctx,
+                              const std::vector<std::string>& filteredItems,
+                              int n)
+{
+    if (n < 0 || n >= (int)filteredItems.size()) return;
+
+    auto it = std::find(ctx.items.begin(), ctx.items.end(), filteredItems[n]);
+    int origIdx = (it != ctx.items.end())
+        ? (int)std::distance(ctx.items.begin(), it) : -1;
+
+    ctx.selectedIndex = origIdx;
+
+    Core::LibrarySelection s;
+    s.title = filteredItems[n];
+    switch (ctx.currentCategoryInt) {
+        case kCat_Songs:     s.type = Core::ItemType::Song;      break;
+        case kCat_Videos:    s.type = Core::ItemType::Video;     break;
+        case kCat_Images:    s.type = Core::ItemType::Image;     break;
+        case kCat_Bibles:    s.type = Core::ItemType::Bible;     break;
+        case kCat_Documents: s.type = Core::ItemType::Documents; break;
+        default:             s.type = Core::ItemType::None;      break;
+    }
+    if (ctx.currentCategoryInt == kCat_Songs)
+        s.contentData = ctx.loadSongVerses(filteredItems[n]);
+    else if (ctx.currentCategoryInt == kCat_Documents) {
+        fs::path docDir =
+            U8Path(GetAssetsPath() + "/documents") / U8Path(filteredItems[n]);
+        if (fs::exists(docDir) && fs::is_directory(docDir)) {
+            std::vector<std::string> pages;
+            for (const auto& pe : fs::directory_iterator(docDir))
+                if (pe.is_regular_file())
+                    pages.push_back(ProyecThor::Library::PathToUtf8(pe.path()));
+            std::sort(pages.begin(), pages.end());
+            s.contentData = pages;
+        }
+    }
+
+    Core::PresentationCore::Get().SetSelection(s);
+    ApplyDefaultStyleIfSet(ctx);
 }
 
 // =============================================================================

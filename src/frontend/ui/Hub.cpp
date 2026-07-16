@@ -46,30 +46,36 @@ struct UpdateVersionInfo {
 // Para agregar una nueva actualizacion con su propia portada, solo hay que
 // anadir una nueva linea a esta lista con su archivo de imagen.
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
-        {
+    {
+        6, "0.3.5",
+        " NUEVA VERSION ", "ACTUALIZACION - BETA",
+        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Correcciones de navegacion en la biblioteca, atajos de teclado globales y accesos rapidos documentados para la Biblia."
+    },
+    {
         5, "0.3.4",
-        " NUEVA VERSION ", "ACTUALIZACION",
+        " NUEVA VERSION ", "ACTUALIZACION - BETA",
         "splash_bg2.png",
         "Dashboard de estadísticas locales, historial de FPS y etiquetas de biblioteca mejoradas."
     },
     {
         4, "0.3.3",
-        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
-        "splash_bg5.png",
+        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION - BETA",
+        "splash_bg2.png",
         "Multimonitor, nueva biblioteca, búsqueda bíblica mejorada y LAN más estable."
     },
     {
         3, "0.3.2",
-        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
-        "splash_bg4.png",
+        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION - BETA",
+        "splash_bg2.png",
         "Soporte oficial para Linux, mejoras de rendimiento en video, cola de "
         "reproduccion mas estable, nuevos estilos de la app y correccion en "
         "guardado/carga de ajustes."
     },
     {
         1, "0.3.1",
-        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION",
-        "splash_bg1.png",
+        " ACTUALIZACION FUNCIONAL ", "ACTUALIZACION - BETA",
+        "splash_bg2.png",
         "Audio Rework completo, nueva interfaz, sistema de covers y mejoras generales de personalizacion."
     },
     {
@@ -507,7 +513,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 5; // id de kUpdateRegistry (5 = v0.3.4)
+    static int    selectedUpdateVer = 6; // id de kUpdateRegistry (5 = v0.3.4)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -870,7 +876,24 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
             // ── Bloque de contenido condicional por versión ──────────────────
-           if (selectedUpdateVer == 4) { // v0.3.3
+           if (selectedUpdateVer == 6) { // v0.3.5
+    Cat("Biblioteca — navegacion con teclado");
+    Bul("Corregido: las flechas arriba/abajo en la lista de canciones ya no mueven el panel completo ni los botones inferiores, solo la seleccion dentro de la lista.");
+    Bul("La navegacion manual con flechas ahora convive correctamente con el sistema de foco interno de la interfaz.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Atajos de teclado globales");
+    Bul("Ctrl + P, F1 y Alt + F4 ahora funcionan como atajos reales en toda la aplicacion, no solo como texto de referencia en los menus.");
+    Bul("F1 abre la documentacion, Ctrl + P abre Preferencias y Alt + F4 cierra ProyecThor desde cualquier pantalla.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Biblia — accesos rapidos documentados");
+    Bul("Se agrego una seccion dedicada en Ajustes con todos los atajos de navegacion de la Biblia: flechas para cambiar de versiculo, toques rapidos de Ctrl y Alt para saltar de capitulo o versiculo, y Ctrl + F para el buscador rapido.");
+    ImGui::Dummy(ImVec2(0,12));
+
+    Cat("Estabilidad general");
+    Bul("Correccion de un error de compilacion en la biblioteca de canciones relacionado con el orden de declaracion de funciones internas.");
+} else if (selectedUpdateVer == 4) { // v0.3.3
                 Cat("Biblioteca renovada");
                 Bul("Nueva biblioteca con listas y playlists más prácticas.");
                 Bul("Nuevas teclas rapidas en la navegacion, biblia: ctrl + f abre el buscador de libro, capitulo biblia. Ctrl abre el buscador de capitulos y Alt abre el buscador de versiculos");

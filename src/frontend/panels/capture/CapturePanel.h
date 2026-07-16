@@ -15,14 +15,15 @@ enum class CaptureSourceType {
     Camera,         // Cámara física (webcam, capturadora HDMI, etc.)
     Window,         // Ventana específica del sistema operativo
     Monitor,        // Monitor / pantalla completa
-    None
+    Unknown         // Antes "None" — renombrado para no chocar con la
+                     // macro None de X11 (Xlib.h la define como 0L)
 };
 
 struct CaptureSource {
-    CaptureSourceType type   = CaptureSourceType::None;
-    std::string       name;   // Nombre legible ("Webcam HD", "OBS Studio", …)
-    int               index  = -1; // Índice de dispositivo (para cámaras / monitores)
-    std::string       handle; // Handle de ventana como string (para Window capture)
+    CaptureSourceType type   = CaptureSourceType::Unknown;
+    std::string       name;
+    int               index  = -1;
+    std::string       handle;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

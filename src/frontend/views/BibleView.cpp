@@ -860,12 +860,6 @@ void BibleView::Render() {
     }
  UpdateModifierTaps();
 
-    // Navegacion con flechas (deshabilitada si el buscador, el buscador
-    // rapido o el salto de capitulo/versiculo tienen foco)
-    if (!m_SearchFocused && !m_QuickNav.IsOpen() && m_JumpMode == JumpKind::None && m_BibleLoaded) {
-        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  false)) NavigateVerse(-1);
-        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) NavigateVerse(+1);
-    }
     RenderTopBar();
 
     if (ImGui::BeginTable("##BibleLayout", 2, ImGuiTableFlags_Resizable)) {

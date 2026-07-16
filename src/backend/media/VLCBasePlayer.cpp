@@ -29,10 +29,11 @@
 #endif
 
 namespace {
+
 std::atomic<int> g_NextVlcInstanceId{0};
+
 std::string GetDirectYoutubeURL(const std::string& youtubeURL)
 {
-
 #ifdef _WIN32
     std::string command = "yt-dlp.exe -f \"best[ext=mp4]/best\" -g --no-playlist \""
                         + youtubeURL + "\"";
@@ -97,10 +98,20 @@ struct VLCAudioCtx {
     WAVEHDR waveHeaders[NUM_BUFFERS] = {};
     int currentHeader = 0;
 
-    // true una vez que waveOutOpen tuvo exito. El dispositivo se abre UNA
-    // sola vez por reproductor y se mantiene abierto durante toda su vida,
-    // sin importar cuantos clips se reproduzcan despues.
+    // true una vez que waveOutOpen tuvo exito. El dispositivo se abre al
+    // arrancar el audio y se mantiene abierto mientras no cambie de
+    // dispositivo (ver SetAudioDevice / OpenWaveOutDeviceLocked /
+    // CloseWaveOutDeviceLocked).
     bool deviceInitialized = false;
+
+    // Dispositivo WinMM deseado. WAVE_MAPPER = predeterminado del sistema.
+    // Se puede cambiar en caliente via VLCBasePlayer::SetAudioDevice(),
+    // que cierra y reabre el HWAVEOUT en el nuevo id.
+    UINT_PTR deviceId = WAVE_MAPPER;
+
+    // Protege apertura/cierre/reapertura de hWaveOut contra el callback
+    // de audio (vlc_audio_play), que corre en un hilo interno de libVLC.
+    std::mutex deviceMutex;
 #endif
 };
 
@@ -115,6 +126,61 @@ struct VLCVideoCtx {
 
 #ifdef _WIN32
 
+// Abre el dispositivo WinMM indicado con el formato fijo que usa este
+// reproductor (PCM 16-bit, 44.1kHz, estereo) y prepara los buffers de
+// multiple buffering. Debe llamarse con ctx->deviceMutex tomado.
+static bool OpenWaveOutDeviceLocked(VLCAudioCtx* ctx, UINT_PTR deviceId)
+{
+    WAVEFORMATEX wfx       = {};
+    wfx.wFormatTag         = WAVE_FORMAT_PCM;
+    wfx.nChannels          = 2;
+    wfx.nSamplesPerSec     = 44100;
+    wfx.wBitsPerSample     = 16;
+    wfx.nBlockAlign        = (wfx.nChannels * wfx.wBitsPerSample) / 8;
+    wfx.nAvgBytesPerSec    = wfx.nSamplesPerSec * wfx.nBlockAlign;
+
+    if (waveOutOpen(&ctx->hWaveOut, static_cast<UINT>(deviceId), &wfx, 0, 0, CALLBACK_NULL)
+        != MMSYSERR_NOERROR)
+    {
+        ctx->hWaveOut = nullptr;
+        return false;
+    }
+
+    for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
+    {
+        ctx->waveHeaders[i] = {};
+        ctx->waveHeaders[i].dwBufferLength = 4096 * 8;
+        ctx->waveHeaders[i].lpData         = new char[ctx->waveHeaders[i].dwBufferLength];
+        waveOutPrepareHeader(ctx->hWaveOut, &ctx->waveHeaders[i], sizeof(WAVEHDR));
+    }
+    ctx->currentHeader     = 0;
+    ctx->deviceId          = deviceId;
+    ctx->deviceInitialized = true;
+    return true;
+}
+
+// Cierra el dispositivo WinMM actualmente abierto (si lo hay). Debe
+// llamarse con ctx->deviceMutex tomado.
+static void CloseWaveOutDeviceLocked(VLCAudioCtx* ctx)
+{
+    if (!ctx->hWaveOut)
+    {
+        ctx->deviceInitialized = false;
+        return;
+    }
+
+    waveOutReset(ctx->hWaveOut);
+    for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
+    {
+        waveOutUnprepareHeader(ctx->hWaveOut, &ctx->waveHeaders[i], sizeof(WAVEHDR));
+        delete[] ctx->waveHeaders[i].lpData;
+        ctx->waveHeaders[i].lpData = nullptr;
+    }
+    waveOutClose(ctx->hWaveOut);
+    ctx->hWaveOut          = nullptr;
+    ctx->deviceInitialized = false;
+}
+
 static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned* channels)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(*opaque);
@@ -122,56 +188,29 @@ static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned
     *rate     = 44100;
     *channels = 2;
 
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
     if (ctx->deviceInitialized)
         return 0;
 
-    WAVEFORMATEX wfx       = {};
-    wfx.wFormatTag         = WAVE_FORMAT_PCM;
-    wfx.nChannels          = *channels;
-    wfx.nSamplesPerSec     = *rate;
-    wfx.wBitsPerSample     = 16;
-    wfx.nBlockAlign        = (wfx.nChannels * wfx.wBitsPerSample) / 8;
-    wfx.nAvgBytesPerSec    = wfx.nSamplesPerSec * wfx.nBlockAlign;
+    if (!OpenWaveOutDeviceLocked(ctx, ctx->deviceId))
+        std::cerr << "[Audio] Error al abrir la salida WinMM (deviceId="
+                  << ctx->deviceId << ").\n";
 
-    if (waveOutOpen(&ctx->hWaveOut, WAVE_MAPPER, &wfx, 0, 0, CALLBACK_NULL) == MMSYSERR_NOERROR)
-    {
-        for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
-        {
-            ctx->waveHeaders[i].dwBufferLength = 4096 * 8;
-            ctx->waveHeaders[i].lpData         = new char[ctx->waveHeaders[i].dwBufferLength];
-            waveOutPrepareHeader(ctx->hWaveOut, &ctx->waveHeaders[i], sizeof(WAVEHDR));
-        }
-        ctx->deviceInitialized = true;
-    }
-    else
-    {
-        std::cerr << "[Audio] Error al abrir la salida nativa de Windows.\n";
-    }
     return 0;
 }
 
 static void vlc_audio_cleanup(void* opaque)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
     if (ctx->hWaveOut)
         waveOutReset(ctx->hWaveOut);
 }
 
 static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
 {
-    if (ctx->hWaveOut)
-    {
-        waveOutReset(ctx->hWaveOut);
-        for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
-        {
-            waveOutUnprepareHeader(ctx->hWaveOut, &ctx->waveHeaders[i], sizeof(WAVEHDR));
-            delete[] ctx->waveHeaders[i].lpData;
-            ctx->waveHeaders[i].lpData = nullptr;
-        }
-        waveOutClose(ctx->hWaveOut);
-        ctx->hWaveOut = nullptr;
-    }
-    ctx->deviceInitialized = false;
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+    CloseWaveOutDeviceLocked(ctx);
 }
 
 static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t /*pts*/)
@@ -182,7 +221,13 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
         return;
 
     if (!ctx->volumeMultiplier || !ctx->muted) return;
-    if (!ctx->hWaveOut) return;
+
+    // El dispositivo puede estar cerrado momentaneamente si SetAudioDevice()
+    // lo esta reabriendo desde el hilo de UI. En ese caso descartamos este
+    // bloque de samples: preferible perder unos milisegundos de audio a
+    // bloquear el hilo interno de audio de libVLC esperando el lock.
+    std::unique_lock<std::mutex> devLock(ctx->deviceMutex, std::try_to_lock);
+    if (!devLock.owns_lock() || !ctx->hWaveOut) return;
 
     // forceSilent manda por encima de cualquier otro estado: si este
     // player nacio silenciado (preview), el volumen efectivo es siempre 0,
@@ -363,17 +408,19 @@ void VLCBasePlayer::CreatePersistentPlayer()
 
 #ifdef _WIN32
     // Solo en Windows interceptamos los samples crudos para mandarlos a
-    // WinMM manualmente (necesario para el VU meter con picos reales).
+    // WinMM manualmente (necesario para el VU meter con picos reales y
+    // para poder elegir el dispositivo de salida explicitamente).
     libvlc_audio_set_format_callbacks(m_MediaPlayer, vlc_audio_setup, vlc_audio_cleanup);
     libvlc_audio_set_callbacks(m_MediaPlayer, vlc_audio_play,
                                nullptr, nullptr, nullptr, nullptr, aCtx);
 #else
     // En Linux NO registramos callbacks de audio: dejamos que libVLC use
     // su salida nativa (PulseAudio/ALSA autodetectado), que es la unica
-    // que realmente reproduce sonido en esta plataforma. Volumen/mute se
-    // controlan via libvlc_audio_set_volume()/libvlc_audio_set_mute()
-    // (ver SetVolume/SetMute mas abajo). Si el player es forceSilent, el
-    // estado inicial ya queda mudo y en volumen 0.
+    // que realmente reproduce sonido en esta plataforma. Volumen/mute/
+    // dispositivo se controlan via libvlc_audio_set_volume()/
+    // libvlc_audio_set_mute()/libvlc_audio_output_device_set() (ver
+    // SetVolume/SetMute/SetAudioDevice mas abajo). Si el player es
+    // forceSilent, el estado inicial ya queda mudo y en volumen 0.
     bool initialMute = m_Muted.load(std::memory_order_relaxed) ||
                         m_ForceSilent.load(std::memory_order_relaxed);
     libvlc_audio_set_mute(m_MediaPlayer, initialMute ? 1 : 0);
@@ -531,6 +578,15 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
     }
 
     libvlc_media_release(media); // el player ya tomo su propia referencia
+
+#ifndef _WIN32
+    // En Linux, cada Play()/set_media reinicia el modulo de salida de
+    // audio (aout) de libVLC, lo que puede perder la seleccion de
+    // dispositivo hecha con SetAudioDevice(). La reaplicamos aca para que
+    // el dispositivo elegido por el usuario persista entre clips.
+    if (!m_AudioDeviceId.empty() && m_AudioDeviceId != "default")
+        libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
+#endif
 }
 
 void VLCBasePlayer::Stop()
@@ -715,6 +771,22 @@ void VLCBasePlayer::UpdateTexture()
 std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices()
 {
     std::vector<AudioDevice> devices;
+
+#ifdef _WIN32
+    // En Windows este player no usa el modulo de audio nativo de libVLC
+    // (usamos callbacks WinMM propios, ver CreatePersistentPlayer), asi
+    // que libvlc_audio_output_device_enum() NO reflejaria los
+    // dispositivos reales del sistema. Enumeramos directamente via WinMM.
+    devices.push_back({ "default", "Dispositivo predeterminado del sistema" });
+
+    UINT numDevs = waveOutGetNumDevs();
+    for (UINT i = 0; i < numDevs; ++i)
+    {
+        WAVEOUTCAPSA caps{};
+        if (waveOutGetDevCapsA(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
+            devices.push_back({ std::to_string(i), caps.szPname });
+    }
+#else
     if (!m_MediaPlayer) return devices;
 
     libvlc_audio_output_device_t* devList = libvlc_audio_output_device_enum(m_MediaPlayer);
@@ -725,14 +797,59 @@ std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices(
     }
     if (devList)
         libvlc_audio_output_device_list_release(devList);
+#endif
 
     return devices;
 }
 
 void VLCBasePlayer::SetAudioDevice(const std::string& deviceId)
 {
-    if (m_MediaPlayer)
+    // Se recuerda siempre, incluso si todavia no hay nada reproduciendose:
+    // asi, cuando arranque el audio (Windows: vlc_audio_setup / Linux:
+    // proximo Play()), se abre directamente en el dispositivo correcto.
+    m_AudioDeviceId = deviceId;
+
+    std::cerr << "[VLC#" << m_InstanceId << "] SetAudioDevice(\""
+              << deviceId << "\")\n";
+
+#ifdef _WIN32
+    if (!m_AudioCtx) return;
+    auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+
+    UINT_PTR targetId = WAVE_MAPPER;
+    if (!deviceId.empty() && deviceId != "default")
+    {
+        try { targetId = static_cast<UINT_PTR>(std::stoul(deviceId)); }
+        catch (...) { targetId = WAVE_MAPPER; }
+    }
+
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+
+    if (ctx->deviceInitialized && ctx->deviceId == targetId)
+        return; // ya esta en ese dispositivo, nada que hacer
+
+    bool wasInitialized = ctx->deviceInitialized;
+    if (wasInitialized)
+        CloseWaveOutDeviceLocked(ctx);
+
+    if (wasInitialized)
+    {
+        // Habia audio en curso: reabrimos de inmediato en el nuevo
+        // dispositivo para no interrumpir la reproduccion.
+        if (!OpenWaveOutDeviceLocked(ctx, targetId))
+            std::cerr << "[Audio] No se pudo cambiar al dispositivo " << targetId << ".\n";
+    }
+    else
+    {
+        // Todavia no se abrio ningun dispositivo: solo dejamos el id
+        // pedido guardado, y vlc_audio_setup() lo abrira cuando arranque
+        // el audio.
+        ctx->deviceId = targetId;
+    }
+#else
+    if (m_MediaPlayer && !deviceId.empty() && deviceId != "default")
         libvlc_audio_output_device_set(m_MediaPlayer, nullptr, deviceId.c_str());
+#endif
 }
 
 void VLCBasePlayer::GetAudioLevels(float& left, float& right)

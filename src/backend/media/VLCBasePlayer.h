@@ -88,8 +88,33 @@ namespace ProyecThor::Core {
         // true si ya se decodifico al menos un frame de video real.
         bool HasVideoFrame() const;
 
+        // Enumera los dispositivos de salida de audio disponibles.
+        // - Windows: enumera dispositivos WinMM reales via
+        //   waveOutGetNumDevs()/waveOutGetDevCaps(), incluyendo siempre
+        //   un primer item "default" (WAVE_MAPPER = dispositivo
+        //   predeterminado del sistema). No depende de que haya un media
+        //   cargado.
+        // - Linux/macOS: delega en libvlc_audio_output_device_enum(),
+        //   que si necesita que el media player exista (no necesariamente
+        //   reproduciendo).
         std::vector<AudioDevice> GetAvailableAudioDevices();
+
+        // Selecciona el dispositivo de salida de audio para este player.
+        // deviceId vacio o "default" selecciona el dispositivo
+        // predeterminado del sistema.
+        //
+        // - Windows: el audio de este player pasa por una salida WinMM
+        //   propia (ver vlc_audio_play en el .cpp), asi que aca cerramos
+        //   y reabrimos el HWAVEOUT en el dispositivo pedido. Si se llama
+        //   antes de la primera reproduccion, el dispositivo se recuerda
+        //   y se abre directamente en ese ID cuando arranque el audio.
+        // - Linux/macOS: delega en libvlc_audio_output_device_set() sobre
+        //   la salida nativa de libVLC. Ademas, el ID se recuerda y se
+        //   reaplica automaticamente en cada Play() (LoadAndPlay), porque
+        //   libVLC puede resetear el device seleccionado al cargar un
+        //   nuevo medio.
         void SetAudioDevice(const std::string& deviceId);
+        std::string GetCurrentAudioDeviceId() const { return m_AudioDeviceId; }
 
         // Sin hilo de fondo, la carga ya terminó cuando Play() retorna,
         // asi que esto siempre es false. Se mantiene por compatibilidad
@@ -120,11 +145,16 @@ namespace ProyecThor::Core {
         int          m_VideoW    = 0;
         int          m_VideoH    = 0;
 
+        // Dispositivo de salida de audio actualmente seleccionado (vacio =
+        // predeterminado del sistema). Se recuerda aca (y no solo en el
+        // ctx nativo) para poder reaplicarlo tras cada Play()/reload.
+        std::string m_AudioDeviceId;
+
         bool                    m_PathBlocked       = false;
         std::string             m_BlockedPath;
 
         std::atomic<uint64_t> m_LoadGeneration{0};
- int m_InstanceId = -1;
+        int m_InstanceId = -1;
         void InitVLC();
         void DestroyVLC();
         void EnsureTexture(int w, int h);

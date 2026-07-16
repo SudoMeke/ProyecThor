@@ -45,9 +45,7 @@ void main() {
 }
 )GLSL";
 
-      // BackgroundLayer.cpp — reemplazar k_BlitFrag y BlitTexture
-
-static const char* k_BlitFrag = R"GLSL(
+        static const char* k_BlitFrag = R"GLSL(
 #version 330 core
 in  vec2      v_UV;
 out vec4      fragColor;
@@ -60,7 +58,6 @@ void main() {
     fragColor = vec4(c.rgb, c.a * u_Alpha);
 }
 )GLSL";
-
 
         static BlitResources& EnsureBlitResources()
         {
@@ -109,28 +106,28 @@ void main() {
             return s_ResourcesPerContext.emplace(ctx, res).first->second;
         }
 
-       static void BlitTexture(GLuint tex, float alpha = 1.0f, float flipY = 0.0f)
-{
-    BlitResources& res = EnsureBlitResources();
-    glUseProgram(res.prog);
-    glUniform1i(glGetUniformLocation(res.prog, "u_Tex"), 0);
-    glUniform1f(glGetUniformLocation(res.prog, "u_Alpha"), alpha);
-    glUniform1f(glGetUniformLocation(res.prog, "u_FlipY"), flipY);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glBindVertexArray(res.vao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glUseProgram(0);
-}
+        static void BlitTexture(GLuint tex, float alpha = 1.0f, float flipY = 0.0f)
+        {
+            BlitResources& res = EnsureBlitResources();
+            glUseProgram(res.prog);
+            glUniform1i(glGetUniformLocation(res.prog, "u_Tex"), 0);
+            glUniform1f(glGetUniformLocation(res.prog, "u_Alpha"), alpha);
+            glUniform1f(glGetUniformLocation(res.prog, "u_FlipY"), flipY);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glBindVertexArray(res.vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindVertexArray(0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glUseProgram(0);
+        }
 
-         static double NowSeconds()
+        static double NowSeconds()
         {
             using namespace std::chrono;
             return duration<double>(steady_clock::now().time_since_epoch()).count();
         }
-    } // anonymous namespace   <-- ESTO FALTABA
+    } // anonymous namespace
 
     BackgroundLayer::BackgroundLayer(bool forceSilentAudio)
         : m_PlayerA(2, true, forceSilentAudio)
@@ -141,23 +138,23 @@ void main() {
     VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
     VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
 
-void BackgroundLayer::Update()
-{
-    Active().UpdateTexture();
-    Active().EnforceSilenceIfNeeded();
-    Standby().EnforceSilenceIfNeeded();
-
-    if (m_SwapPending)
+    void BackgroundLayer::Update()
     {
-        VLCBasePlayer& standby = Standby();
+        Active().UpdateTexture();
+        Active().EnforceSilenceIfNeeded();
+        Standby().EnforceSilenceIfNeeded();
 
-        bool ready    = standby.HasVideoFrame() && !standby.IsLoading();
-        bool timedOut = (NowSeconds() - m_PendingSwapStart) > 3.0;
+        if (m_SwapPending)
+        {
+            VLCBasePlayer& standby = Standby();
 
-        if (ready || timedOut)
-            PerformSwap();
+            bool ready    = standby.HasVideoFrame() && !standby.IsLoading();
+            bool timedOut = (NowSeconds() - m_PendingSwapStart) > 3.0;
+
+            if (ready || timedOut)
+                PerformSwap();
+        }
     }
-}
 
     void BackgroundLayer::Render(int outputW, int outputH)
     {
@@ -221,22 +218,22 @@ void BackgroundLayer::Update()
             }
         }
 
-      if (m_SwapPending && Standby().HasVideoFrame())
-{
-    GLuint standbyTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Standby().GetTextureID()));
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glViewport(viewX, viewY, viewW, viewH);
-    BlitTexture(finalTex,   1.0f - m_TransitionProgress, m_FlipVideoY ? 1.0f : 0.0f);
-    BlitTexture(standbyTex, m_TransitionProgress,          m_FlipVideoY ? 1.0f : 0.0f);
-    glDisable(GL_BLEND);
-}
-else
-{
-    glDisable(GL_BLEND);
-    glViewport(viewX, viewY, viewW, viewH);
-    BlitTexture(finalTex, 1.0f, m_FlipVideoY ? 1.0f : 0.0f);
-}
+        if (m_SwapPending && Standby().HasVideoFrame())
+        {
+            GLuint standbyTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Standby().GetTextureID()));
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glViewport(viewX, viewY, viewW, viewH);
+            BlitTexture(finalTex,   1.0f - m_TransitionProgress, m_FlipVideoY ? 1.0f : 0.0f);
+            BlitTexture(standbyTex, m_TransitionProgress,          m_FlipVideoY ? 1.0f : 0.0f);
+            glDisable(GL_BLEND);
+        }
+        else
+        {
+            glDisable(GL_BLEND);
+            glViewport(viewX, viewY, viewW, viewH);
+            BlitTexture(finalTex, 1.0f, m_FlipVideoY ? 1.0f : 0.0f);
+        }
 
         glViewport(0, 0, outputW, outputH);
     }
@@ -283,52 +280,52 @@ else
         return &Active();
     }
 
-   void BackgroundLayer::SetVideo(const std::string& path, bool allowAudio)
-{
-    m_IsVideo = true;
-    m_ContentAllowsAudio = allowAudio;   // <-- se fija ANTES de reproducir
-
-    if (m_SwapPending || GetTextureID() != nullptr)
+    void BackgroundLayer::SetVideo(const std::string& path, bool allowAudio)
     {
-        Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
-        Standby().SetAudioActive(false);
-        m_SwapPending      = true;
-        m_PendingSwapStart = NowSeconds();
+        m_IsVideo = true;
+        m_ContentAllowsAudio = allowAudio;   // <-- se fija ANTES de reproducir
+
+        if (m_SwapPending || GetTextureID() != nullptr)
+        {
+            Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
+            Standby().SetAudioActive(false);
+            m_SwapPending      = true;
+            m_PendingSwapStart = NowSeconds();
+        }
+        else
+        {
+            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+            if (!m_IsLiveToPublic || !allowAudio)
+                Active().SetAudioActive(false);
+        }
     }
-    else
+
+    void BackgroundLayer::PerformSwap()
     {
-        Active().Play(path, /*loop=*/false, /*startMuted=*/true);
-        if (!m_IsLiveToPublic || !allowAudio)
-            Active().SetAudioActive(false);
+        VLCBasePlayer& oldActive = Active();
+        m_ActiveIsA = !m_ActiveIsA;
+        VLCBasePlayer& newActive = Active();
+
+        // Ahora el swap respeta el permiso asociado al contenido que se esta
+        // por mostrar, no solo el estado global "al aire".
+        if (m_IsLiveToPublic && m_ContentAllowsAudio)
+        {
+            newActive.SetAudioActive(true);
+            newActive.SetMute(m_TargetMuted);
+            newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        }
+        else
+        {
+            newActive.SetAudioActive(false);
+        }
+        newActive.SetPause(false);
+
+        oldActive.SetAudioActive(false);
+        oldActive.SetMute(true);
+        oldActive.Stop();
+
+        m_SwapPending = false;
     }
-}
-
-void BackgroundLayer::PerformSwap()
-{
-    VLCBasePlayer& oldActive = Active();
-    m_ActiveIsA = !m_ActiveIsA;
-    VLCBasePlayer& newActive = Active();
-
-    // Ahora el swap respeta el permiso asociado al contenido que se esta
-    // por mostrar, no solo el estado global "al aire".
-    if (m_IsLiveToPublic && m_ContentAllowsAudio)
-    {
-        newActive.SetAudioActive(true);
-        newActive.SetMute(m_TargetMuted);
-        newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
-    }
-    else
-    {
-        newActive.SetAudioActive(false);
-    }
-    newActive.SetPause(false);
-
-    oldActive.SetAudioActive(false);
-    oldActive.SetMute(true);
-    oldActive.Stop();
-
-    m_SwapPending = false;
-}
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)
     {
@@ -414,6 +411,26 @@ void BackgroundLayer::PerformSwap()
             Active().SetMute(mute);
             Active().SetVolume(mute ? 0 : m_TargetVolume);
         }
+    }
+
+    // ── Dispositivo de salida de audio ──────────────────────────────────
+
+    std::vector<VLCBasePlayer::AudioDevice> BackgroundLayer::GetAvailableAudioDevices()
+    {
+        // Cualquiera de los dos players sirve para enumerar: ambos corren
+        // en el mismo proceso y ven los mismos dispositivos del sistema.
+        return m_PlayerA.GetAvailableAudioDevices();
+    }
+
+    void BackgroundLayer::SetAudioOutputDevice(const std::string& deviceId)
+    {
+        m_AudioDeviceId = deviceId;
+
+        // Se aplica a AMBOS players (no solo al activo): el standby puede
+        // pasar a ser el activo en cualquier momento via PerformSwap(), y
+        // para entonces ya debe estar apuntando al dispositivo correcto.
+        m_PlayerA.SetAudioDevice(deviceId);
+        m_PlayerB.SetAudioDevice(deviceId);
     }
 
     void BackgroundLayer::BlockPath(const std::string& path)
