@@ -2,6 +2,7 @@
 #include <string>
 #include <imgui.h>
 #include "Version.h"
+#include "StageLayoutTemplates.h"
 
 namespace ProyecThor::Settings {
 
@@ -49,6 +50,13 @@ namespace ProyecThor::Settings {
         float fadeDuration = 0.3f;
         bool  vsync        = true;
         int   targetFPS    = 60;
+
+        // ── Calidad de salida (video de fondo) ──────────────────────────
+        // outputWidth/outputHeight/targetFPS (arriba) se reutilizan como el
+        // tamano/fps del modo Custom. outputQualityMode: 0=Auto, 1=Preset,
+        // 2=Custom (ver ProjectionQualityPresets.h).
+        int   outputQualityMode = 0;
+        int   outputPresetIndex = 3; // default: "1080p / 60 FPS"
     };
 
     // ── Audio ────────────────────────────────────────────────────────────
@@ -126,12 +134,21 @@ namespace ProyecThor::Settings {
         bool        autoDownload   = false;
     };
 
+    // ── Stage Display (monitor de control) ──────────────────────────────
+    struct StageDisplaySettings {
+        int layoutTemplateIndex = 0; // indice en kStageLayoutTemplates
+        int cellWidget[kStageMaxCells] = {
+            (int)StageWidgetType::LiveText, (int)StageWidgetType::Clock, 0, 0
+        };
+    };
+
     struct AppSettings {
-        ProjectionSettings projection;
-        AudioSettings      audio;
-        GeneralSettings    general;
-        ThemeSettings      theme;
-        UpdatesSettings    updates;
+        ProjectionSettings    projection;
+        AudioSettings         audio;
+        GeneralSettings       general;
+        ThemeSettings         theme;
+        UpdatesSettings       updates;
+        StageDisplaySettings  stageDisplay;
     };
 
     class SettingsManager {

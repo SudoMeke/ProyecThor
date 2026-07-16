@@ -106,7 +106,39 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
 
     auto& core = Core::PresentationCore::Get();
     core.SetLayer2_Text(fullText);
+    core.SetNextText(PeekNextVerseText(bookIdx, chapIdx, verseIdx));
     core.SetProjecting(true);
+}
+
+std::string BibleView::PeekNextVerseText(int bookIdx, int chapIdx, int verseIdx) const {
+    if (bookIdx < 0 || bookIdx >= (int)m_CurrentBible.books.size()) return "";
+    const auto& book = m_CurrentBible.books[bookIdx];
+    if (chapIdx < 0 || chapIdx >= (int)book.chapters.size()) return "";
+    if (verseIdx < 0 || verseIdx >= (int)book.chapters[chapIdx].verses.size()) return "";
+
+    int nextBookIdx  = bookIdx;
+    int nextChapIdx  = chapIdx;
+    int nextVerseIdx = verseIdx + 1;
+
+    if (nextVerseIdx >= (int)book.chapters[chapIdx].verses.size()) {
+        if (chapIdx + 1 < (int)book.chapters.size()) {
+            nextChapIdx  = chapIdx + 1;
+            nextVerseIdx = 0;
+        } else if (bookIdx + 1 < (int)m_CurrentBible.books.size()) {
+            nextBookIdx  = bookIdx + 1;
+            nextChapIdx  = 0;
+            nextVerseIdx = 0;
+        } else {
+            return ""; // fin de la Biblia
+        }
+    }
+
+    const auto& nextBook = m_CurrentBible.books[nextBookIdx];
+    if (nextChapIdx < 0 || nextChapIdx >= (int)nextBook.chapters.size()) return "";
+    const auto& nextChap = nextBook.chapters[nextChapIdx];
+    if (nextVerseIdx < 0 || nextVerseIdx >= (int)nextChap.verses.size()) return "";
+
+    return BuildProjectedText(nextBook, nextChap, nextChap.verses[nextVerseIdx], m_CurrentBible.name);
 }
 
 void BibleView::ReprojectInCurrentBible() {

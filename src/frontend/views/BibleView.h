@@ -21,6 +21,10 @@ private:
     void ProjectVerse(int bookIdx, int chapIdx, int verseIdx);
     void ReprojectInCurrentBible();
     void NavigateVerse(int delta);
+    // Texto del proximo versiculo (mismo rollover capitulo/libro que
+    // NavigateVerse), sin mutar estado. Vacio si no hay siguiente. Solo para
+    // el Stage Display, nunca se muestra al publico.
+    std::string PeekNextVerseText(int bookIdx, int chapIdx, int verseIdx) const;
 
     void RenderTopBar();
     void RenderHistoryPopup();

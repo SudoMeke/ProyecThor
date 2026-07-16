@@ -36,6 +36,7 @@ namespace ProyecThor::UI {
 
         void RenderDivider();
         void RenderMonitorInfo();
+        void RenderOutputQuality();
         void RenderProjectButton(float dt);
         void RenderStatusBar();
         void RenderStageSection(float dt);

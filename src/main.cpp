@@ -34,6 +34,7 @@
 #include "frontend/panels/LibraryPanel.h"
 #include "frontend/panels/PreviewPanel.h"
 #include "frontend/panels/ControlPanel.h"
+#include "frontend/panels/StageDisplayPanel.h"
 #include "frontend/panels/capture/CapturePanel.h"
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
@@ -714,6 +715,7 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     uiManager.AddPanel(previewPanel);
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::CapturePanel>());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::ControlPanel>(&uiManager));
+    uiManager.AddPanel(std::make_shared<ProyecThor::UI::StageDisplayPanel>());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::BackgroundsPanel>());
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::CanvasStylesPanel>());

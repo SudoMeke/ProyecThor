@@ -48,6 +48,10 @@ namespace ProyecThor::Core {
         std::string currentText;
         bool  showText          = false;
 
+        // Texto que vendra despues del actual (siguiente estrofa/versiculo),
+        // solo para el Stage Display — nunca se muestra al publico.
+        std::string nextText;
+
         uint64_t transitionTrigger  = 0;
         int      transitionType     = 0;
         float    transitionDuration = 1.0f;
@@ -141,6 +145,7 @@ void SetGlobalMute(bool mute);
         void StopOverlayMedia();
         void SetLayer2_Text(const std::string& text);
         void ClearLayer2();
+        void SetNextText(const std::string& text); // vista previa para el Stage Display, nunca al publico
 
         void*          GetPreviewTexture();
         VLCBasePlayer* GetPreviewPlayer();

@@ -4,6 +4,7 @@
 #include "DesignSystem.h"
 #include "ControlTheme.h"
 #include "../settings/SettingsManager.h"
+#include "../settings/ProjectionQualityPresets.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
 
 #include <imgui.h>
@@ -335,6 +336,7 @@ void ControlPanel::Render() {
     ImGui::Spacing();
     SectionHeader("ENRUTAMIENTO DE PANTALLAS");
     RenderMonitorInfo();
+    RenderOutputQuality();
 
     ImGui::Spacing();
     SectionHeader("MONITOR DE CONTROL");
@@ -397,6 +399,56 @@ void ControlPanel::RenderMonitorInfo() {
             ImGui::PopStyleColor();
         }
     }
+    EndCard();
+}
+
+void ControlPanel::RenderOutputQuality() {
+    using namespace ProyecThor::Settings;
+    auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+    auto& p = settings.projection;
+
+    BeginCard("QualityCard", 92.0f);
+    ImGui::TextUnformatted("Calidad de salida (video de fondo)");
+    ImGui::Spacing();
+
+    static thread_local std::vector<std::string> labels;
+    static thread_local std::vector<const char*> ptrs;
+    labels.clear(); ptrs.clear();
+    labels.push_back("Auto");
+    for (const auto& preset : kQualityPresets) labels.push_back(preset.label);
+    labels.push_back("Personalizado (ver Ajustes > Proyección)");
+    for (const auto& l : labels) ptrs.push_back(l.c_str());
+
+    // sel: 0=Auto, 1..N=presets, N+1=Custom
+    auto mode = static_cast<OutputQualityMode>(p.outputQualityMode);
+    int sel = 0;
+    if (mode == OutputQualityMode::Preset)
+        sel = 1 + std::clamp(p.outputPresetIndex, 0, kQualityPresetCount - 1);
+    else if (mode == OutputQualityMode::Custom)
+        sel = 1 + kQualityPresetCount;
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ControlTheme::ComboBg);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ControlTheme::ComboBgHover);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,        ControlTheme::ComboPopupBg);
+    ImGui::PushStyleColor(ImGuiCol_Border,         ControlTheme::Divider);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.frameRounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 6.0f));
+
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::Combo("##outputQuality", &sel, ptrs.data(), (int)ptrs.size())) {
+        if (sel == 0) {
+            p.outputQualityMode = (int)OutputQualityMode::Auto;
+        } else if (sel <= kQualityPresetCount) {
+            p.outputQualityMode = (int)OutputQualityMode::Preset;
+            p.outputPresetIndex = sel - 1;
+        } else {
+            p.outputQualityMode = (int)OutputQualityMode::Custom;
+        }
+        ProyecThor::Settings::SettingsManager::Get().Save();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(4);
     EndCard();
 }
 

@@ -370,6 +370,16 @@ void SettingsManager::SaveSettings() {
     j["projection"]["defaultBgR"]    = p.defaultBgR;
     j["projection"]["defaultBgG"]    = p.defaultBgG;
     j["projection"]["defaultBgB"]    = p.defaultBgB;
+    j["projection"]["outputWidth"]        = p.outputWidth;
+    j["projection"]["outputHeight"]       = p.outputHeight;
+    j["projection"]["targetFPS"]          = p.targetFPS;
+    j["projection"]["outputQualityMode"]  = p.outputQualityMode;
+    j["projection"]["outputPresetIndex"]  = p.outputPresetIndex;
+
+    const auto& sd = m_Settings.stageDisplay;
+    j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
+    for (int i = 0; i < kStageMaxCells; i++)
+        j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -453,6 +463,22 @@ void SettingsManager::LoadSettings() {
             p.defaultBgR    = jp.value("defaultBgR",    0.0f);
             p.defaultBgG    = jp.value("defaultBgG",    0.0f);
             p.defaultBgB    = jp.value("defaultBgB",    0.0f);
+            p.outputWidth        = jp.value("outputWidth",        0);
+            p.outputHeight       = jp.value("outputHeight",       0);
+            p.targetFPS          = jp.value("targetFPS",          60);
+            p.outputQualityMode  = jp.value("outputQualityMode",  0);
+            p.outputPresetIndex  = jp.value("outputPresetIndex",  3);
+        }
+
+        if (j.contains("stageDisplay")) {
+            auto& sd = m_Settings.stageDisplay;
+            const auto& jsd = j["stageDisplay"];
+            sd.layoutTemplateIndex = jsd.value("layoutTemplateIndex", 0);
+            if (jsd.contains("cellWidget") && jsd["cellWidget"].is_array()) {
+                const auto& arr = jsd["cellWidget"];
+                for (int i = 0; i < kStageMaxCells && i < (int)arr.size(); i++)
+                    sd.cellWidget[i] = arr[i].get<int>();
+            }
         }
 
         if (j.contains("general")) {

@@ -459,6 +459,14 @@ if (!styleFont) styleFont = ImGui::GetFont();
         m_HasRecordedCurrentSongProjection = true;
     };
 
+    // Empuja al Stage Display la estrofa que viene despues de idx (o vacio si
+    // es la ultima). Nunca se muestra al publico, solo en el Stage.
+    auto PushNextStanzaText = [&](int idx) {
+        int nextIdx = idx + 1;
+        core.SetNextText(nextIdx < (int)selection.contentData.size()
+                          ? selection.contentData[nextIdx] : "");
+    };
+
     // ── Navegacion con teclado ────────────────────────────────────────────────
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
         !selection.contentData.empty())
@@ -469,6 +477,7 @@ if (!styleFont) styleFont = ImGui::GetFont();
     {
         m_ActiveStanzaIndex++;
         core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
+        PushNextStanzaText(m_ActiveStanzaIndex);
         if (core.IsProjecting())
             core.SetProjecting(true);
 
@@ -481,6 +490,7 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
     {
         m_ActiveStanzaIndex--;
         core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
+        PushNextStanzaText(m_ActiveStanzaIndex);
         if (core.IsProjecting())
             core.SetProjecting(true);
 
@@ -534,6 +544,7 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
             {
                 m_ActiveStanzaIndex = (int)i;
                 core.SetLayer2_Text(stanza);
+                PushNextStanzaText(m_ActiveStanzaIndex);
                 if (core.IsProjecting())
                     core.SetProjecting(true);
                 TryRecordProjection(true);

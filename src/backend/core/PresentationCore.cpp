@@ -419,7 +419,14 @@ void PresentationCore::ClearLayer2() {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = "";
     m_State.showText    = false;
+    m_State.nextText    = "";
     ++m_State.transitionTrigger;   // NUEVO
+    ++m_StreamVersion;
+}
+
+void PresentationCore::SetNextText(const std::string& text) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_State.nextText = text;
     ++m_StreamVersion;
 }
 
