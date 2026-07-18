@@ -9,8 +9,6 @@
 
 namespace ProyecThor::UI {
 
-namespace DS = ProyecThor::UI::DS;
-
 StylesHubPanel::StylesHubPanel(UIManager* uiManager)
     : m_UIManager(uiManager)
 {}
@@ -27,7 +25,7 @@ void StylesHubPanel::Render()
         return;
     }
 
-    constexpr float railH   = kIconRailHorizontalSize;
+    const float     railH   = IconRailThickness(false);
     const float     totalW  = ImGui::GetContentRegionAvail().x;
     const float     totalH  = ImGui::GetContentRegionAvail().y;
 
@@ -43,11 +41,12 @@ void StylesHubPanel::Render()
         static const IconRailItem kItems[] = {
             { (int)StylesSection::Backgrounds,  AppIcons::DrawIcon_Layers,  "Fondos"   },
             { (int)StylesSection::Styles,       AppIcons::DrawIcon_Palette,"Estilos"  },
+            { (int)StylesSection::Overlays,     AppIcons::DrawIcon_Overlay,"Overlays" },
             { (int)StylesSection::Transitions,  AppIcons::DrawIcon_Swap,   "Trans."   },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 4, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (StylesSection)currentIndex;
     }
 
@@ -79,6 +78,7 @@ void StylesHubPanel::Render()
     {
         case StylesSection::Backgrounds: m_Backgrounds.RenderContent(); break;
         case StylesSection::Styles:      m_Styles.RenderContent();     break;
+        case StylesSection::Overlays:    m_Overlays.RenderContent();   break;
         case StylesSection::Transitions:
             if (m_TransitionsRef) m_TransitionsRef->RenderContent();
             break;

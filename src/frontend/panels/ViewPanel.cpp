@@ -1,12 +1,88 @@
 #include "ViewPanel.h"
+#include "UIManager.h"
+#include "DesignSystem.h"
+#include "frontend/ui/bin/StyleGeneralApp.h"
 #include "backend/core/PresentationCore.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <GLFW/glfw3.h>
 
 namespace ProyecThor::UI {
+
+static constexpr float kQuickActionsRailW = 40.0f;
+
+namespace {
+
+ImVec4 ToVec4(ImU32 col) { return ImGui::ColorConvertU32ToFloat4(col); }
+ImVec4 Brighten(const ImVec4& c, float amount)
+{
+    return ImVec4(
+        std::clamp(c.x + amount, 0.0f, 1.0f),
+        std::clamp(c.y + amount, 0.0f, 1.0f),
+        std::clamp(c.z + amount, 0.0f, 1.0f),
+        c.w);
+}
+
+// Botón de celda plano — sin esquinas redondeadas, ancho completo del riel y
+// separador inferior de 1px: da el efecto de "grilla" tipo hoja de cálculo
+// (Excel) / toolbar de Holyrics-ProPresenter en vez de tarjetas vistosas.
+bool QuickActionButton(const char* id, const char* iconKey, const char* fallbackGlyph,
+                       const char* tooltip, ImVec2 size, ImVec4 bgColor, ImVec4 hoverColor,
+                       ImVec4 activeColor, ImVec4 tint, bool toggledOn)
+{
+    ImVec4 restColor = toggledOn ? activeColor : bgColor;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        restColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  activeColor);
+    ImGui::PushStyleColor(ImGuiCol_Text,          tint);
+
+    auto it = StyleGeneralApp::Icons.find(iconKey);
+    bool hasIcon = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
+    std::string label = (hasIcon ? "" : std::string(fallbackGlyph)) + "##" + id;
+
+    bool clicked = ImGui::Button(label.c_str(), size);
+
+    ImVec2 bMin = ImGui::GetItemRectMin();
+    ImVec2 bMax = ImGui::GetItemRectMax();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    if (hasIcon)
+    {
+        const float iconSide = std::min(size.x, size.y) * 0.42f;
+        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+        const ImVec2 pMin    = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
+        const ImVec2 pMax    = { center.x + iconSide * 0.5f, center.y + iconSide * 0.5f };
+
+        dl->AddImage(it->second.textureID, pMin, pMax,
+            ImVec2(0, 0), ImVec2(1, 1),
+            ImGui::ColorConvertFloat4ToU32(tint));
+    }
+
+    // Línea fina de "celda" — misma idea que los bordes de una hoja de cálculo.
+    dl->AddLine({ bMin.x, bMax.y }, { bMax.x, bMax.y }, IM_COL32(0, 0, 0, 120), 1.0f);
+
+    // Barra izquierda delgada cuando el estado está activo/encendido.
+    if (toggledOn)
+    {
+        ImU32 accent = ImGui::ColorConvertFloat4ToU32(tint);
+        dl->AddRectFilled({ bMin.x, bMin.y + 3.0f }, { bMin.x + 2.0f, bMax.y - 3.0f }, accent);
+    }
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar();
+
+    if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("%s", tooltip);
+
+    return clicked;
+}
+
+} // namespace
 
 void ViewPanel::Render()
 {
@@ -20,12 +96,103 @@ void ViewPanel::Render()
 
     if (visible)
     {
-        ImVec2 contentSize = ImGui::GetContentRegionAvail();
-        if (contentSize.x > 8.0f && contentSize.y > 8.0f)
-            RenderContent(contentSize.x, contentSize.y);
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        const float railW    = kQuickActionsRailW;
+        const float contentW = std::max(0.0f, avail.x - railW);
+
+        // Children con padding cero — el estilo global usa WindowPadding
+        // (22,18), que aquí sólo recortaría el video y el riel angosto.
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+        if (contentW > 8.0f && avail.y > 8.0f)
+        {
+            ImGui::BeginChild("##viewVideoArea", ImVec2(contentW, avail.y), false,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            RenderContent(contentW, avail.y);
+            ImGui::EndChild();
+        }
+
+        ImGui::SameLine(0.0f, 0.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.06f, 0.09f, 1.0f));
+        ImGui::BeginChild("##viewQuickActions", ImVec2(railW, avail.y), false,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        RenderQuickActions(railW, avail.y);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::PopStyleVar();
     }
 
     ImGui::End();
+}
+
+void ViewPanel::RenderQuickActions(float railW, float railH)
+{
+    (void)railH;
+    auto& core = Core::PresentationCore::Get();
+    bool stretchOn = core.GetStretchToFill();
+    bool isMuted   = core.GetLiveMute();
+
+    ImVec4 baseFill     = ToVec4(DS::BtnDefaultFill);
+    ImVec4 hoverClear   = ToVec4(DS::AccentColorDim);
+    ImVec4 hoverStop    = ToVec4((DS::DangerColor & 0x00FFFFFFu) | (89u << 24));
+    ImVec4 activeStretch= ToVec4((DS::AccentColor & 0x00FFFFFFu) | (140u << 24));
+    ImVec4 hoverMute    = ToVec4(DS::DangerColor);
+    ImVec4 activeMute   = Brighten(ToVec4(DS::DangerColor), 0.12f);
+    ImVec4 textPrimary  = ToVec4(DS::TextPrimary);
+    ImVec4 textDanger   = ToVec4(DS::DangerColor);
+
+    struct ActionDef {
+        const char* id;
+        const char* icon;
+        const char* fallbackGlyph;
+        const char* tooltip;
+        ImVec4      hoverColor;
+        ImVec4      activeColor;
+        bool        toggledOn;
+        ImVec4      tint;
+    };
+
+    ActionDef actions[5] = {
+        { "vaClearText", "cleaning_services", "Lim", "Limpiar texto",
+          hoverClear, baseFill, false, textPrimary },
+        { "vaClearBg",   "delete",            "BG",  "Quitar fondo",
+          hoverStop,  baseFill, false, textPrimary },
+        { "vaStretch",   stretchOn ? "original_screen" : "fit_screen", stretchOn ? "1:1" : "Fit",
+          "Alternar proporción", hoverClear, activeStretch, stretchOn, textPrimary },
+        { "vaMute",      isMuted ? "volume_off" : "volume_up", isMuted ? "Mute" : "Vol",
+          "Mutear / Desmutear audio vivo", isMuted ? hoverMute : hoverClear, activeMute, isMuted,
+          isMuted ? textDanger : textPrimary },
+        { "vaPrefs",     "settings", "Cfg", "Abrir preferencias",
+          hoverClear, baseFill, false, textPrimary },
+    };
+
+    // Celdas de ancho completo, pegadas unas a otras (separadas solo por la
+    // línea de 1px que dibuja QuickActionButton) — look de toolbar plano,
+    // no de tarjetas sueltas.
+    const ImVec2 cellSize(railW, 34.0f);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    ImGui::Dummy(ImVec2(railW, 1.0f));
+
+    for (int i = 0; i < 5; i++)
+    {
+        if (i == 4) ImGui::Dummy(ImVec2(railW, 10.0f)); // separa "Ajustes" del resto
+
+        if (QuickActionButton(actions[i].id, actions[i].icon, actions[i].fallbackGlyph, actions[i].tooltip,
+                               cellSize, baseFill, actions[i].hoverColor, actions[i].activeColor,
+                               actions[i].tint, actions[i].toggledOn))
+        {
+            if (i == 0)      core.ClearLayer2();
+            else if (i == 1) core.StopBackgroundMedia();
+            else if (i == 2) core.SetStretchToFill(!stretchOn);
+            else if (i == 3) core.SetLiveMute(!isMuted);
+            else if (i == 4 && m_UIManager) m_UIManager->RequestSettings();
+        }
+    }
+
+    ImGui::PopStyleVar();
 }
 
 void ViewPanel::RenderContent(float panelW, float panelH)

@@ -1,0 +1,631 @@
+#include "LayersOverlayTab.h"
+#include "LayersTheme.h"
+#include "backend/core/PresentationCore.h"
+#include <imgui.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <shlobj.h>
+#include <commdlg.h>
+#else
+#include <cstdlib>
+#include <pwd.h>
+#include <unistd.h>
+#endif
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <algorithm>
+#include <cstring>
+#include <cstdio>
+#include <GL/gl.h>
+#include "stb_image.h"
+
+namespace fs = std::filesystem;
+namespace ProyecThor::UI {
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Rutas — mismo patron que LayersStyleTab/LayersBgTab (cada tab resuelve su
+//  propia carpeta de datos).
+// ─────────────────────────────────────────────────────────────────────────────
+static fs::path GetAppDataDir() {
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH] = {};
+    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
+    fs::path dir = fs::path(buf) / "ProyecThor";
+#else
+    fs::path base;
+    if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg) {
+        base = xdg;
+    } else if (const char* home = std::getenv("HOME"); home && *home) {
+        base = fs::path(home) / ".local" / "share";
+    } else if (struct passwd* pw = getpwuid(getuid())) {
+        base = fs::path(pw->pw_dir) / ".local" / "share";
+    } else {
+        base = fs::current_path();
+    }
+    fs::path dir = base / "ProyecThor";
+#endif
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    return dir;
+}
+static fs::path OverlaysDir() {
+    fs::path dir = GetAppDataDir() / "assets" / "overlays";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    return dir;
+}
+static fs::path FontsDir() { return GetAppDataDir() / "assets" / "fonts"; }
+static fs::path OverlayImagesDir() {
+    fs::path dir = OverlaysDir() / "images";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    return dir;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Carpeta de imagenes del tab "Fondos" — replica la resolucion de ruta de
+//  LayersBgTab::GetAppDataDir()/BgRootDir() (usa XDG_CONFIG_HOME/.config, a
+//  diferencia de este tab que usa XDG_DATA_HOME/.local/share), para poder
+//  listar esas imagenes como origen al anadir una capa de imagen sin acoplar
+//  ambas clases entre si.
+// ─────────────────────────────────────────────────────────────────────────────
+static fs::path BgImagesRootDir() {
+    fs::path dir;
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH] = {};
+    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
+    dir = fs::path(buf) / "ProyecThor";
+#else
+    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+    fs::path base;
+    if (xdgConfig && *xdgConfig) base = fs::path(xdgConfig);
+    else { const char* home = std::getenv("HOME"); base = fs::path(home ? home : ".") / ".config"; }
+    dir = base / "ProyecThor";
+#endif
+    return dir / "assets" / "backgrounds";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Selector de archivo de imagen (para importar una capa de imagen nueva)
+// ─────────────────────────────────────────────────────────────────────────────
+#ifndef _WIN32
+static std::string OpenImageFileDialogUnix() {
+    const char* commands[] = {
+        "zenity --file-selection --title=\"Seleccionar imagen\" "
+        "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
+    };
+    for (const char* cmd : commands) {
+        std::string result;
+        char buffer[1024];
+        FILE* pipe = popen(cmd, "r");
+        if (!pipe) continue;
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
+        int status = pclose(pipe);
+        if (status != 0) continue;
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+            result.pop_back();
+        if (!result.empty()) return result;
+    }
+    return {};
+}
+#endif
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Escapado simple de saltos de linea para el formato .overlay (una linea = un
+//  par clave=valor)
+// ─────────────────────────────────────────────────────────────────────────────
+static std::string EscapeNewlines(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if (c == '\n') out += "\\n";
+        else if (c == '\r') continue;
+        else out += c;
+    }
+    return out;
+}
+static std::string UnescapeNewlines(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == '\\' && i + 1 < s.size() && s[i+1] == 'n') { out += '\n'; i++; }
+        else out += s[i];
+    }
+    return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Thumbnails (PNG ya rasterizado del overlay)
+// ─────────────────────────────────────────────────────────────────────────────
+static ImTextureID LoadImageThumb(const char* path) {
+    int w, h, n;
+    unsigned char* d = stbi_load(path, &w, &h, &n, 4);
+    if (!d) return 0;
+    GLuint tex; glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d);
+    stbi_image_free(d);
+    return (ImTextureID)(intptr_t)tex;
+}
+
+ImTextureID LayersOverlayTab::GetThumbnail(const std::string& path) {
+    auto it = m_ThumbnailCache.find(path);
+    if (it != m_ThumbnailCache.end()) return it->second;
+    std::string abs = fs::absolute(fs::path(path)).string();
+    ImTextureID t = LoadImageThumb(abs.c_str());
+    m_ThumbnailCache[path] = t;
+    return t;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Constructor / listas
+// ─────────────────────────────────────────────────────────────────────────────
+LayersOverlayTab::LayersOverlayTab() {
+    LoadFontsList();
+    m_Editor = std::make_unique<OverlayCanvasEditor>(
+        &m_AvailableFonts,
+        [this](const std::string& name) { return ResolvePngPath(name); },
+        [this]() { return ListBgImages(); },
+        [this]() { return ImportOverlayImage(); });
+    ReloadList();
+}
+
+void LayersOverlayTab::LoadFontsList() {
+    m_AvailableFonts.clear();
+    m_AvailableFonts.push_back("Predeterminada");
+    try {
+        fs::path d = FontsDir();
+        fs::create_directories(d);
+        if (fs::exists(d))
+            for (const auto& e : fs::directory_iterator(d)) {
+                std::string ext = e.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext == ".ttf" || ext == ".otf" || ext == ".ttc")
+                    m_AvailableFonts.push_back(e.path().stem().string());
+            }
+    } catch (...) {}
+}
+
+void LayersOverlayTab::ReloadList() {
+    m_Overlays.clear();
+    try {
+        for (const auto& e : fs::directory_iterator(OverlaysDir())) {
+            if (!e.is_regular_file()) continue;
+            if (e.path().extension() != ".overlay") continue;
+            std::string name = e.path().stem().string();
+            fs::path png = OverlaysDir() / (name + ".png");
+            if (!fs::exists(png)) continue;
+            m_Overlays.push_back({ name, png.string() });
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "[LayersOverlayTab] " << ex.what() << "\n";
+    }
+    std::sort(m_Overlays.begin(), m_Overlays.end(),
+        [](const OverlayEntry& a, const OverlayEntry& b) { return a.name < b.name; });
+}
+
+std::string LayersOverlayTab::ResolvePngPath(const std::string& name) {
+    return (OverlaysDir() / (name + ".png")).string();
+}
+
+std::vector<std::string> LayersOverlayTab::ListBgImages() {
+    std::vector<std::string> out;
+    std::error_code ec;
+    fs::path root = BgImagesRootDir();
+    if (!fs::exists(root, ec)) return out;
+    for (const auto& e : fs::recursive_directory_iterator(
+             root, fs::directory_options::skip_permission_denied, ec)) {
+        if (!e.is_regular_file()) continue;
+        std::string ext = e.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png")
+            out.push_back(e.path().string());
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+std::string LayersOverlayTab::ImportOverlayImage() {
+    std::string selectedPath;
+#ifdef _WIN32
+    char filename[MAX_PATH] = {};
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = NULL;
+    ofn.lpstrFilter = "Imagenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
+    ofn.lpstrFile   = filename;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameA(&ofn)) return {};
+    selectedPath = filename;
+#else
+    selectedPath = OpenImageFileDialogUnix();
+    if (selectedPath.empty()) return {};
+#endif
+
+    std::error_code ec;
+    fs::path dstDir = OverlayImagesDir();
+    fs::path src(selectedPath);
+    fs::path dst = dstDir / src.filename();
+    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+    if (ec) return {};
+    return dst.string();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Persistencia de la receta editable (.overlay)
+// ─────────────────────────────────────────────────────────────────────────────
+bool LayersOverlayTab::SaveOverlayRecipe(const std::string& name, const OverlayDoc& doc) {
+    if (name.empty()) return false;
+    std::ofstream f(OverlaysDir() / (name + ".overlay"));
+    if (!f.is_open()) return false;
+
+    f << "canvasW=" << doc.canvasW << "\n";
+    f << "canvasH=" << doc.canvasH << "\n";
+    f << "bgColor=" << doc.bgColor[0] << "," << doc.bgColor[1] << ","
+                    << doc.bgColor[2] << "," << doc.bgColor[3] << "\n";
+    f << "layerCount=" << doc.layers.size() << "\n";
+    for (size_t i = 0; i < doc.layers.size(); i++) {
+        const auto& l = doc.layers[i];
+        f << "layer" << i << ".kind="  << (l.kind == OverlayLayerKind::Image ? "image" : "text") << "\n";
+        f << "layer" << i << ".text="  << EscapeNewlines(l.text) << "\n";
+        f << "layer" << i << ".font="  << l.fontName << "\n";
+        f << "layer" << i << ".size="  << l.fontSize << "\n";
+        f << "layer" << i << ".color=" << l.color[0] << "," << l.color[1] << ","
+                                        << l.color[2] << "," << l.color[3] << "\n";
+        f << "layer" << i << ".image=" << l.imagePath << "\n";
+        f << "layer" << i << ".sizeW=" << l.sizeW << "\n";
+        f << "layer" << i << ".sizeH=" << l.sizeH << "\n";
+        f << "layer" << i << ".rotation=" << l.rotation << "\n";
+        f << "layer" << i << ".posX="  << l.posX << "\n";
+        f << "layer" << i << ".posY="  << l.posY << "\n";
+
+        f << "layer" << i << ".shadowOn="  << (l.shadowEnabled ? 1 : 0) << "\n";
+        f << "layer" << i << ".shadowCol=" << l.shadowColor[0] << "," << l.shadowColor[1] << ","
+                                            << l.shadowColor[2] << "," << l.shadowColor[3] << "\n";
+        f << "layer" << i << ".shadowOffX=" << l.shadowOffsetX << "\n";
+        f << "layer" << i << ".shadowOffY=" << l.shadowOffsetY << "\n";
+
+        f << "layer" << i << ".outlineOn="  << (l.outlineEnabled ? 1 : 0) << "\n";
+        f << "layer" << i << ".outlineCol=" << l.outlineColor[0] << "," << l.outlineColor[1] << ","
+                                             << l.outlineColor[2] << "," << l.outlineColor[3] << "\n";
+        f << "layer" << i << ".outlineW="   << l.outlineWidth << "\n";
+
+        f << "layer" << i << ".bgOn="      << (l.bgEnabled ? 1 : 0) << "\n";
+        f << "layer" << i << ".bgCol="     << l.bgColor[0] << "," << l.bgColor[1] << ","
+                                            << l.bgColor[2] << "," << l.bgColor[3] << "\n";
+        f << "layer" << i << ".bgPadX="    << l.bgPaddingX << "\n";
+        f << "layer" << i << ".bgPadY="    << l.bgPaddingY << "\n";
+        f << "layer" << i << ".bgRound="   << l.bgRounding << "\n";
+    }
+    return true;
+}
+
+bool LayersOverlayTab::LoadOverlayRecipe(const std::string& name, OverlayDoc& out) {
+    std::ifstream f(OverlaysDir() / (name + ".overlay"));
+    if (!f.is_open()) return false;
+
+    out = OverlayDoc{};
+    out.layers.clear();
+    int layerCount = 0;
+
+    std::string line;
+    while (std::getline(f, line)) {
+        std::string::size_type eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string k = line.substr(0, eq);
+        std::string v = line.substr(eq + 1);
+        while (!v.empty() && (v.back() == '\r' || v.back() == '\n')) v.pop_back();
+
+        if (k == "canvasW") out.canvasW = std::atoi(v.c_str());
+        else if (k == "canvasH") out.canvasH = std::atoi(v.c_str());
+        else if (k == "bgColor")
+            sscanf(v.c_str(), "%f,%f,%f,%f", &out.bgColor[0], &out.bgColor[1], &out.bgColor[2], &out.bgColor[3]);
+        else if (k == "layerCount") layerCount = std::atoi(v.c_str());
+        else if (k.rfind("layer", 0) == 0) {
+            std::string::size_type dot = k.find('.');
+            if (dot == std::string::npos) continue;
+            int idx = std::atoi(k.substr(5, dot - 5).c_str());
+            std::string field = k.substr(dot + 1);
+            if (idx < 0) continue;
+            while ((int)out.layers.size() <= idx) out.layers.push_back(OverlayLayer{});
+
+            auto& l = out.layers[idx];
+            if      (field == "kind")  l.kind     = (v == "image") ? OverlayLayerKind::Image : OverlayLayerKind::Text;
+            else if (field == "text")  l.text     = UnescapeNewlines(v);
+            else if (field == "font")  l.fontName = v;
+            else if (field == "size")  l.fontSize = (float)std::atof(v.c_str());
+            else if (field == "image") l.imagePath = v;
+            else if (field == "sizeW") l.sizeW    = (float)std::atof(v.c_str());
+            else if (field == "sizeH") l.sizeH    = (float)std::atof(v.c_str());
+            else if (field == "rotation") l.rotation = (float)std::atof(v.c_str());
+            else if (field == "posX")  l.posX     = (float)std::atof(v.c_str());
+            else if (field == "posY")  l.posY     = (float)std::atof(v.c_str());
+            else if (field == "color")
+                sscanf(v.c_str(), "%f,%f,%f,%f", &l.color[0], &l.color[1], &l.color[2], &l.color[3]);
+            else if (field == "shadowOn")   l.shadowEnabled = (v != "0");
+            else if (field == "shadowCol")
+                sscanf(v.c_str(), "%f,%f,%f,%f", &l.shadowColor[0], &l.shadowColor[1],
+                       &l.shadowColor[2], &l.shadowColor[3]);
+            else if (field == "shadowOffX") l.shadowOffsetX = (float)std::atof(v.c_str());
+            else if (field == "shadowOffY") l.shadowOffsetY = (float)std::atof(v.c_str());
+            else if (field == "outlineOn")  l.outlineEnabled = (v != "0");
+            else if (field == "outlineCol")
+                sscanf(v.c_str(), "%f,%f,%f,%f", &l.outlineColor[0], &l.outlineColor[1],
+                       &l.outlineColor[2], &l.outlineColor[3]);
+            else if (field == "outlineW")   l.outlineWidth = (float)std::atof(v.c_str());
+            else if (field == "bgOn")       l.bgEnabled = (v != "0");
+            else if (field == "bgCol")
+                sscanf(v.c_str(), "%f,%f,%f,%f", &l.bgColor[0], &l.bgColor[1], &l.bgColor[2], &l.bgColor[3]);
+            else if (field == "bgPadX")     l.bgPaddingX = (float)std::atof(v.c_str());
+            else if (field == "bgPadY")     l.bgPaddingY = (float)std::atof(v.c_str());
+            else if (field == "bgRound")    l.bgRounding = (float)std::atof(v.c_str());
+        }
+    }
+    (void)layerCount;
+    return true;
+}
+
+bool LayersOverlayTab::DeleteOverlay(const std::string& name) {
+    std::error_code ec;
+    fs::remove(OverlaysDir() / (name + ".overlay"), ec);
+    fs::remove(OverlaysDir() / (name + ".png"), ec);
+    m_ThumbnailCache.erase(ResolvePngPath(name));
+    return true;
+}
+
+bool LayersOverlayTab::RenameOverlay(const std::string& oldName, const std::string& newName) {
+    if (newName.empty() || oldName == newName) return false;
+    std::error_code ec;
+    fs::rename(OverlaysDir() / (oldName + ".overlay"), OverlaysDir() / (newName + ".overlay"), ec);
+    if (ec) return false;
+    fs::rename(OverlaysDir() / (oldName + ".png"), OverlaysDir() / (newName + ".png"), ec);
+    m_ThumbnailCache.erase(ResolvePngPath(oldName));
+    return !ec;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Toolbar superior — compacta, solo iconos
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::RenderTopBar() {
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+    ImGui::TextUnformatted("Overlays");
+    ImGui::PopStyleColor();
+
+    const float btnSz = 26.0f;
+    const float zoomW = 76.0f;
+    const float gap   = 4.0f;
+    const float rowW  = zoomW + gap + btnSz * 3 + gap * 3;
+    const float avail = ImGui::GetWindowContentRegionMax().x;
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
+
+    if (m_GridMode) {
+        LPZoomSlider("##ovzoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
+        ImGui::SameLine(0, gap);
+    } else {
+        ImGui::Dummy(ImVec2(zoomW, btnSz));
+        ImGui::SameLine(0, gap);
+    }
+
+    ImGui::PushID("ovview");
+    if (LPCornerIconBtn("##ovgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            float cs = r*0.42f, g = r*0.18f;
+            for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
+                ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
+                dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
+            }
+        }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
+        m_GridMode = true;
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##ovlistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            for (int i=0;i<3;i++) {
+                float y = c.y - r*0.5f + i*r*0.5f;
+                dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
+            }
+        }, "Vista en lista", {btnSz,btnSz}, !m_GridMode))
+        m_GridMode = false;
+    ImGui::PopID();
+
+    ImGui::SameLine(0, gap*2);
+    if (LPCornerIconBtn("##ovnew", LPDrawPlus, "Nuevo overlay", {btnSz,btnSz}, true)) {
+        LoadFontsList();
+        m_Editor->OpenNew();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tarjeta / fila
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::RenderCard(const OverlayEntry& e, float W, float H, int col, int cols) {
+    ImGui::PushID(e.name.c_str());
+
+    ImTextureID thumb = GetThumbnail(e.pngPath);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x+W, pos.y+H});
+    float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    float inset = 2.0f * t;
+    ImVec2 p0 = { pos.x - inset, pos.y - inset };
+    ImVec2 p1 = { pos.x + W + inset, pos.y + H + inset };
+
+    dl->AddRectFilled(p0, p1, LPU32(LP::Surface1), 10.0f);
+    if (thumb) dl->AddImageRounded(thumb, p0, p1, {0,0}, {1,1}, IM_COL32_WHITE, 10.0f);
+
+    ImVec4 borderCol(
+        LP::Border.x + (LP::Accent.x-LP::Border.x)*t,
+        LP::Border.y + (LP::Accent.y-LP::Border.y)*t,
+        LP::Border.z + (LP::Accent.z-LP::Border.z)*t,
+        LP::Border.w + (0.6f-LP::Border.w)*t);
+    dl->AddRect(p0, p1, LPU32(borderCol), 10.0f, 0, 1.0f + 0.8f*t);
+
+    std::string dn = e.name.length() > 18 ? e.name.substr(0,15) + "..." : e.name;
+    dl->AddRectFilled({p0.x, p1.y-26.0f}, {p1.x, p1.y}, LPU32({0,0,0,0.78f}), 10.0f, ImDrawFlags_RoundCornersBottom);
+    ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
+    dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, LPU32(LP::Text), dn.c_str());
+
+    ImGui::InvisibleButton(("##ovc_"+e.name).c_str(), {W, H});
+    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        Core::PresentationCore::Get().SetBackgroundMedia(e.pngPath, /*isVideo*/false, /*allowAudio*/false);
+
+    if (ImGui::BeginPopupContextItem(("OvCtx_"+e.name).c_str())) {
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);
+        ImGui::Text("%s", e.name.c_str());
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+        if (ImGui::Selectable("  Editar")) {
+            OverlayDoc doc;
+            if (LoadOverlayRecipe(e.name, doc))
+                m_Editor->OpenEdit(e.name, doc);
+        }
+        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+        if (ImGui::Selectable("  Eliminar")) {
+            if (DeleteOverlay(e.name)) ReloadList();
+        }
+        ImGui::PopStyleColor();
+        ImGui::EndPopup();
+    }
+
+    if (col < cols-1) ImGui::SameLine();
+    ImGui::PopID();
+}
+
+void LayersOverlayTab::RenderRow(const OverlayEntry& e, float W, float rowH) {
+    const float thumbSz = 38.0f;
+    ImGui::PushID(("ovr_"+e.name).c_str());
+
+    ImTextureID thumb = GetThumbnail(e.pngPath);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x+W, pos.y+rowH});
+    float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    ImVec4 bgCol(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
+                 LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
+                 LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f);
+    dl->AddRectFilled(pos, {pos.x+W,pos.y+rowH}, LPU32(bgCol), 8.0f);
+    if (t > 0.01f)
+        dl->AddRectFilled(pos, {pos.x+3.0f,pos.y+rowH}, LPU32(ImVec4(LP::Accent.x,LP::Accent.y,LP::Accent.z,t)), 2.0f);
+
+    float tx = pos.x+8.0f, ty = pos.y+(rowH-thumbSz)*0.5f;
+    if (thumb) dl->AddImageRounded(thumb, {tx,ty}, {tx+thumbSz,ty+thumbSz}, {0,0},{1,1}, IM_COL32_WHITE, 5.0f);
+    else       dl->AddRectFilled({tx,ty}, {tx+thumbSz,ty+thumbSz}, LPU32(LP::Surface0), 5.0f);
+
+    std::string dn = e.name.length() > 32 ? e.name.substr(0,29) + "..." : e.name;
+    dl->AddText({tx+thumbSz+10.0f, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f}, LPU32(LP::Text), dn.c_str());
+
+    ImGui::InvisibleButton(("##ovrow_"+e.name).c_str(), {W, rowH});
+    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        Core::PresentationCore::Get().SetBackgroundMedia(e.pngPath, /*isVideo*/false, /*allowAudio*/false);
+
+    if (ImGui::BeginPopupContextItem(("OvRowCtx_"+e.name).c_str())) {
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);
+        ImGui::Text("%s", e.name.c_str());
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+        if (ImGui::Selectable("  Editar")) {
+            OverlayDoc doc;
+            if (LoadOverlayRecipe(e.name, doc))
+                m_Editor->OpenEdit(e.name, doc);
+        }
+        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+        if (ImGui::Selectable("  Eliminar")) {
+            if (DeleteOverlay(e.name)) ReloadList();
+        }
+        ImGui::PopStyleColor();
+        ImGui::EndPopup();
+    }
+
+    ImGui::Dummy({0, 5.0f});
+    ImGui::PopID();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Galeria
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::RenderGallery() {
+    if (m_Overlays.empty()) {
+        ImGui::Dummy({0,16});
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float w  = ImGui::GetContentRegionAvail().x;
+        ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x+w,p.y+64}, LPU32(LP::Surface1), 10.0f);
+        ImGui::Dummy({0,12});
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
+        const char* msg = "Sin overlays aun. Usa el boton + de arriba para crear uno.";
+        float tw = ImGui::CalcTextSize(msg).x;
+        ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
+        ImGui::Text("%s", msg);
+        ImGui::PopStyleColor();
+        return;
+    }
+
+    if (m_GridMode) {
+        const float cW = 150.0f * m_ThumbZoom;
+        const float cH = 92.0f  * m_ThumbZoom;
+        const float minGap = 10.0f;
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        int cols = std::max(1, static_cast<int>((availWidth + minGap) / (cW + minGap)));
+
+        float totalGaps = static_cast<float>(cols - 1);
+        float dynamicGap = minGap;
+        if (totalGaps > 0) {
+            float extraSpace = availWidth - (cols * cW);
+            dynamicGap = std::max(minGap, extraSpace / totalGaps);
+        }
+
+        int currentCol = 0;
+        for (size_t i = 0; i < m_Overlays.size(); ++i) {
+            RenderCard(m_Overlays[i], cW, cH, currentCol, cols);
+            currentCol++;
+            if (currentCol < cols) {
+                ImGui::SameLine(0.0f, dynamicGap);
+            } else {
+                currentCol = 0;
+                ImGui::Dummy({0.0f, minGap});
+            }
+        }
+    } else {
+        float w = ImGui::GetContentRegionAvail().x;
+        for (const auto& e : m_Overlays)
+            RenderRow(e, w, 44.0f);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Modal del editor
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::RenderEditorModal() {
+    if (!m_Editor) return;
+    m_Editor->Render([this](const std::string& name, const OverlayDoc& doc) {
+        if (SaveOverlayRecipe(name, doc)) {
+            m_ThumbnailCache.erase(ResolvePngPath(name));
+            ReloadList();
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Render principal
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::Render() {
+    RenderTopBar();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    LPSeparatorLine();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    RenderGallery();
+    RenderEditorModal();
+}
+
+} // namespace ProyecThor::UI

@@ -58,6 +58,20 @@ inline void DrawIcon_Palette(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         dl->AddCircleFilled(IcPt(o, sz, x, 0.30f), sz * 0.06f, col, 10);
 }
 
+// Overlays — marco de imagen (sol + montaña) con una linea de texto debajo
+inline void DrawIcon_Overlay(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.065f;
+    dl->AddRect(IcPt(o, sz, 0.14f, 0.14f), IcPt(o, sz, 0.86f, 0.68f),
+                col, sz * 0.04f, ImDrawFlags_RoundCornersAll, thick);
+    dl->AddCircleFilled(IcPt(o, sz, 0.32f, 0.32f), sz * 0.06f, col, 10);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.20f, 0.60f), IcPt(o, sz, 0.42f, 0.36f), IcPt(o, sz, 0.62f, 0.60f), col);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.44f, 0.60f), IcPt(o, sz, 0.66f, 0.40f), IcPt(o, sz, 0.80f, 0.60f), col);
+    dl->AddRectFilled(IcPt(o, sz, 0.20f, 0.80f), IcPt(o, sz, 0.80f, 0.88f), col, sz * 0.02f);
+}
+
 // Transiciones — flechas cruzadas (swap)
 inline void DrawIcon_Swap(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

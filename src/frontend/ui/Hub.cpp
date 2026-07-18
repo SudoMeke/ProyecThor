@@ -44,10 +44,18 @@ struct UpdateVersionInfo {
 };
 
 // A partir de la version estable 0.3.5, el historial visible en el Hub
-// muestra unicamente las actualizaciones MAYORES (0.3.0 y 0.3.5). Todas las
-// betas intermedias (0.3.1 a 0.3.4) quedaron consolidadas dentro del
+// muestra unicamente las actualizaciones MAYORES (0.3.0, 0.3.5 y 0.4.0). Todas
+// las betas intermedias (0.3.1 a 0.3.4) quedaron consolidadas dentro del
 // changelog de la 0.3.5 en vez de listarse por separado.
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
+    {
+        7, "0.4.0",
+        " ACTUALIZACION MAYOR ", "ACTUALIZACION MAYOR",
+        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Nueva seccion de Overlays con editor vectorial, Vista en Vivo con "
+        "acciones rapidas al estilo, y un rediseño completo de "
+        "Fondos y Estilos mas compacto y profesional."
+    },
     {
         6, "0.3.5",
         " ACTUALIZACION ", "ACTUALIZACION",
@@ -855,11 +863,34 @@ void Hub::RenderMainContent(float w, float h) {
             };
 
             // ── Bloque de contenido condicional por versión ──────────────────
-            // Ahora solo existen dos entradas: la 0.3.5 (estable, con TODO lo
-            // acumulado desde la 0.3.1 hasta la 0.3.5, incluidas las betas) y
-            // la 0.3.0 original. Cualquier otro id cae en el bloque "else"
-            // de la 0.3.0 por seguridad.
-            if (selectedUpdateVer == 6) { // v0.3.5 — version estable, changelog consolidado
+            // Tres entradas: la 0.4.0 (mas reciente), la 0.3.5 (estable, con
+            // TODO lo acumulado desde la 0.3.1 hasta la 0.3.5, incluidas las
+            // betas) y la 0.3.0 original. Cualquier otro id cae en el bloque
+            // "else" de la 0.3.0 por seguridad.
+            if (selectedUpdateVer == 7) { // v0.4.0
+                Cat("Overlays (nuevo)");
+                Bul("Nueva seccion \"Overlays\" dentro del hub de Diseño: un editor para crear imagenes con capas de texto (fuente, tamaño y color propios por capa) que se pueden arrastrar libremente sobre un lienzo.");
+                Bul("Galeria de overlays guardados con miniaturas: un click proyecta el overlay igual que un fondo comun.");
+                Bul("Menu contextual para editar o eliminar overlays guardados.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Vista en Vivo");
+                Bul("Nuevo riel de acciones rapidas a la derecha de la Vista en Vivo, al estilo ProPresenter: limpiar texto, quitar fondo, ajustar proporcion, silenciar audio y ajustes, con botones compactos solo-icono.");
+                Bul("El panel de Control ahora se enfoca solo en iniciar/detener la proyeccion y el enrutamiento de pantallas.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Fondos y Estilos");
+                Bul("Rediseño completo al estilo: las carpetas de Fondos ahora viven en una columna lateral, con el contenido de la carpeta seleccionada al centro.");
+                Bul("Toolbars mas compactas y solo-icono (importar, nueva carpeta, grid/lista) para ocupar menos espacio en pantalla.");
+                Bul("Nuevo control deslizante de zoom para achicar o agrandar las miniaturas y ver mas fondos o estilos a la vez.");
+                Bul("Animaciones de hover y transiciones suaves en tarjetas y listas.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Interfaz general");
+                Bul("Los 4 rieles de iconos (Biblioteca, Control, Home y Diseño) ahora son mas compactos y comparten exactamente el mismo tamaño.");
+                Bul("Nueva opcion en Vista > \"Titulos en barras de iconos\" para mostrar u ocultar los titulos de esos rieles y ganar aun mas espacio, con una transicion animada al activarla o desactivarla.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 6) { // v0.3.5 — version estable, changelog consolidado
                 Cat("Audio");
                 Bul("Rework completo del sistema de audio: nueva interfaz, portadas (covers) por pista, ecualizador (EQ), control de ganancia y cola de reproduccion.");
                 Bul("Ahora es posible asignar autores a las canciones.");

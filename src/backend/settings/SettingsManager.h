@@ -82,6 +82,9 @@ namespace ProyecThor::Settings {
         std::string defaultMediaFolder  = "";
         Language    language            = Language::Spanish;
         std::string dismissedChangelog  = "";
+        // Titulos bajo los iconos de los 4 rails (Biblioteca/Home/Control/Diseño).
+        // Apagarlo los deja solo-icono para ocupar menos espacio en pantalla.
+        bool        showRailLabels      = true;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -183,9 +186,10 @@ namespace ProyecThor::Settings {
 
     // ── Sidebar del hub de Diseño (Fondos/Estilos/Transiciones) ──────────
     struct StylesHubSettings {
-        float categoryColor[3][4] = {
+        float categoryColor[4][4] = {
             { 0.35f, 0.80f, 0.55f, 1.0f }, // Fondos
             { 0.65f, 0.31f, 0.94f, 1.0f }, // Estilos
+            { 0.95f, 0.60f, 0.20f, 1.0f }, // Overlays
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Transiciones
         };
     };

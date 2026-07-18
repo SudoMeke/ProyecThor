@@ -18,6 +18,7 @@
 #include "backend/core/PresentationCore.h"
 #include "UIStrings.h"
 #include "frontend/ui/UIManager.h"
+#include "frontend/ui/IconRail.h"
 #include "ui/DesignSystem.h"
 #include "biblio/LibraryPlaylists.h"
 #include <iostream>
@@ -449,7 +450,7 @@ void LibraryPanel::Render()
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && m_UIManagerRef)
         m_UIManagerRef->SetActiveLeftPanel(ActiveLeftPanel::Library);
 
-    constexpr float k_SidebarW = 82.0f;
+    const float k_SidebarW = IconRailThickness(true);
     const float     totalH     = ImGui::GetContentRegionAvail().y;
 
     // ── Sidebar izquierdo ──────────────────────────────────────────────────

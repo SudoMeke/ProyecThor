@@ -8,6 +8,7 @@
 #include <imgui_internal.h>
 #include <string>
 #include <cmath>
+#include <algorithm>
 
 // El enum vive en LibraryPanel.h; aqui lo reproducimos como constantes locales
 // para no crear una dependencia circular con el header del panel.
@@ -20,6 +21,20 @@ static constexpr int kCat_Documents = 4;
 static constexpr int kCat_Audio     = 5;
 
 namespace ProyecThor::Library {
+
+// Progreso animado (0..1) de "mostrar titulo" — misma idea que IconRail.cpp,
+// para que este sidebar (implementacion propia, no comparte RenderIconRail)
+// se comporte igual que los otros 3 rails ante Vista > Titulos en barras.
+static float RailLabelProgress()
+{
+    bool wantLabels = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID id = ImGui::GetID("##librarySidebarLabelT");
+    float* cur = storage->GetFloatRef(id, wantLabels ? 1.0f : 0.0f);
+    float target = wantLabels ? 1.0f : 0.0f;
+    *cur += (target - *cur) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    return *cur;
+}
 
 void RenderCategoryButtons(LibraryContext& ctx)
 {
@@ -55,13 +70,15 @@ void RenderCategoryButtons(LibraryContext& ctx)
     dl->AddRectFilled(winPos, { winPos.x + sidebarW, winPos.y + winH },
                       IM_COL32(11, 11, 20, 255));
 
-    ImGui::Dummy({ sidebarW, 8.0f });
+    ImGui::Dummy({ sidebarW, 4.0f });
 
-    constexpr float btnGapY  = 2.0f;
-    constexpr float rounding = 8.0f;
-    const float     btnH     = 64.0f;
+    constexpr float btnGapY  = 1.0f;
+    constexpr float rounding = 5.0f;
+    const float     btnH     = 46.0f;
     const float     iconSz   = std::floor(btnH * 0.38f);
     (void)winH;
+
+    const float lt = RailLabelProgress();
 
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, btnGapY));
@@ -123,25 +140,27 @@ void RenderCategoryButtons(LibraryContext& ctx)
             }
 
             ImVec2 lblDim       = ImGui::CalcTextSize(cd.label);
-            float  totalContent = iconSz + 5.0f + lblDim.y;
+            float  totalContent = iconSz + lt * (5.0f + lblDim.y);
             float  startY       = cursor.y + (btnH - totalContent) * 0.5f;
             float  iconX        = cursor.x + (sidebarW - iconSz) * 0.5f;
 
             cd.drawIcon(dl, { iconX, startY }, iconSz,
                         ImGui::ColorConvertFloat4ToU32(icF));
 
-            float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-            ImVec4 lblF = { lblBright, lblBright, lblBright, 1.0f };
-            if (active) {
-                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
-                lblF = LerpColor(lblF, ac, 0.25f);
-                lblF.w = 1.0f;
-            }
+            if (lt > 0.01f) {
+                float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
+                ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+                if (active) {
+                    ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
+                    lblF = LerpColor(lblF, ac, 0.25f);
+                    lblF.w = lt;
+                }
 
-            float lblX = cursor.x + (sidebarW - lblDim.x) * 0.5f;
-            float lblY = startY + iconSz + 5.0f;
-            dl->AddText({ lblX, lblY },
-                        ImGui::ColorConvertFloat4ToU32(lblF), cd.label);
+                float lblX = cursor.x + (sidebarW - lblDim.x) * 0.5f;
+                float lblY = startY + iconSz + 5.0f;
+                dl->AddText({ lblX, lblY },
+                            ImGui::ColorConvertFloat4ToU32(lblF), cd.label);
+            }
         }
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))

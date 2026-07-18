@@ -65,6 +65,7 @@ file(GLOB FRONTEND_WINDOWING_SOURCES CONFIGURE_DEPENDS "src/frontend/windowing/*
 file(GLOB FRONTEND_PANELS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/*.cpp")
 file(GLOB FRONTEND_CAPTURE_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/capture/*.cpp")
 file(GLOB FRONTEND_LAYERS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/layers/*.cpp")
+file(GLOB FRONTEND_OVERLAY_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/overlay/*.cpp")
 file(GLOB FRONTEND_MONITOR_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/monitor/*.cpp")
 file(GLOB FRONTEND_STYLES_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/styles/*.cpp")
 file(GLOB FRONTEND_VIEWS_SOURCES    CONFIGURE_DEPENDS "src/frontend/views/*.cpp")
@@ -128,6 +129,7 @@ if(WIN32)
         ${FRONTEND_PANELS_SOURCES}
         ${FRONTEND_CAPTURE_SOURCES}
         ${FRONTEND_LAYERS_SOURCES}
+        ${FRONTEND_OVERLAY_SOURCES}
         ${FRONTEND_MONITOR_SOURCES}
         ${FRONTEND_STYLES_SOURCES}
         ${FRONTEND_VIEWS_SOURCES}
@@ -158,6 +160,7 @@ else()
         ${FRONTEND_PANELS_SOURCES}
         ${FRONTEND_CAPTURE_SOURCES}
         ${FRONTEND_LAYERS_SOURCES}
+        ${FRONTEND_OVERLAY_SOURCES}
         ${FRONTEND_MONITOR_SOURCES}
         ${FRONTEND_STYLES_SOURCES}
         ${FRONTEND_VIEWS_SOURCES}
@@ -211,6 +214,7 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/capture"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/layers"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/overlay"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/monitor"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/styles"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/preview"

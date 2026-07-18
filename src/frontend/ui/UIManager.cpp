@@ -913,6 +913,21 @@ ImGui::Spacing();
                 OpenHub();
 
             ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+
+            // Afecta a los 4 rails de iconos (Biblioteca/Home/Control/Diseño):
+            // con el titulo apagado quedan solo-icono y ocupan menos espacio.
+            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+            if (ImGui::MenuItem("Titulos en barras de iconos", nullptr, general.showRailLabels))
+            {
+                general.showRailLabels = !general.showRailLabels;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+
+            ImGui::Spacing();
             ImGui::EndMenu();
         }
 

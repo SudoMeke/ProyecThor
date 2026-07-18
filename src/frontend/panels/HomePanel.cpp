@@ -4,12 +4,11 @@
 #include "frontend/ui/UIStrings.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/media/VLCBasePlayer.h"
+#include "frontend/ui/IconRail.h"
 #include <imgui.h>
 #include <algorithm>
 
 namespace ProyecThor::UI {
-
-namespace DS = ProyecThor::UI::DS;
 
 HomePanel::HomePanel() {
     // Ya no se construye ningun VLCBasePlayer propio: el preview de
@@ -132,7 +131,7 @@ void HomePanel::Render()
         return;
     }
 
-    constexpr float k_BarH = 64.0f;
+    const float k_BarH = IconRailThickness(false);
     const float     totalW = ImGui::GetContentRegionAvail().x;
 
     // ── Barra de iconos arriba ──────────────────────────────────────────────

@@ -18,9 +18,23 @@ enum class IconRailOrientation {
 };
 
 // Ancho fijo de columna (Vertical) / alto fijo de fila (Horizontal).
-inline constexpr float kIconRailVerticalSize    = 82.0f;
-inline constexpr float kIconRailHorizontalSize  = 64.0f;
-inline constexpr float kIconRailHorizontalItemW = 90.0f;
+// Tamaños compactos tipo toolbar (Holyrics/ProPresenter) — no tarjetas grandes.
+inline constexpr float kIconRailVerticalSize    = 56.0f;
+inline constexpr float kIconRailHorizontalSize  = 46.0f;
+inline constexpr float kIconRailHorizontalItemW = 64.0f;
+
+// Variantes "solo icono" (sin titulo) — usadas cuando el usuario apaga
+// Vista > Titulos en barras de iconos, para ocupar aun menos espacio.
+inline constexpr float kIconRailVerticalSizeCompact   = 34.0f;
+inline constexpr float kIconRailHorizontalSizeCompact = 30.0f;
+
+// Grosor animado del rail (ancho si es vertical, alto si es horizontal),
+// leyendo Settings.general.showRailLabels y suavizando la transicion entre
+// el tamaño completo y el compacto. Los 4 rails (Biblioteca/Home/Control/
+// Diseño) deben pedir su tamaño de contenedor con esta funcion en vez de
+// usar las constantes de arriba directamente, para que la opcion de
+// Vista > Titulos los afecte a todos por igual.
+float IconRailThickness(bool vertical);
 
 // Dibuja el rail completo (fondo, hover, barra de seleccion, icono+label) y
 // actualiza currentIndex al click. categoryColor debe tener exactamente

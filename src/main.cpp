@@ -36,6 +36,7 @@
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
 #include "frontend/panels/StylesHubPanel.h"
+#include "frontend/panels/overlay/OverlayExportService.h"
 
 #ifdef _WIN32
     #pragma comment(lib, "dwmapi.lib")
@@ -710,7 +711,7 @@ homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     uiManager.AddPanel(libraryPanel);
     uiManager.AddPanel(homePanel);
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::ControlPanel>(&uiManager));
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>());
+    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>(&uiManager));
 
     auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
     stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
@@ -802,6 +803,12 @@ core.RenderAllSecondaryWindows();
 
         ImGui::Render();
         FrameProfiler::Add(FrameProfiler::s_ImGuiBuild, FrameProfiler::ElapsedMs(t2));
+
+        // Debe correr DESPUES de ImGui::Render() (el ImDrawList de la child
+        // del canvas de Overlays recien queda finalizado ahi) y ANTES del
+        // RenderDrawData normal, para poder redirigir ese mismo draw list a
+        // un FBO propio y guardarlo como PNG (ver OverlayExportService).
+        ProyecThor::UI::OverlayExportService::Get().ProcessPending();
 
         auto t3 = Clock::now();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

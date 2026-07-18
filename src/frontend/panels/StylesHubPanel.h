@@ -2,6 +2,7 @@
 #include "IPanel.h"
 #include "BackgroundsPanel.h"
 #include "CanvasStylesPanel.h"
+#include "OverlaysPanel.h"
 #include <string>
 
 namespace ProyecThor::UI {
@@ -9,9 +10,9 @@ namespace ProyecThor::UI {
 class UIManager;
 class TransitionPanel;
 
-// Hub de Diseño: reune Fondos + Estilos + Transiciones en un solo panel con
-// rail de iconos a la izquierda (igual que Biblioteca/Home).
-enum class StylesSection { Backgrounds = 0, Styles = 1, Transitions = 2 };
+// Hub de Diseño: reune Fondos + Estilos + Overlays + Transiciones en un solo
+// panel con rail de iconos a la izquierda (igual que Biblioteca/Home).
+enum class StylesSection { Backgrounds = 0, Styles = 1, Overlays = 2, Transitions = 3 };
 
 class StylesHubPanel : public IPanel {
 public:
@@ -32,6 +33,7 @@ private:
 
     BackgroundsPanel   m_Backgrounds;
     CanvasStylesPanel  m_Styles;
+    OverlaysPanel      m_Overlays;
     TransitionPanel*   m_TransitionsRef = nullptr;
 };
 

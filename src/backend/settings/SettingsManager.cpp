@@ -395,7 +395,7 @@ void SettingsManager::SaveSettings() {
             j["controlHub"]["categoryColor"][i][c] = chs.categoryColor[i][c];
 
     const auto& shs = m_Settings.stylesHub;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
@@ -412,6 +412,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["autoSaveIntervalSec"] = m_Settings.general.autoSaveIntervalSec;
     j["general"]["defaultBiblesFolder"] = m_Settings.general.defaultBiblesFolder;
     j["general"]["defaultMediaFolder"]  = m_Settings.general.defaultMediaFolder;
+    j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -537,7 +538,7 @@ void SettingsManager::LoadSettings() {
             const auto& jshs = j["stylesHub"];
             if (jshs.contains("categoryColor") && jshs["categoryColor"].is_array()) {
                 const auto& arr = jshs["categoryColor"];
-                for (int i = 0; i < 3 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 4 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         shs.categoryColor[i][c] = arr[i][c].get<float>();
             }
@@ -558,6 +559,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.autoSaveIntervalSec  = jg.value("autoSaveIntervalSec", 120);
             m_Settings.general.defaultBiblesFolder  = jg.value("defaultBiblesFolder", "");
             m_Settings.general.defaultMediaFolder   = jg.value("defaultMediaFolder",  "");
+            m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
         }
 
         if (j.contains("audio")) {

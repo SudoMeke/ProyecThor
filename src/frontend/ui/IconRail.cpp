@@ -1,11 +1,42 @@
 #include "IconRail.h"
+#include "backend/settings/SettingsManager.h"
 #include <imgui_internal.h>
 #include <cmath>
 #include <string>
+#include <algorithm>
 
 namespace ProyecThor::UI {
 
 static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+
+// ── Grosor animado del rail (ver IconRail.h) ────────────────────────────────
+float IconRailThickness(bool vertical)
+{
+    bool wantLabels = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
+    float target = vertical
+        ? (wantLabels ? kIconRailVerticalSize   : kIconRailVerticalSizeCompact)
+        : (wantLabels ? kIconRailHorizontalSize : kIconRailHorizontalSizeCompact);
+
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID id = ImGui::GetID(vertical ? "##railThicknessV" : "##railThicknessH");
+    float* cur = storage->GetFloatRef(id, target);
+    *cur += (target - *cur) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    return *cur;
+}
+
+// Progreso animado (0..1) de "mostrar titulo" — compartido por Vertical/Horizontal
+// para que el fade del texto y el recentrado del icono avancen sincronizados
+// con el cambio de grosor de arriba.
+static float RailLabelProgress()
+{
+    bool wantLabels = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID id = ImGui::GetID("##railLabelT");
+    float* cur = storage->GetFloatRef(id, wantLabels ? 1.0f : 0.0f);
+    float target = wantLabels ? 1.0f : 0.0f;
+    *cur += (target - *cur) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    return *cur;
+}
 
 static void RenderVertical(const IconRailItem* items, int count, int& currentIndex,
                             const float (*categoryColor)[4])
@@ -14,15 +45,16 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
     const float  railW    = ImGui::GetContentRegionAvail().x;
     const float  winH     = ImGui::GetWindowHeight();
     const ImVec2 winPos   = ImGui::GetWindowPos();
+    const float  lt       = RailLabelProgress();
 
     dl->AddRectFilled(winPos, { winPos.x + railW, winPos.y + winH },
                       IM_COL32(11, 11, 20, 255));
 
-    ImGui::Dummy({ railW, 8.0f });
+    ImGui::Dummy({ railW, 4.0f });
 
-    constexpr float btnGapY  = 2.0f;
-    constexpr float rounding = 8.0f;
-    const float     btnH    = 64.0f;
+    constexpr float btnGapY  = 1.0f;
+    constexpr float rounding = 5.0f;
+    const float     btnH    = 46.0f;
     const float     iconSz  = std::floor(btnH * 0.38f);
 
     ImGuiStorage* storage = ImGui::GetStateStorage();
@@ -80,25 +112,26 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
             }
 
             ImVec2 lblDim       = ImGui::CalcTextSize(item.label);
-            float  totalContent = iconSz + 5.0f + lblDim.y;
+            float  totalContent = iconSz + lt * (5.0f + lblDim.y);
             float  startY       = cursor.y + (btnH - totalContent) * 0.5f;
             float  iconX        = cursor.x + (railW - iconSz) * 0.5f;
 
             item.drawIcon(dl, { iconX, startY }, iconSz, ImGui::ColorConvertFloat4ToU32(icF));
 
-            float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-            ImVec4 lblF = { lblBright, lblBright, lblBright, 1.0f };
-            if (active) {
-                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-                lblF.x = Lerp(lblF.x, ac.x, 0.25f);
-                lblF.y = Lerp(lblF.y, ac.y, 0.25f);
-                lblF.z = Lerp(lblF.z, ac.z, 0.25f);
-                lblF.w = 1.0f;
-            }
+            if (lt > 0.01f) {
+                float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
+                ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+                if (active) {
+                    ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
+                    lblF.x = Lerp(lblF.x, ac.x, 0.25f);
+                    lblF.y = Lerp(lblF.y, ac.y, 0.25f);
+                    lblF.z = Lerp(lblF.z, ac.z, 0.25f);
+                }
 
-            float lblX = cursor.x + (railW - lblDim.x) * 0.5f;
-            float lblY = startY + iconSz + 5.0f;
-            dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
+                float lblX = cursor.x + (railW - lblDim.x) * 0.5f;
+                float lblY = startY + iconSz + 5.0f;
+                dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
+            }
         }
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
@@ -117,15 +150,16 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
     const float  railH  = ImGui::GetContentRegionAvail().y;
     const float  winW   = ImGui::GetWindowWidth();
     const ImVec2 winPos = ImGui::GetWindowPos();
+    const float  lt     = RailLabelProgress();
 
     dl->AddRectFilled(winPos, { winPos.x + winW, winPos.y + railH },
                       IM_COL32(11, 11, 20, 255));
 
-    ImGui::Dummy({ 8.0f, railH });
+    ImGui::Dummy({ 4.0f, railH });
     ImGui::SameLine(0.0f, 0.0f);
 
-    constexpr float btnGapX  = 2.0f;
-    constexpr float rounding = 8.0f;
+    constexpr float btnGapX  = 1.0f;
+    constexpr float rounding = 5.0f;
     const float     btnW    = kIconRailHorizontalItemW;
     const float      iconSz  = std::floor(railH * 0.38f);
 
@@ -186,25 +220,26 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
             }
 
             ImVec2 lblDim       = ImGui::CalcTextSize(item.label);
-            float  totalContent = iconSz + 5.0f + lblDim.y;
+            float  totalContent = iconSz + lt * (5.0f + lblDim.y);
             float  startY       = cursor.y + (railH - totalContent) * 0.5f;
             float  iconX        = cursor.x + (btnW - iconSz) * 0.5f;
 
             item.drawIcon(dl, { iconX, startY }, iconSz, ImGui::ColorConvertFloat4ToU32(icF));
 
-            float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-            ImVec4 lblF = { lblBright, lblBright, lblBright, 1.0f };
-            if (active) {
-                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-                lblF.x = Lerp(lblF.x, ac.x, 0.25f);
-                lblF.y = Lerp(lblF.y, ac.y, 0.25f);
-                lblF.z = Lerp(lblF.z, ac.z, 0.25f);
-                lblF.w = 1.0f;
-            }
+            if (lt > 0.01f) {
+                float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
+                ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+                if (active) {
+                    ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
+                    lblF.x = Lerp(lblF.x, ac.x, 0.25f);
+                    lblF.y = Lerp(lblF.y, ac.y, 0.25f);
+                    lblF.z = Lerp(lblF.z, ac.z, 0.25f);
+                }
 
-            float lblX = cursor.x + (btnW - lblDim.x) * 0.5f;
-            float lblY = startY + iconSz + 5.0f;
-            dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
+                float lblX = cursor.x + (btnW - lblDim.x) * 0.5f;
+                float lblY = startY + iconSz + 5.0f;
+                dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
+            }
         }
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))

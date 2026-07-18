@@ -1,5 +1,8 @@
 #pragma once
 #include <imgui.h>
+#include <imgui_internal.h>
+#include <algorithm>
+#include <cmath>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersTheme — paleta de colores y widgets compartidos por todos los tabs
@@ -142,6 +145,104 @@ inline void LPBadge(ImDrawList* dl, ImVec2 pos, const char* text,
         {pos.x + ts.x + padX, pos.y + ts.y + padY},
         LPU32(bgColor), 5.0f);
     dl->AddText(pos, LPU32(fgColor), text);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Animacion — hover suavizado (mismo patron que IconRail/LibrarySidebar).
+//  Guarda el valor entre frames en el ImGuiStorage del contexto actual.
+// ─────────────────────────────────────────────────────────────────────────────
+inline float LPHoverLerp(ImGuiID id, bool hovered, float speed = 14.0f) {
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* pT = storage->GetFloatRef(id ^ 0x4C50484Cu, 0.0f); // salt "LPHL"
+    float target = hovered ? 1.0f : 0.0f;
+    *pT += (target - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+    return *pT;
+}
+
+// Version por puntero (para animar cualquier float propio, ej. fade de contenido)
+inline float LPApproach(float current, float target, float speed) {
+    return current + (target - current) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Toolbars compactas — boton plano solo-icono, sin titulo (ProPresenter-like).
+// ─────────────────────────────────────────────────────────────────────────────
+using LPDrawIconFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
+
+inline bool LPCornerIconBtn(const char* id, LPDrawIconFn drawIcon, const char* tooltip,
+                            ImVec2 size = {26.0f, 26.0f}, bool active = false) {
+    ImVec4 bg = active ? ImVec4(0.24f, 0.27f, 0.46f, 1.0f) : ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        bg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::Surface2);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  LP::Surface3);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    bool clicked = ImGui::Button(id, size);
+
+    ImVec2 bMin = ImGui::GetItemRectMin();
+    ImVec2 bMax = ImGui::GetItemRectMax();
+    ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+    ImU32 col = active ? LPU32(LP::Accent) : LPU32(LP::TextSub);
+    drawIcon(ImGui::GetWindowDrawList(), center, size.x * 0.42f, col);
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+
+    if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("%s", tooltip);
+    return clicked;
+}
+
+inline void LPDrawPlus(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float s  = r * 0.85f;
+    float th = std::max(1.4f, r * 0.24f);
+    dl->AddLine({c.x - s, c.y}, {c.x + s, c.y}, col, th);
+    dl->AddLine({c.x, c.y - s}, {c.x, c.y + s}, col, th);
+}
+
+inline void LPDrawFolderGlyph(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float w = r * 1.5f, h = r * 1.05f;
+    ImVec2 tl = {c.x - w * 0.5f, c.y - h * 0.32f};
+    dl->AddRectFilled({tl.x, tl.y - h * 0.30f}, {tl.x + w * 0.46f, tl.y + h*0.02f}, col, r * 0.10f);
+    dl->AddRectFilled(tl, {tl.x + w, tl.y + h}, col, r * 0.14f);
+}
+
+inline void LPDrawFolderPlus(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    LPDrawFolderGlyph(dl, {c.x, c.y + r * 0.12f}, r * 0.72f, col);
+    LPDrawPlus(dl, {c.x + r * 0.62f, c.y - r * 0.55f}, r * 0.34f, col);
+}
+
+inline void LPDrawRefresh(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float rad = r * 0.62f;
+    float th  = std::max(1.4f, r * 0.20f);
+    dl->PathArcTo(c, rad, -IM_PI * 0.65f, IM_PI * 0.85f, 20);
+    dl->PathStroke(col, ImDrawFlags_None, th);
+    float ang = IM_PI * 0.85f;
+    ImVec2 tip  = {c.x + rad * std::cos(ang), c.y + rad * std::sin(ang)};
+    ImVec2 perp = {-std::sin(ang), std::cos(ang)};
+    ImVec2 back = {std::cos(ang), std::sin(ang)};
+    float asz = r * 0.42f;
+    dl->AddTriangleFilled(
+        {tip.x + back.x * asz,               tip.y + back.y * asz},
+        {tip.x - perp.x * asz * 0.7f,        tip.y - perp.y * asz * 0.7f},
+        {tip.x + perp.x * asz * 0.7f,        tip.y + perp.y * asz * 0.7f}, col);
+}
+
+// ── Slider compacto para controlar el zoom de las miniaturas (grid) ────────
+inline bool LPZoomSlider(const char* id, float* zoom, float minZ, float maxZ, float width) {
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        LP::Surface1);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, LP::Surface2);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  LP::Surface2);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       LP::Accent);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, LP::AccentHov);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding,  8.0f);
+    ImGui::SetNextItemWidth(width);
+    bool changed = ImGui::SliderFloat(id, zoom, minZ, maxZ, "");
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(5);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Tamano de las miniaturas");
+    return changed;
 }
 
 } // namespace ProyecThor::UI
