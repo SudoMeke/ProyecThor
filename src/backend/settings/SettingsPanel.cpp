@@ -30,8 +30,9 @@ static const Category k_Categories[] = {
        { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles"           },
     { "LNG", "Idioma",          "Idioma de la interfaz"                   },
     { "UPD", "Actualizaciones", "Versión instalada y canales"             },
+    { "INT", "Integraciones",   "APIs externas (ej. banco de imagenes)"   },
 };
-static constexpr int k_CategoryCount = 8;
+static constexpr int k_CategoryCount = 9;
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
 // ImVec4, con un multiplicador opcional de alpha.
@@ -318,6 +319,7 @@ void SettingsPanel::RenderContent() {
          case 5: RenderCategoryShortcuts();  break;
         case 6: RenderCategoryLanguage();   break;
         case 7: RenderCategoryUpdates();    break;
+        case 8: RenderCategoryIntegrations(); break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 

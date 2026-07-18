@@ -6,21 +6,44 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdlib>
-#include "MonitorTheme.h" 
+#ifndef _WIN32
+#include <pwd.h>
+#include <unistd.h>
+#endif
+#include "MonitorTheme.h"
 #include "HubTheme.h"
 
 using json = nlohmann::json;
 
 namespace ProyecThor::Settings {
 
+// Este archivo puede contener secretos del usuario (ej. API keys de
+// integraciones externas, ver IntegrationsSettings) — nunca debe resolver a
+// una ruta relativa dependiente del cwd (podria terminar escrito dentro del
+// propio repo si la app se lanza desde ahi). Windows usa %APPDATA%, el resto
+// sigue la convencion XDG ($XDG_CONFIG_HOME o $HOME/.config), igual que
+// LayersBgTab::GetAppDataDir().
 static std::string GetSettingsPath() {
+    std::filesystem::path dir;
+#ifdef _WIN32
     const char* appData = std::getenv("APPDATA");
-    if (!appData) return "settings.json";
-
-    std::filesystem::path dir = std::filesystem::path(appData) / "ProyecThor";
-    if (!std::filesystem::exists(dir))
-        std::filesystem::create_directories(dir);
-
+    dir = std::filesystem::path(appData ? appData : ".") / "ProyecThor";
+#else
+    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+    std::filesystem::path base;
+    if (xdgConfig && *xdgConfig) {
+        base = xdgConfig;
+    } else if (const char* home = std::getenv("HOME"); home && *home) {
+        base = std::filesystem::path(home) / ".config";
+    } else if (struct passwd* pw = getpwuid(getuid())) {
+        base = std::filesystem::path(pw->pw_dir) / ".config";
+    } else {
+        base = std::filesystem::current_path();
+    }
+    dir = base / "ProyecThor";
+#endif
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
     return (dir / "settings.json").string();
 }
 
@@ -399,6 +422,8 @@ void SettingsManager::SaveSettings() {
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
+    j["integrations"]["pexelsApiKey"] = m_Settings.integrations.pexelsApiKey;
+
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
     else if (m_Settings.general.language == Language::Portuguese) langStr = "pt";
@@ -542,6 +567,11 @@ void SettingsManager::LoadSettings() {
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         shs.categoryColor[i][c] = arr[i][c].get<float>();
             }
+        }
+
+        if (j.contains("integrations")) {
+            const auto& ji = j["integrations"];
+            m_Settings.integrations.pexelsApiKey = ji.value("pexelsApiKey", "");
         }
 
         if (j.contains("general")) {

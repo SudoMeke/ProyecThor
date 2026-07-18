@@ -34,8 +34,9 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryAudio();
         void RenderCategoryLanguage();
         void RenderCategoryUpdates();
-        void RenderCategoryShortcuts(); 
-void RenderCategorySongs(); 
+        void RenderCategoryShortcuts();
+void RenderCategorySongs();
+        void RenderCategoryIntegrations();
         // Helpers
         void SectionTitle(const char* label);
         void HelpTooltip(const char* desc);

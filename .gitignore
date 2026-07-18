@@ -39,3 +39,6 @@ text.txt
 .vscode/
 .idea/
 *.user
+
+# ── Configuracion local del usuario (puede contener API keys, ej. Pexels) ────
+settings.json
