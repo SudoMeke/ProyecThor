@@ -17,12 +17,10 @@ using json = nlohmann::json;
 
 namespace ProyecThor::Settings {
 
-// Este archivo puede contener secretos del usuario (ej. API keys de
-// integraciones externas, ver IntegrationsSettings) — nunca debe resolver a
-// una ruta relativa dependiente del cwd (podria terminar escrito dentro del
-// propio repo si la app se lanza desde ahi). Windows usa %APPDATA%, el resto
-// sigue la convencion XDG ($XDG_CONFIG_HOME o $HOME/.config), igual que
-// LayersBgTab::GetAppDataDir().
+// Nunca debe resolver a una ruta relativa dependiente del cwd (podria
+// terminar escrito dentro del propio repo si la app se lanza desde ahi).
+// Windows usa %APPDATA%, el resto sigue la convencion XDG ($XDG_CONFIG_HOME
+// o $HOME/.config), igual que LayersBgTab::GetAppDataDir().
 static std::string GetSettingsPath() {
     std::filesystem::path dir;
 #ifdef _WIN32
@@ -422,8 +420,6 @@ void SettingsManager::SaveSettings() {
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
-    j["integrations"]["pexelsApiKey"] = m_Settings.integrations.pexelsApiKey;
-
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
     else if (m_Settings.general.language == Language::Portuguese) langStr = "pt";
@@ -448,6 +444,8 @@ void SettingsManager::SaveSettings() {
     j["updates"]["autoDownload"]   = m_Settings.updates.autoDownload;
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
+
+    j["foudrevue"]["releaseChannel"] = m_Settings.foudrevue.releaseChannel;
 
     j["theme"]["preset"]        = ThemePresetToKey(t.preset);
     j["theme"]["windowRounding"]= t.windowRounding;
@@ -569,11 +567,6 @@ void SettingsManager::LoadSettings() {
             }
         }
 
-        if (j.contains("integrations")) {
-            const auto& ji = j["integrations"];
-            m_Settings.integrations.pexelsApiKey = ji.value("pexelsApiKey", "");
-        }
-
         if (j.contains("general")) {
             const auto& jg = j["general"];
             std::string langStr = jg.value("language", "es");
@@ -606,6 +599,11 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
+        }
+
+        if (j.contains("foudrevue")) {
+            const auto& jf = j["foudrevue"];
+            m_Settings.foudrevue.releaseChannel = jf.value("releaseChannel", "stable");
         }
 
         if (j.contains("theme")) {

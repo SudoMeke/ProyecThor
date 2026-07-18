@@ -1,22 +1,21 @@
 #include "LayersOverlayTab.h"
 #include "LayersTheme.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/GitHubRelease.h"
+#include "backend/settings/SettingsManager.h"
+#include "OpenURL.h"
 #include <imgui.h>
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
-#include <commdlg.h>
 #else
 #include <cstdlib>
 #include <pwd.h>
 #include <unistd.h>
 #endif
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <iostream>
 #include <algorithm>
-#include <cstring>
 #include <cstdio>
 #include <GL/gl.h>
 #include "stb_image.h"
@@ -56,89 +55,33 @@ static fs::path OverlaysDir() {
     fs::create_directories(dir, ec);
     return dir;
 }
-static fs::path FontsDir() { return GetAppDataDir() / "assets" / "fonts"; }
-static fs::path OverlayImagesDir() {
-    fs::path dir = OverlaysDir() / "images";
-    std::error_code ec;
-    fs::create_directories(dir, ec);
-    return dir;
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Carpeta de imagenes del tab "Fondos" — replica la resolucion de ruta de
-//  LayersBgTab::GetAppDataDir()/BgRootDir() (usa XDG_CONFIG_HOME/.config, a
-//  diferencia de este tab que usa XDG_DATA_HOME/.local/share), para poder
-//  listar esas imagenes como origen al anadir una capa de imagen sin acoplar
-//  ambas clases entre si.
-// ─────────────────────────────────────────────────────────────────────────────
-static fs::path BgImagesRootDir() {
-    fs::path dir;
+// Carpeta de overlays de FoudreVue (app hermana) — mismo calculo XDG /
+// %APPDATA% que GetAppDataDir() pero para "FoudreVue" en vez de
+// "ProyecThor". A diferencia de OverlaysDir(), nunca la crea: solo se lee
+// si FoudreVue ya la creo por su cuenta (ver ReloadList).
+static fs::path FoudreVueOverlaysDir() {
 #ifdef _WIN32
-    wchar_t buf[MAX_PATH] = {};
-    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
-    dir = fs::path(buf) / "ProyecThor";
+    const char* appData = std::getenv("APPDATA");
+    fs::path dir = fs::path(appData ? appData : ".") / "FoudreVue";
 #else
-    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
     fs::path base;
-    if (xdgConfig && *xdgConfig) base = fs::path(xdgConfig);
-    else { const char* home = std::getenv("HOME"); base = fs::path(home ? home : ".") / ".config"; }
-    dir = base / "ProyecThor";
+    if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg) {
+        base = xdg;
+    } else if (const char* home = std::getenv("HOME"); home && *home) {
+        base = fs::path(home) / ".local" / "share";
+    } else if (struct passwd* pw = getpwuid(getuid())) {
+        base = fs::path(pw->pw_dir) / ".local" / "share";
+    } else {
+        base = fs::current_path();
+    }
+    fs::path dir = base / "FoudreVue";
 #endif
-    return dir / "assets" / "backgrounds";
+    return dir / "assets" / "overlays";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Selector de archivo de imagen (para importar una capa de imagen nueva)
-// ─────────────────────────────────────────────────────────────────────────────
-#ifndef _WIN32
-static std::string OpenImageFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar imagen\" "
-        "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
-    };
-    for (const char* cmd : commands) {
-        std::string result;
-        char buffer[1024];
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
-        int status = pclose(pipe);
-        if (status != 0) continue;
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-        if (!result.empty()) return result;
-    }
-    return {};
-}
-#endif
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Escapado simple de saltos de linea para el formato .overlay (una linea = un
-//  par clave=valor)
-// ─────────────────────────────────────────────────────────────────────────────
-static std::string EscapeNewlines(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (char c : s) {
-        if (c == '\n') out += "\\n";
-        else if (c == '\r') continue;
-        else out += c;
-    }
-    return out;
-}
-static std::string UnescapeNewlines(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); i++) {
-        if (s[i] == '\\' && i + 1 < s.size() && s[i+1] == 'n') { out += '\n'; i++; }
-        else out += s[i];
-    }
-    return out;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Thumbnails (PNG ya rasterizado del overlay)
+//  Thumbnails (PNG ya rasterizado del overlay, generado por FoudreVue)
 // ─────────────────────────────────────────────────────────────────────────────
 static ImTextureID LoadImageThumb(const char* path) {
     int w, h, n;
@@ -165,48 +108,44 @@ ImTextureID LayersOverlayTab::GetThumbnail(const std::string& path) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Constructor / listas
+//  Listado — un overlay = un .png en la carpeta de overlays (lo genera
+//  FoudreVue; ver ImportBundle para traer uno desde un paquete exportado).
 // ─────────────────────────────────────────────────────────────────────────────
-LayersOverlayTab::LayersOverlayTab() {
-    LoadFontsList();
-    m_Editor = std::make_unique<OverlayCanvasEditor>(
-        &m_AvailableFonts,
-        [this](const std::string& name) { return ResolvePngPath(name); },
-        [this]() { return ListBgImages(); },
-        [this]() { return ImportOverlayImage(); });
-    ReloadList();
-}
-
-void LayersOverlayTab::LoadFontsList() {
-    m_AvailableFonts.clear();
-    m_AvailableFonts.push_back("Predeterminada");
-    try {
-        fs::path d = FontsDir();
-        fs::create_directories(d);
-        if (fs::exists(d))
-            for (const auto& e : fs::directory_iterator(d)) {
-                std::string ext = e.path().extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext == ".ttf" || ext == ".otf" || ext == ".ttc")
-                    m_AvailableFonts.push_back(e.path().stem().string());
-            }
-    } catch (...) {}
-}
-
 void LayersOverlayTab::ReloadList() {
     m_Overlays.clear();
     try {
         for (const auto& e : fs::directory_iterator(OverlaysDir())) {
             if (!e.is_regular_file()) continue;
-            if (e.path().extension() != ".overlay") continue;
-            std::string name = e.path().stem().string();
-            fs::path png = OverlaysDir() / (name + ".png");
-            if (!fs::exists(png)) continue;
-            m_Overlays.push_back({ name, png.string() });
+            if (e.path().extension() != ".png") continue;
+            m_Overlays.push_back({ e.path().stem().string(), e.path().string(), false });
         }
     } catch (const std::exception& ex) {
         std::cerr << "[LayersOverlayTab] " << ex.what() << "\n";
     }
+
+    // Suite unificada: si FoudreVue esta instalado en esta misma maquina,
+    // sus overlays ya rasterizados se leen directo de su carpeta (sin
+    // copiar) — no hace falta pasar por "Importar overlay..." a mano. Un
+    // nombre ya presente entre los overlays propios gana (no se pisa la
+    // copia local del usuario).
+    std::error_code ec;
+    fs::path fvDir = FoudreVueOverlaysDir();
+    if (fs::exists(fvDir, ec)) {
+        try {
+            for (const auto& e : fs::directory_iterator(fvDir)) {
+                if (!e.is_regular_file()) continue;
+                if (e.path().extension() != ".png") continue;
+                std::string name = e.path().stem().string();
+                bool alreadyMine = std::any_of(m_Overlays.begin(), m_Overlays.end(),
+                    [&](const OverlayEntry& o) { return o.name == name; });
+                if (alreadyMine) continue;
+                m_Overlays.push_back({ name, e.path().string(), true });
+            }
+        } catch (const std::exception& ex) {
+            std::cerr << "[LayersOverlayTab] " << ex.what() << "\n";
+        }
+    }
+
     std::sort(m_Overlays.begin(), m_Overlays.end(),
         [](const OverlayEntry& a, const OverlayEntry& b) { return a.name < b.name; });
 }
@@ -215,167 +154,8 @@ std::string LayersOverlayTab::ResolvePngPath(const std::string& name) {
     return (OverlaysDir() / (name + ".png")).string();
 }
 
-std::vector<std::string> LayersOverlayTab::ListBgImages() {
-    std::vector<std::string> out;
-    std::error_code ec;
-    fs::path root = BgImagesRootDir();
-    if (!fs::exists(root, ec)) return out;
-    for (const auto& e : fs::recursive_directory_iterator(
-             root, fs::directory_options::skip_permission_denied, ec)) {
-        if (!e.is_regular_file()) continue;
-        std::string ext = e.path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png")
-            out.push_back(e.path().string());
-    }
-    std::sort(out.begin(), out.end());
-    return out;
-}
-
-std::string LayersOverlayTab::ImportOverlayImage() {
-    std::string selectedPath;
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Imagenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile   = filename;
-    ofn.nMaxFile    = MAX_PATH;
-    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameA(&ofn)) return {};
-    selectedPath = filename;
-#else
-    selectedPath = OpenImageFileDialogUnix();
-    if (selectedPath.empty()) return {};
-#endif
-
-    std::error_code ec;
-    fs::path dstDir = OverlayImagesDir();
-    fs::path src(selectedPath);
-    fs::path dst = dstDir / src.filename();
-    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
-    if (ec) return {};
-    return dst.string();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Persistencia de la receta editable (.overlay)
-// ─────────────────────────────────────────────────────────────────────────────
-bool LayersOverlayTab::SaveOverlayRecipe(const std::string& name, const OverlayDoc& doc) {
-    if (name.empty()) return false;
-    std::ofstream f(OverlaysDir() / (name + ".overlay"));
-    if (!f.is_open()) return false;
-
-    f << "canvasW=" << doc.canvasW << "\n";
-    f << "canvasH=" << doc.canvasH << "\n";
-    f << "bgColor=" << doc.bgColor[0] << "," << doc.bgColor[1] << ","
-                    << doc.bgColor[2] << "," << doc.bgColor[3] << "\n";
-    f << "layerCount=" << doc.layers.size() << "\n";
-    for (size_t i = 0; i < doc.layers.size(); i++) {
-        const auto& l = doc.layers[i];
-        f << "layer" << i << ".kind="  << (l.kind == OverlayLayerKind::Image ? "image" : "text") << "\n";
-        f << "layer" << i << ".text="  << EscapeNewlines(l.text) << "\n";
-        f << "layer" << i << ".font="  << l.fontName << "\n";
-        f << "layer" << i << ".size="  << l.fontSize << "\n";
-        f << "layer" << i << ".color=" << l.color[0] << "," << l.color[1] << ","
-                                        << l.color[2] << "," << l.color[3] << "\n";
-        f << "layer" << i << ".image=" << l.imagePath << "\n";
-        f << "layer" << i << ".sizeW=" << l.sizeW << "\n";
-        f << "layer" << i << ".sizeH=" << l.sizeH << "\n";
-        f << "layer" << i << ".rotation=" << l.rotation << "\n";
-        f << "layer" << i << ".posX="  << l.posX << "\n";
-        f << "layer" << i << ".posY="  << l.posY << "\n";
-
-        f << "layer" << i << ".shadowOn="  << (l.shadowEnabled ? 1 : 0) << "\n";
-        f << "layer" << i << ".shadowCol=" << l.shadowColor[0] << "," << l.shadowColor[1] << ","
-                                            << l.shadowColor[2] << "," << l.shadowColor[3] << "\n";
-        f << "layer" << i << ".shadowOffX=" << l.shadowOffsetX << "\n";
-        f << "layer" << i << ".shadowOffY=" << l.shadowOffsetY << "\n";
-
-        f << "layer" << i << ".outlineOn="  << (l.outlineEnabled ? 1 : 0) << "\n";
-        f << "layer" << i << ".outlineCol=" << l.outlineColor[0] << "," << l.outlineColor[1] << ","
-                                             << l.outlineColor[2] << "," << l.outlineColor[3] << "\n";
-        f << "layer" << i << ".outlineW="   << l.outlineWidth << "\n";
-
-        f << "layer" << i << ".bgOn="      << (l.bgEnabled ? 1 : 0) << "\n";
-        f << "layer" << i << ".bgCol="     << l.bgColor[0] << "," << l.bgColor[1] << ","
-                                            << l.bgColor[2] << "," << l.bgColor[3] << "\n";
-        f << "layer" << i << ".bgPadX="    << l.bgPaddingX << "\n";
-        f << "layer" << i << ".bgPadY="    << l.bgPaddingY << "\n";
-        f << "layer" << i << ".bgRound="   << l.bgRounding << "\n";
-    }
-    return true;
-}
-
-bool LayersOverlayTab::LoadOverlayRecipe(const std::string& name, OverlayDoc& out) {
-    std::ifstream f(OverlaysDir() / (name + ".overlay"));
-    if (!f.is_open()) return false;
-
-    out = OverlayDoc{};
-    out.layers.clear();
-    int layerCount = 0;
-
-    std::string line;
-    while (std::getline(f, line)) {
-        std::string::size_type eq = line.find('=');
-        if (eq == std::string::npos) continue;
-        std::string k = line.substr(0, eq);
-        std::string v = line.substr(eq + 1);
-        while (!v.empty() && (v.back() == '\r' || v.back() == '\n')) v.pop_back();
-
-        if (k == "canvasW") out.canvasW = std::atoi(v.c_str());
-        else if (k == "canvasH") out.canvasH = std::atoi(v.c_str());
-        else if (k == "bgColor")
-            sscanf(v.c_str(), "%f,%f,%f,%f", &out.bgColor[0], &out.bgColor[1], &out.bgColor[2], &out.bgColor[3]);
-        else if (k == "layerCount") layerCount = std::atoi(v.c_str());
-        else if (k.rfind("layer", 0) == 0) {
-            std::string::size_type dot = k.find('.');
-            if (dot == std::string::npos) continue;
-            int idx = std::atoi(k.substr(5, dot - 5).c_str());
-            std::string field = k.substr(dot + 1);
-            if (idx < 0) continue;
-            while ((int)out.layers.size() <= idx) out.layers.push_back(OverlayLayer{});
-
-            auto& l = out.layers[idx];
-            if      (field == "kind")  l.kind     = (v == "image") ? OverlayLayerKind::Image : OverlayLayerKind::Text;
-            else if (field == "text")  l.text     = UnescapeNewlines(v);
-            else if (field == "font")  l.fontName = v;
-            else if (field == "size")  l.fontSize = (float)std::atof(v.c_str());
-            else if (field == "image") l.imagePath = v;
-            else if (field == "sizeW") l.sizeW    = (float)std::atof(v.c_str());
-            else if (field == "sizeH") l.sizeH    = (float)std::atof(v.c_str());
-            else if (field == "rotation") l.rotation = (float)std::atof(v.c_str());
-            else if (field == "posX")  l.posX     = (float)std::atof(v.c_str());
-            else if (field == "posY")  l.posY     = (float)std::atof(v.c_str());
-            else if (field == "color")
-                sscanf(v.c_str(), "%f,%f,%f,%f", &l.color[0], &l.color[1], &l.color[2], &l.color[3]);
-            else if (field == "shadowOn")   l.shadowEnabled = (v != "0");
-            else if (field == "shadowCol")
-                sscanf(v.c_str(), "%f,%f,%f,%f", &l.shadowColor[0], &l.shadowColor[1],
-                       &l.shadowColor[2], &l.shadowColor[3]);
-            else if (field == "shadowOffX") l.shadowOffsetX = (float)std::atof(v.c_str());
-            else if (field == "shadowOffY") l.shadowOffsetY = (float)std::atof(v.c_str());
-            else if (field == "outlineOn")  l.outlineEnabled = (v != "0");
-            else if (field == "outlineCol")
-                sscanf(v.c_str(), "%f,%f,%f,%f", &l.outlineColor[0], &l.outlineColor[1],
-                       &l.outlineColor[2], &l.outlineColor[3]);
-            else if (field == "outlineW")   l.outlineWidth = (float)std::atof(v.c_str());
-            else if (field == "bgOn")       l.bgEnabled = (v != "0");
-            else if (field == "bgCol")
-                sscanf(v.c_str(), "%f,%f,%f,%f", &l.bgColor[0], &l.bgColor[1], &l.bgColor[2], &l.bgColor[3]);
-            else if (field == "bgPadX")     l.bgPaddingX = (float)std::atof(v.c_str());
-            else if (field == "bgPadY")     l.bgPaddingY = (float)std::atof(v.c_str());
-            else if (field == "bgRound")    l.bgRounding = (float)std::atof(v.c_str());
-        }
-    }
-    (void)layerCount;
-    return true;
-}
-
 bool LayersOverlayTab::DeleteOverlay(const std::string& name) {
     std::error_code ec;
-    fs::remove(OverlaysDir() / (name + ".overlay"), ec);
     fs::remove(OverlaysDir() / (name + ".png"), ec);
     m_ThumbnailCache.erase(ResolvePngPath(name));
     return true;
@@ -384,11 +164,237 @@ bool LayersOverlayTab::DeleteOverlay(const std::string& name) {
 bool LayersOverlayTab::RenameOverlay(const std::string& oldName, const std::string& newName) {
     if (newName.empty() || oldName == newName) return false;
     std::error_code ec;
-    fs::rename(OverlaysDir() / (oldName + ".overlay"), OverlaysDir() / (newName + ".overlay"), ec);
-    if (ec) return false;
     fs::rename(OverlaysDir() / (oldName + ".png"), OverlaysDir() / (newName + ".png"), ec);
     m_ThumbnailCache.erase(ResolvePngPath(oldName));
     return !ec;
+}
+
+// Duplica un overlay leido desde la carpeta de FoudreVue a la carpeta
+// propia de ProyecThor, para que a partir de ahi se pueda renombrar/borrar
+// como cualquier overlay propio (FoudreVue sigue siendo el dueño de su
+// copia original, que no se toca).
+bool LayersOverlayTab::CopyExternalToMine(const OverlayEntry& e) {
+    if (!e.external) return false;
+    std::error_code ec;
+    fs::copy_file(e.pngPath, ResolvePngPath(e.name), fs::copy_options::overwrite_existing, ec);
+    if (ec) return false;
+    m_ThumbnailCache.erase(ResolvePngPath(e.name));
+    ReloadList();
+    return true;
+}
+
+void LayersOverlayTab::SetStatus(const std::string& msg) {
+    m_StatusMsg   = msg;
+    m_StatusTimer = 5.0f;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  "Abrir FoudreVue" — intenta lanzar el editor profesional de overlays (app
+//  hermana, open source, ver /FoudreVue en el repo). Si no esta instalado,
+//  en vez de un simple mensaje de texto, abre un modal que chequea la ultima
+//  release publicada (por canal estable/beta) contra el repo de GitHub y
+//  ofrece abrirla en el navegador (ver RenderFoudreVueDownloadModal).
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::OpenOrOfferFoudreVue() {
+#ifdef _WIN32
+    int found = std::system("where foudrevue >nul 2>nul");
+    if (found == 0) {
+        std::system("start \"\" foudrevue.exe");
+        return;
+    }
+#else
+    int found = std::system("command -v foudrevue > /dev/null 2>&1");
+    if (found == 0) {
+        std::system("foudrevue >/dev/null 2>&1 &");
+        return;
+    }
+#endif
+    m_ShowFoudreVueModal = true;
+    if (m_FvStatus.load() == FvCheckStatus::Idle) StartFoudreVueCheck();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Chequeo de version — igual criterio que CategoryUpdates::DoCheckUpdate
+//  (thread de fondo + estado atomico), pero contra TheVixcho/FoudreVue.
+//  "beta" toma la release mas reciente (sea o no prerelease); "stable" pide
+//  /releases/latest, que GitHub solo resuelve si hay al menos una release
+//  no-prerelease (hoy no hay ninguna publicada todavia, asi que el estado
+//  mas comun en la practica va a ser NoReleases, y eso se muestra tal cual).
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::StartFoudreVueCheck() {
+    if (m_FvThread.joinable()) m_FvThread.join();
+    m_FvStatus = FvCheckStatus::Checking;
+
+    std::string channel = ProyecThor::Settings::SettingsManager::Get()
+                               .GetSettings().foudrevue.releaseChannel;
+
+    m_FvThread = std::thread([this, channel]() {
+        std::string path = (channel == "beta")
+            ? "/repos/TheVixcho/FoudreVue/releases?per_page=1"
+            : "/repos/TheVixcho/FoudreVue/releases/latest";
+
+        std::string body = ProyecThor::Core::FetchGitHubJson(path);
+        if (body.empty() || body == "[]") {
+            m_FvStatus = FvCheckStatus::NoReleases;
+            return;
+        }
+
+        std::string tag = ProyecThor::Core::ExtractJsonField(body, "tag_name");
+        if (tag.empty()) {
+            std::string msg = ProyecThor::Core::ExtractJsonField(body, "message");
+            m_FvStatus = msg.empty() ? FvCheckStatus::Error : FvCheckStatus::NoReleases;
+            return;
+        }
+
+        m_FvVersion     = tag;
+        m_FvHtmlUrl     = ProyecThor::Core::ExtractJsonField(body, "html_url");
+        m_FvPublishedAt = ProyecThor::Core::ExtractJsonField(body, "published_at");
+        m_FvStatus      = FvCheckStatus::Found;
+    });
+    m_FvThread.detach();
+}
+
+void LayersOverlayTab::RenderFoudreVueDownloadModal() {
+    if (m_ShowFoudreVueModal)
+        ImGui::OpenPopup("FoudreVue no encontrado");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(440, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
+
+    if (ImGui::BeginPopupModal("FoudreVue no encontrado", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Text);
+        ImGui::TextWrapped(
+            "FoudreVue es la app hermana, open source, donde se crean y "
+            "editan los overlays (Pexels, rotacion, tipografia...). "
+            "ProyecThor solo los consume ya renderizados.");
+        ImGui::PopStyleColor();
+
+        ImGui::Dummy({0, 8});
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+        ImGui::TextUnformatted("Canal:");
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+
+        auto& fv = ProyecThor::Settings::SettingsManager::Get().GetSettings().foudrevue;
+        bool isStable = (fv.releaseChannel != "beta");
+        if (LPIconToggle("Estable", isStable, {70, 24})) {
+            if (!isStable) {
+                fv.releaseChannel = "stable";
+                ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                StartFoudreVueCheck();
+            }
+        }
+        ImGui::SameLine();
+        if (LPIconToggle("Beta", !isStable, {56, 24})) {
+            if (isStable) {
+                fv.releaseChannel = "beta";
+                ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                StartFoudreVueCheck();
+            }
+        }
+
+        ImGui::Dummy({0, 10});
+
+        switch (m_FvStatus.load()) {
+            case FvCheckStatus::Checking:
+                ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+                ImGui::TextUnformatted("Buscando la ultima version en GitHub...");
+                ImGui::PopStyleColor();
+                break;
+            case FvCheckStatus::Found: {
+                ImGui::PushStyleColor(ImGuiCol_Text, LP::Gold);
+                ImGui::Text("Version %s disponible", m_FvVersion.c_str());
+                ImGui::PopStyleColor();
+                if (!m_FvPublishedAt.empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
+                    ImGui::Text("Publicada: %s", m_FvPublishedAt.c_str());
+                    ImGui::PopStyleColor();
+                }
+                ImGui::Dummy({0, 6});
+                if (LPPrimaryBtn("Descargar en GitHub") && !m_FvHtmlUrl.empty())
+                    ProyecThor::External::OpenURL(m_FvHtmlUrl);
+                break;
+            }
+            case FvCheckStatus::NoReleases:
+                ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+                ImGui::TextWrapped(
+                    "Todavia no hay versiones publicadas en este canal. Por "
+                    "ahora se puede compilar desde la carpeta FoudreVue/ del "
+                    "repositorio.");
+                ImGui::PopStyleColor();
+                ImGui::Dummy({0, 6});
+                if (LPGhostBtn("Ver repositorio en GitHub"))
+                    ProyecThor::External::OpenURL("https://github.com/TheVixcho/FoudreVue");
+                break;
+            case FvCheckStatus::Error:
+                ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+                ImGui::TextUnformatted("No se pudo conectar a GitHub para chequear la version.");
+                ImGui::PopStyleColor();
+                break;
+            case FvCheckStatus::Idle:
+                break;
+        }
+
+        ImGui::Dummy({0, 12});
+        if (LPGhostBtn("Cerrar")) {
+            m_ShowFoudreVueModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  "Importar overlay..." — lee un paquete .foudrevue exportado (carpeta con
+//  render.png + recipe.json). ProyecThor solo consume el PNG ya rasterizado;
+//  no necesita parsear el recipe.json (eso es responsabilidad de FoudreVue,
+//  que es donde se re-edita un overlay).
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersOverlayTab::ImportBundle() {
+#ifdef _WIN32
+    SetStatus("Importar overlays todavia no esta disponible en Windows.");
+#else
+    std::string cmd = "zenity --file-selection --directory "
+                       "--title=\"Elegi la carpeta .foudrevue a importar\" 2>/dev/null";
+    std::string bundleDir;
+    {
+        char buffer[1024];
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if (pipe) {
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) bundleDir += buffer;
+            pclose(pipe);
+        }
+    }
+    while (!bundleDir.empty() && (bundleDir.back() == '\n' || bundleDir.back() == '\r'))
+        bundleDir.pop_back();
+    if (bundleDir.empty()) return;
+
+    fs::path png = fs::path(bundleDir) / "render.png";
+    std::error_code ec;
+    if (!fs::exists(png, ec)) {
+        SetStatus("Esa carpeta no tiene un render.png — no parece un overlay exportado valido.");
+        return;
+    }
+
+    std::string name = fs::path(bundleDir).stem().string();
+    if (name.empty()) name = "overlay_importado";
+
+    fs::copy_file(png, ResolvePngPath(name), fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        SetStatus("No se pudo copiar el overlay importado.");
+        return;
+    }
+
+    m_ThumbnailCache.erase(ResolvePngPath(name));
+    ReloadList();
+    SetStatus("Overlay \"" + name + "\" importado.");
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -403,7 +409,7 @@ void LayersOverlayTab::RenderTopBar() {
     const float btnSz = 26.0f;
     const float zoomW = 76.0f;
     const float gap   = 4.0f;
-    const float rowW  = zoomW + gap + btnSz * 3 + gap * 3;
+    const float rowW  = zoomW + gap + btnSz * 5 + gap * 5;
     const float avail = ImGui::GetWindowContentRegionMax().x;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
 
@@ -435,9 +441,21 @@ void LayersOverlayTab::RenderTopBar() {
     ImGui::PopID();
 
     ImGui::SameLine(0, gap*2);
-    if (LPCornerIconBtn("##ovnew", LPDrawPlus, "Nuevo overlay", {btnSz,btnSz}, true)) {
-        LoadFontsList();
-        m_Editor->OpenNew();
+    if (LPCornerIconBtn("##ovrefresh", LPDrawRefresh,
+            "Refrescar (vuelve a leer mis overlays y los de FoudreVue)", {btnSz,btnSz}))
+        ReloadList();
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##ovimport", LPDrawFolderPlus, "Importar overlay (.foudrevue)...", {btnSz,btnSz}))
+        ImportBundle();
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##ovfoudrevue", LPDrawPlus, "Abrir FoudreVue (crear/editar overlays)", {btnSz,btnSz}, true))
+        OpenOrOfferFoudreVue();
+
+    if (m_StatusTimer > 0.0f) {
+        m_StatusTimer -= ImGui::GetIO().DeltaTime;
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+        ImGui::TextWrapped("%s", m_StatusMsg.c_str());
+        ImGui::PopStyleColor();
     }
 }
 
@@ -472,6 +490,9 @@ void LayersOverlayTab::RenderCard(const OverlayEntry& e, float W, float H, int c
     ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
     dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, LPU32(LP::Text), dn.c_str());
 
+    if (e.external)
+        LPBadge(dl, {p0.x+6.0f, p0.y+6.0f}, "FV", LP::AccentDim, LP::Accent);
+
     ImGui::InvisibleButton(("##ovc_"+e.name).c_str(), {W, H});
     if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         Core::PresentationCore::Get().SetBackgroundMedia(e.pngPath, /*isVideo*/false, /*allowAudio*/false);
@@ -481,17 +502,16 @@ void LayersOverlayTab::RenderCard(const OverlayEntry& e, float W, float H, int c
         ImGui::Text("%s", e.name.c_str());
         ImGui::PopStyleColor();
         ImGui::Separator();
-        if (ImGui::Selectable("  Editar")) {
-            OverlayDoc doc;
-            if (LoadOverlayRecipe(e.name, doc))
-                m_Editor->OpenEdit(e.name, doc);
+        if (e.external) {
+            if (ImGui::Selectable("  Copiar a mis overlays"))
+                CopyExternalToMine(e);
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+            if (ImGui::Selectable("  Eliminar")) {
+                if (DeleteOverlay(e.name)) ReloadList();
+            }
+            ImGui::PopStyleColor();
         }
-        ImGui::Separator();
-        ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-        if (ImGui::Selectable("  Eliminar")) {
-            if (DeleteOverlay(e.name)) ReloadList();
-        }
-        ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
 
@@ -521,7 +541,13 @@ void LayersOverlayTab::RenderRow(const OverlayEntry& e, float W, float rowH) {
     else       dl->AddRectFilled({tx,ty}, {tx+thumbSz,ty+thumbSz}, LPU32(LP::Surface0), 5.0f);
 
     std::string dn = e.name.length() > 32 ? e.name.substr(0,29) + "..." : e.name;
-    dl->AddText({tx+thumbSz+10.0f, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f}, LPU32(LP::Text), dn.c_str());
+    float labelX = tx+thumbSz+10.0f;
+    dl->AddText({labelX, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f}, LPU32(LP::Text), dn.c_str());
+    if (e.external) {
+        ImVec2 lsz = ImGui::CalcTextSize(dn.c_str());
+        LPBadge(dl, {labelX+lsz.x+10.0f, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f},
+                "FV", LP::AccentDim, LP::Accent);
+    }
 
     ImGui::InvisibleButton(("##ovrow_"+e.name).c_str(), {W, rowH});
     if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
@@ -532,17 +558,16 @@ void LayersOverlayTab::RenderRow(const OverlayEntry& e, float W, float rowH) {
         ImGui::Text("%s", e.name.c_str());
         ImGui::PopStyleColor();
         ImGui::Separator();
-        if (ImGui::Selectable("  Editar")) {
-            OverlayDoc doc;
-            if (LoadOverlayRecipe(e.name, doc))
-                m_Editor->OpenEdit(e.name, doc);
+        if (e.external) {
+            if (ImGui::Selectable("  Copiar a mis overlays"))
+                CopyExternalToMine(e);
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+            if (ImGui::Selectable("  Eliminar")) {
+                if (DeleteOverlay(e.name)) ReloadList();
+            }
+            ImGui::PopStyleColor();
         }
-        ImGui::Separator();
-        ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-        if (ImGui::Selectable("  Eliminar")) {
-            if (DeleteOverlay(e.name)) ReloadList();
-        }
-        ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
 
@@ -561,7 +586,7 @@ void LayersOverlayTab::RenderGallery() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x+w,p.y+64}, LPU32(LP::Surface1), 10.0f);
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* msg = "Sin overlays aun. Usa el boton + de arriba para crear uno.";
+        const char* msg = "Sin overlays aun. Creá uno en FoudreVue (se leen automaticamente si esta instalado) o importá un .foudrevue exportado.";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
         ImGui::Text("%s", msg);
@@ -603,29 +628,21 @@ void LayersOverlayTab::RenderGallery() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Modal del editor
-// ─────────────────────────────────────────────────────────────────────────────
-void LayersOverlayTab::RenderEditorModal() {
-    if (!m_Editor) return;
-    m_Editor->Render([this](const std::string& name, const OverlayDoc& doc) {
-        if (SaveOverlayRecipe(name, doc)) {
-            m_ThumbnailCache.erase(ResolvePngPath(name));
-            ReloadList();
-        }
-    });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  Render principal
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersOverlayTab::Render() {
+    if (!m_Loaded) {
+        ReloadList();
+        m_Loaded = true;
+    }
+
     RenderTopBar();
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     LPSeparatorLine();
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     RenderGallery();
-    RenderEditorModal();
+    RenderFoudreVueDownloadModal();
 }
 
 } // namespace ProyecThor::UI

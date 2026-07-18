@@ -10,7 +10,8 @@
       "Bash(DISPLAY=:0 xwininfo -root -tree)",
       "Bash(which xwininfo *)",
       "Bash(ldconfig -p)",
-      "Bash(pkg-config --exists openssl)"
+      "Bash(pkg-config --exists openssl)",
+      "Bash(DISPLAY=:0 magick import -window root /home/vixcho/Documentos/ProyecThor/pt_test.png)"
     ]
   }
 }

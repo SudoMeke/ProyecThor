@@ -137,6 +137,13 @@ namespace ProyecThor::Settings {
         bool        autoDownload   = false;
     };
 
+    // ── FoudreVue (app hermana de overlays) ──────────────────────────────
+    // Solo guarda el canal elegido para el chequeo de version en el modal
+    // de descarga (ver LayersOverlayTab::RenderFoudreVueDownloadModal).
+    struct FoudreVueSettings {
+        std::string releaseChannel = "stable"; // "stable" | "beta"
+    };
+
     // ── Stage Display (monitor de control) ──────────────────────────────
     struct StageDisplaySettings {
         int layoutTemplateIndex = 0; // indice en kStageLayoutTemplates
@@ -184,15 +191,6 @@ namespace ProyecThor::Settings {
         };
     };
 
-    // ── Integraciones (APIs externas) ────────────────────────────────────
-    // Cada usuario pega su propia key gratuita (ver pexels.com/api) —
-    // se guarda solo en settings.json local (fuera del repo, ver
-    // SettingsManager::GetSettingsPath), nunca hardcodeada en el codigo
-    // porque el proyecto es open source.
-    struct IntegrationsSettings {
-        std::string pexelsApiKey = "";
-    };
-
     // ── Sidebar del hub de Diseño (Fondos/Estilos/Transiciones) ──────────
     struct StylesHubSettings {
         float categoryColor[4][4] = {
@@ -209,12 +207,12 @@ namespace ProyecThor::Settings {
         GeneralSettings        general;
         ThemeSettings          theme;
         UpdatesSettings        updates;
+        FoudreVueSettings      foudrevue;
         StageDisplaySettings   stageDisplay;
         LibrarySidebarSettings librarySidebar;
         HomeSidebarSettings    homeSidebar;
         ControlHubSettings     controlHub;
         StylesHubSettings      stylesHub;
-        IntegrationsSettings   integrations;
     };
 
     class SettingsManager {
