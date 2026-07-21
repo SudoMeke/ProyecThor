@@ -17,6 +17,9 @@
 #include <atomic>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <future>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -32,28 +35,51 @@ namespace {
 
 std::atomic<int> g_NextVlcInstanceId{0};
 
+// popen()/_popen() bloquean hasta que el proceso hijo termina (o el pipe se
+// cierra). yt-dlp puede tardar de mas o colgarse (red caida, proceso
+// zombie) — sin limite de tiempo eso congela quien haya llamado a Play()
+// (tipicamente el hilo principal de render). Corremos el trabajo bloqueante
+// en un hilo aparte y esperamos con timeout (mismo patron que
+// NetworkStreamServer::Start(), que ya usa promise/future + wait_for).
+// Si expira, devolvemos vacio para que Play() falle de forma controlada en
+// vez de colgar la app; el hilo detached simplemente termina en background
+// y se descarta cuando yt-dlp finalice por su cuenta.
 std::string GetDirectYoutubeURL(const std::string& youtubeURL)
 {
+    auto runYtDlp = [](const std::string& url) -> std::string {
 #ifdef _WIN32
-    std::string command = "yt-dlp.exe -f \"best[ext=mp4]/best\" -g --no-playlist \""
-                        + youtubeURL + "\"";
+        std::string command = "yt-dlp.exe -f \"best[ext=mp4]/best\" -g --no-playlist \""
+                            + url + "\"";
 #else
-    std::string command = "yt-dlp -f \"best[ext=mp4]/best\" -g --no-playlist \""
-                        + youtubeURL + "\"";
+        std::string command = "yt-dlp -f \"best[ext=mp4]/best\" -g --no-playlist \""
+                            + url + "\"";
 #endif
-    std::array<char, 1024> buffer;
-    std::string result;
+        std::array<char, 1024> buffer;
+        std::string result;
 #ifdef _WIN32
-    std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), _pclose);
+        std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), _pclose);
 #else
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
 #endif
-    if (!pipe) return "";
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
-        result += buffer.data();
-    if (!result.empty() && result.back() == '\n') result.pop_back();
-    if (!result.empty() && result.back() == '\r') result.pop_back();
-    return result;
+        if (!pipe) return "";
+        while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+            result += buffer.data();
+        if (!result.empty() && result.back() == '\n') result.pop_back();
+        if (!result.empty() && result.back() == '\r') result.pop_back();
+        return result;
+    };
+
+    std::packaged_task<std::string()> task([runYtDlp, youtubeURL] { return runYtDlp(youtubeURL); });
+    std::future<std::string> future = task.get_future();
+    std::thread(std::move(task)).detach();
+
+    constexpr auto kYtDlpTimeout = std::chrono::seconds(8);
+    if (future.wait_for(kYtDlpTimeout) == std::future_status::ready)
+        return future.get();
+
+    std::cerr << "[VLC] Timeout resolviendo URL de YouTube (yt-dlp tardo mas de "
+              << kYtDlpTimeout.count() << "s): se omite el clip.\n";
+    return "";
 }
 
 // Normaliza una ruta para comparacion: pasa todo a minusculas y reemplaza
@@ -122,6 +148,17 @@ struct VLCVideoCtx {
     unsigned width  = 0;
     unsigned height = 0;
     bool     dirty  = false;
+
+    // Distinto de "dirty": dirty es "hay un frame NUEVO sin subir todavia a
+    // GL" y se consume (pasa a false) en cada UpdateTexture(). everHadFrame
+    // es pegajoso — una vez que se decodifico el primer frame real, queda
+    // en true hasta el proximo vlc_format() (nueva carga). HasVideoFrame()
+    // debe reflejar "ya se vio al menos un frame alguna vez", no "hay uno
+    // pendiente de subir ESTE instante" — mezclar ambas cosas hacia que
+    // GetLoadState()==Ready practicamente nunca se observara true: el
+    // mismo Update() que llamaba a UpdateTexture() (consumiendo dirty)
+    // chequeaba Ready statement despues, viendo dirty ya en false.
+    bool     everHadFrame = false;
 };
 
 #ifdef _WIN32
@@ -292,7 +329,8 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
     ctx->backBuf  = new uint8_t[sz];
     std::memset(ctx->frontBuf, 0, sz);
     std::memset(ctx->backBuf,  0, sz);
-    ctx->dirty = false;
+    ctx->dirty       = false;
+    ctx->everHadFrame = false; // nueva carga: todavia no se decodifico nada
     return 1;
 }
 
@@ -310,7 +348,8 @@ static void vlc_unlock(void* opaque, void* /*picture*/, void* const* /*planes*/)
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     std::swap(ctx->frontBuf, ctx->backBuf);
-    ctx->dirty = true;
+    ctx->dirty        = true;
+    ctx->everHadFrame = true;
     ctx->mutex.unlock();
 }
 
@@ -363,9 +402,11 @@ void VLCBasePlayer::InitVLC()
         "--no-video-title-show",
         hwDecodeArg.c_str(),
         threadsArg.c_str(),
-        "--file-caching=300",
-        "--clock-jitter=0",
-        "--clock-synchro=0",
+        // Cache mas generoso (antes 300ms) para dar margen en disco/CPU
+        // lentos. clock-jitter/clock-synchro NO se fuerzan a 0: eso
+        // desactivaba el auto-corrector de drift audio/video de VLC, que es
+        // justo el mecanismo que hace falta en hardware limitado.
+        "--file-caching=1000",
     };
     m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
     if (!m_Instance)
@@ -374,12 +415,20 @@ void VLCBasePlayer::InitVLC()
 
 void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
 {
-    // Corre en un hilo interno de libVLC: solo tocar el atomico.
+    // Corre en un hilo interno de libVLC: solo tocar atomicos.
     auto* self = static_cast<VLCBasePlayer*>(userData);
     if (evt->type == libvlc_MediaPlayerEndReached ||
         evt->type == libvlc_MediaPlayerEncounteredError)
     {
+        if (evt->type == libvlc_MediaPlayerEncounteredError) {
+            self->m_HadError.store(true, std::memory_order_relaxed);
+            self->m_LoadHasError.store(true, std::memory_order_relaxed);
+        }
         self->m_EndReached.store(true, std::memory_order_relaxed);
+    }
+    else if (evt->type == libvlc_MediaPlayerPlaying)
+    {
+        self->m_VlcIsPlaying.store(true, std::memory_order_relaxed);
     }
 }
 
@@ -434,6 +483,7 @@ void VLCBasePlayer::CreatePersistentPlayer()
     libvlc_event_manager_t* em = libvlc_media_player_event_manager(m_MediaPlayer);
     libvlc_event_attach(em, libvlc_MediaPlayerEndReached,       &VLCBasePlayer::OnVlcEvent, this);
     libvlc_event_attach(em, libvlc_MediaPlayerEncounteredError, &VLCBasePlayer::OnVlcEvent, this);
+    libvlc_event_attach(em, libvlc_MediaPlayerPlaying,          &VLCBasePlayer::OnVlcEvent, this);
 }
 
 void VLCBasePlayer::DestroyVLC()
@@ -501,6 +551,23 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
         return;
     }
 
+    // FIX (freeze en clicks repetidos sobre el mismo video): si esta MISMA
+    // instancia ya tiene esta MISMA ruta como contenido actual (cargando o
+    // ya activo), un Play() reentrante para ella es un reintento espurio,
+    // no un pedido nuevo real — LoadAndPlay() haria un
+    // stop()+set_media()+play() COMPLETO de nuevo, sincronico, por cada
+    // click extra (N clicks = N ciclos serializados en el hilo de UI).
+    // m_CurrentPath se limpia en Stop(), asi que un replay LEGITIMO de la
+    // misma ruta despues de que el contenido termino/se detuvo de verdad
+    // sigue funcionando normalmente.
+    if (!path.empty() && path == m_CurrentPath)
+    {
+        std::cerr << "[VLC#" << m_InstanceId << "] Play() ignorado, reentrante para ruta ya activa/cargando: "
+                  << path << "\n";
+        return;
+    }
+    m_CurrentPath = path;
+
     std::cerr << "[VLC#" << m_InstanceId << "] Play() path=" << path
               << " startMuted=" << (startMuted ? "true" : "false")
               << " forceSilent=" << (m_ForceSilent.load(std::memory_order_relaxed) ? "true" : "false")
@@ -508,6 +575,7 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
               << "\n";
 
     uint64_t myGen = ++m_LoadGeneration;
+    m_HasEverPlayed.store(true, std::memory_order_relaxed);
 
     if (startMuted)
         SetMute(true);
@@ -571,6 +639,29 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         // evita correr dos pipelines de decode en paralelo.
         libvlc_media_player_stop(m_MediaPlayer);
         m_EndReached.store(false, std::memory_order_relaxed);
+        m_HadError.store(false, std::memory_order_relaxed);
+        m_LoadHasError.store(false, std::memory_order_relaxed);
+        m_VlcIsPlaying.store(false, std::memory_order_relaxed);
+
+        // FIX: everHadFrame (ver HasVideoFrame()) se reseteaba SOLO dentro
+        // de vlc_format(), pero libVLC no vuelve a llamar ese callback si el
+        // video nuevo tiene la MISMA resolucion/chroma que el anterior —
+        // reutiliza el buffer tal cual esta. Si eso pasaba, everHadFrame
+        // seguia en true desde la carga ANTERIOR, asi que HasVideoFrame()
+        // (y por lo tanto el crossfade en BackgroundLayer) daba por listo
+        // este Play() ANTES de que hubiera decodificado un solo frame real
+        // — el publico veia el crossfade animar hacia el frame VIEJO que
+        // seguia en el buffer, hasta que el frame nuevo de verdad lo pisaba
+        // (ahi "se corregia" solo, de golpe). Resetear aca, en el punto
+        // donde SABEMOS que arranca una carga nueva (sin depender de que
+        // vlc_format() se dispare o no), lo hace correcto siempre.
+        if (m_VideoCtx)
+        {
+            auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
+            std::lock_guard<std::mutex> ctxLock(ctx->mutex);
+            ctx->everHadFrame = false;
+            ctx->dirty        = false;
+        }
 
         libvlc_media_player_set_media(m_MediaPlayer, media);
         libvlc_media_player_play(m_MediaPlayer);
@@ -594,6 +685,8 @@ void VLCBasePlayer::Stop()
     ++m_LoadGeneration;
 
     m_EndReached.store(false, std::memory_order_relaxed);
+    m_VlcIsPlaying.store(false, std::memory_order_relaxed);
+    m_CurrentPath.clear(); // libera el guard de reentrancia de Play()
 
     std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
     if (m_MediaPlayer)
@@ -603,6 +696,11 @@ void VLCBasePlayer::Stop()
 bool VLCBasePlayer::ConsumeEndReached()
 {
     return m_EndReached.exchange(false, std::memory_order_relaxed);
+}
+
+bool VLCBasePlayer::ConsumeHadError()
+{
+    return m_HadError.exchange(false, std::memory_order_relaxed);
 }
 
 void VLCBasePlayer::SetMute(bool mute)
@@ -743,19 +841,59 @@ bool VLCBasePlayer::HasVideoFrame() const
     if (!m_VideoCtx) return false;
     auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
     std::lock_guard<std::mutex> lock(ctx->mutex);
-    return ctx->dirty && ctx->frontBuf != nullptr && ctx->width > 0 && ctx->height > 0;
+    // FIX: antes chequeaba ctx->dirty (= "hay un frame NUEVO sin subir a GL
+    // todavia"), que UpdateTexture() consume (pone en false) cada vez que
+    // sube algo. Como BackgroundLayer::Update() llama a UpdateTexture() y
+    // JUSTO DESPUES pregunta GetLoadState()==Ready (que depende de esto),
+    // el frame recien decodificado ya aparecia consumido para cuando se
+    // hacia esa pregunta — Ready practicamente nunca se observaba true, y
+    // el prefetch de la cola quedaba reproduciendo sin pausar hasta el
+    // timeout de 3s de BackgroundLayer::Update(), avanzando de mas antes
+    // del corte (el video "salia a la mitad"). everHadFrame es pegajoso
+    // (no se consume): refleja "ya se decodifico al menos un frame real",
+    // que es la pregunta que este metodo siempre quiso responder.
+    return ctx->everHadFrame && ctx->frontBuf != nullptr && ctx->width > 0 && ctx->height > 0;
 }
 
-void VLCBasePlayer::UpdateTexture()
+// Estado derivado (no un evento propio): Idle antes del primer Play(),
+// Error si el load actual encontro libvlc_MediaPlayerEncounteredError,
+// Ready en cuanto HasVideoFrame() es true (SOLO esa condicion — igual que
+// el chequeo que ya funcionaba antes de que existiera este LoadState),
+// Opening/Buffering mientras tanto (distincion informativa via el evento
+// libvlc_MediaPlayerPlaying, para el spinner/ETA — NUNCA condiciona
+// Ready). FIX: la primera version de esto exigia ADEMAS que
+// libvlc_MediaPlayerPlaying hubiera disparado para reportar Ready — ese
+// evento no siempre llega a tiempo (o de forma confiable) en todos los
+// codecs/containers, asi que la mayoria de los swaps terminaban cayendo
+// al timeout de 3s de BackgroundLayer::Update() en vez de swapear en
+// cuanto el primer frame estaba listo (que es lo que hacia, bien, el
+// codigo anterior a este LoadState). Eso se sentia como "todo tarda /
+// esta desfasado" — este fix restaura el gate real a HasVideoFrame() solo.
+VLCBasePlayer::LoadState VLCBasePlayer::GetLoadState() const
 {
-    if (!m_MediaPlayer || !m_VideoCtx) return;
+    if (!m_HasEverPlayed.load(std::memory_order_relaxed)) return LoadState::Idle;
+    if (m_LoadHasError.load(std::memory_order_relaxed))   return LoadState::Error;
+    if (HasVideoFrame())                                   return LoadState::Ready;
+    if (!m_VlcIsPlaying.load(std::memory_order_relaxed))  return LoadState::Opening;
+    return LoadState::Buffering;
+}
+
+bool VLCBasePlayer::IsLoading() const
+{
+    LoadState s = GetLoadState();
+    return s == LoadState::Opening || s == LoadState::Buffering;
+}
+
+bool VLCBasePlayer::UpdateTexture()
+{
+    if (!m_MediaPlayer || !m_VideoCtx) return false;
     auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
 
     void*    pixelsToUpload = nullptr;
     unsigned w = 0, h = 0;
     {
         std::lock_guard<std::mutex> lock(ctx->mutex);
-        if (!ctx->dirty || !ctx->frontBuf || ctx->width == 0 || ctx->height == 0) return;
+        if (!ctx->dirty || !ctx->frontBuf || ctx->width == 0 || ctx->height == 0) return false;
         pixelsToUpload = ctx->frontBuf;
         w = ctx->width;
         h = ctx->height;
@@ -766,6 +904,7 @@ void VLCBasePlayer::UpdateTexture()
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
     glBindTexture(GL_TEXTURE_2D, 0);
+    return true;
 }
 
 std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices()

@@ -7,6 +7,8 @@
 #include <future>
 #include <vector>
 
+#include "ChatMessageStore.h"
+
 namespace ProyecThor::Core {
 
 // ── StreamSnapshot ────────────────────────────────────────────────────────────
@@ -61,11 +63,18 @@ struct StreamConfig {
 };
 // ── NetworkStreamServer ───────────────────────────────────────────────────────
 // Endpoints:
-//   GET /           → HTML interactivo
-//   GET /state      → JSON StreamSnapshot (long-poll ?since=<version>)
-//   GET /frame      → JPEG único del frame actual  (LowLatency mode)
-//   GET /stream     → MJPEG multipart stream       (HighQuality mode)
-//   GET /font       → sirve el .ttf/.otf activo, para @font-face en el cliente
+//   GET /               → HTML interactivo
+//   GET /state          → JSON StreamSnapshot (long-poll ?since=<version>)
+//   GET /frame          → JPEG único del frame actual  (LowLatency mode)
+//   GET /stream         → MJPEG multipart stream       (HighQuality mode)
+//   GET /font           → sirve el .ttf/.otf activo, para @font-face en el cliente
+//   GET /chat           → HTML del chat de equipo (solo si SetChatStore fue llamado)
+//   GET /chat/messages  → JSON mensajes nuevos (long-poll ?since=<id>)
+//   POST /chat/send     → form-urlencoded {nickname, text}
+//
+// El chat vive en ESTE mismo server/puerto (no en uno propio) a proposito:
+// asi nunca necesita un permiso de firewall aparte del que ya tiene la
+// Transmision en Red — ver ChatMessageStore.h.
 class NetworkStreamServer {
 public:
     NetworkStreamServer();
@@ -90,6 +99,12 @@ public:
     using FontPathProvider = std::function<std::string()>;
     void SetFontPathProvider(FontPathProvider provider);
 
+    // Feed de mensajes para las rutas /chat*. nullptr (default) = esas rutas
+    // devuelven 404, como si no existieran. El puntero es propiedad de quien
+    // lo pasa (PresentationCore) — este server solo lo referencia mientras
+    // vive, no lo posee.
+    void SetChatStore(ChatMessageStore* store);
+
     // Configuración de capas y calidad
     void SetConfig(const StreamConfig& cfg);
     StreamConfig GetConfig() const;
@@ -104,7 +119,9 @@ public:
 private:
     static std::string DetectLocalIP();
     static std::string BuildHTMLPage();
+    static std::string BuildChatHTMLPage();
     std::string SnapshotToJSON(const StreamSnapshot& snap) const;
+    std::string ChatMessagesToJSON(const std::vector<ChatMessage>& msgs) const;
 
     void ServerThreadFunc(int port, std::promise<bool> startedPromise);
 
@@ -117,6 +134,7 @@ double m_LastCaptureTime = 0.0;
     SnapshotProvider    m_SnapshotProvider;
     FrameProvider       m_FrameProvider;
     FontPathProvider    m_FontPathProvider;
+    ChatMessageStore*   m_ChatStore { nullptr };
 
     mutable std::mutex  m_ConfigMutex;
     StreamConfig        m_Config;

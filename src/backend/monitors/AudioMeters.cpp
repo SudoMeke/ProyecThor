@@ -99,4 +99,62 @@ void AudioMeters::Render(float w, float h)
     ImGui::Dummy({ w, h });
 }
 
+void AudioMeters::RenderVertical(ImDrawList* dl, ImVec2 pos0, float w, float h)
+{
+    ImVec2 pos1 = { pos0.x + w, pos0.y + h };
+
+    dl->AddRectFilled(pos0, pos1, IM_COL32(10, 10, 12, 150), 3.0f);
+    dl->AddRect(pos0, pos1, IM_COL32(60, 60, 66, 160), 3.0f, 0, 1.0f);
+
+    const float inset  = 2.0f;
+    const float labelH = 11.0f;
+    ImVec2 inner0 = { pos0.x + inset, pos0.y + inset };
+    ImVec2 inner1 = { pos1.x - inset, pos1.y - inset - labelH };
+
+    const float workH = std::max(1.0f, inner1.y - inner0.y);
+    const float workW = std::max(1.0f, inner1.x - inner0.x);
+    const float gap   = 2.0f;
+    const float barW  = std::max(1.0f, (workW - gap) * 0.5f);
+
+    ImU32 colGreen  = ImGui::ColorConvertFloat4ToU32(k_EQ_Green);
+    ImU32 colYellow = ImGui::ColorConvertFloat4ToU32(k_EQ_Yellow);
+    ImU32 colRed    = ImGui::ColorConvertFloat4ToU32(k_EQ_Red);
+
+    auto DrawBar = [&](float x, float level, float peak, const char* label) {
+        ImVec2 t0 = { x, inner0.y };
+        ImVec2 t1 = { x + barW, inner1.y };
+        dl->AddRectFilled(t0, t1, IM_COL32(4, 4, 6, 255), 1.0f);
+
+        float lvl   = std::clamp(level, 0.0f, 1.0f);
+        float lvlH  = lvl * workH;
+        if (lvlH > 0.0f) {
+            ImVec2 f0 = { x, inner1.y - lvlH };
+            ImVec2 f1 = { x + barW, inner1.y };
+            dl->PushClipRect(f0, f1, true);
+            float h1 = workH * 0.65f; // tramo verde, desde abajo
+            float h2 = workH * 0.85f; // tramo amarillo
+            dl->AddRectFilled({ x, inner1.y - h1 }, { x + barW, inner1.y }, colGreen);
+            dl->AddRectFilledMultiColor({ x, inner1.y - h2 }, { x + barW, inner1.y - h1 }, colYellow, colYellow, colGreen, colGreen);
+            dl->AddRectFilledMultiColor({ x, inner0.y }, { x + barW, inner1.y - h2 }, colRed, colRed, colYellow, colYellow);
+            dl->PopClipRect();
+        }
+
+        for (float m = 0.1f; m < 1.0f; m += 0.1f) {
+            float my = inner1.y - workH * m;
+            dl->AddLine({ x, my }, { x + barW, my }, IM_COL32(0, 0, 0, 120), 1.0f);
+        }
+
+        if (peak > 0.01f) {
+            float py = inner1.y - std::clamp(peak, 0.0f, 1.0f) * workH;
+            dl->AddRectFilled({ x, py - 1.0f }, { x + barW, py + 1.0f }, IM_COL32(255, 255, 255, 220));
+        }
+
+        ImVec2 lblSize = ImGui::CalcTextSize(label);
+        dl->AddText({ x + (barW - lblSize.x) * 0.5f, inner1.y + 1.0f }, IM_COL32(150, 150, 158, 255), label);
+    };
+
+    DrawBar(inner0.x, m_VU_L, m_VU_PeakL, "L");
+    DrawBar(inner0.x + barW + gap, m_VU_R, m_VU_PeakR, "R");
+}
+
 } // namespace ProyecThor::UI

@@ -36,12 +36,12 @@ static bool GlassIconButton(const char* id,
                              const char* fallbackGlyph,
                              const char* tooltip,
                              ImVec2      size,
-                             ImVec4      tint = ImVec4(0.80f, 0.84f, 0.96f, 1.0f))
+                             ImVec4      tint = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary))
 {
     // Exactamente 4 PushStyleColor
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.09f, 0.10f, 0.19f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.18f, 0.32f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.19f, 0.24f, 0.42f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
     ImGui::PushStyleColor(ImGuiCol_Text,          tint);
 
     auto it = StyleGeneralApp::Icons.find(iconKey);
@@ -128,9 +128,9 @@ void RenderVideoSection(LibraryContext& ctx)
 void RenderLocalVideoList(LibraryContext& ctx)
 {
     // ── Barra de búsqueda ──────────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.08f, 0.09f, 0.18f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.13f, 0.24f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.14f, 0.16f, 0.30f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
     ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
@@ -222,8 +222,13 @@ void RenderLocalVideoList(LibraryContext& ctx)
             {
                 if (ImGui::MenuItem("Enviar al monitor")) {
                     std::string fp = GetAssetsPath() + "/videos/" + filtered[n];
-                    Core::PresentationCore::Get().StopBackgroundMedia();
-                    Core::PresentationCore::Get().SetBackgroundMedia(fp, true);
+                    // FIX: no forzar un Stop() (corte a negro) antes de
+                    // SetBackgroundMedia() — SetVideo() ya maneja tanto la
+                    // carga en frio como el crossfade sobre lo que esta al
+                    // aire. El Stop() previo ademas rompia el guard de
+                    // reentrancia de VLCBasePlayer::Play() en clicks
+                    // repetidos sobre el mismo video.
+                    Core::PresentationCore::Get().SetBackgroundMedia(fp, true, /*allowAudio=*/true);
                     Core::PresentationCore::Get().SetProjecting(true);
                 }
                 ImGui::Separator();
@@ -302,9 +307,9 @@ void RenderStreamURLSection(LibraryContext& ctx)
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.08f, 0.09f, 0.18f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.13f, 0.24f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.14f, 0.16f, 0.30f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
     ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
@@ -391,8 +396,11 @@ void RenderStreamURLSection(LibraryContext& ctx)
                 Core::PresentationCore::Get().SetSelection(s);
 
                 if (ImGui::IsMouseDoubleClicked(0)) {
-                    Core::PresentationCore::Get().StopBackgroundMedia();
-                    Core::PresentationCore::Get().SetBackgroundMedia(ctx.streamURLs[i], true);
+                    // FIX: sin Stop() previo (corte a negro) — SetVideo()
+                    // ya maneja carga en frio o crossfade, y el guard de
+                    // reentrancia en Play() necesita que no se le limpie
+                    // la ruta actual en cada click repetido.
+                    Core::PresentationCore::Get().SetBackgroundMedia(ctx.streamURLs[i], true, /*allowAudio=*/true);
                     Core::PresentationCore::Get().SetProjecting(true);
                 }
             }
@@ -410,8 +418,7 @@ void RenderStreamURLSection(LibraryContext& ctx)
             if (ImGui::BeginPopupContextItem(("##ctx_url" + std::to_string(i)).c_str()))
             {
                 if (ImGui::MenuItem("Enviar al monitor")) {
-                    Core::PresentationCore::Get().StopBackgroundMedia();
-                    Core::PresentationCore::Get().SetBackgroundMedia(ctx.streamURLs[i], true);
+                    Core::PresentationCore::Get().SetBackgroundMedia(ctx.streamURLs[i], true, /*allowAudio=*/true);
                     Core::PresentationCore::Get().SetProjecting(true);
                 }
                 ImGui::Separator();

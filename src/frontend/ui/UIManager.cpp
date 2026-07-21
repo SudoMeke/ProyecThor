@@ -1,8 +1,10 @@
 #include <GL/glew.h>
 #include "UIManager.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/PerformanceGovernor.h"
 #include "../toolbar/ConfigPanel.h"
 #include "panels/HomePanel.h"
+#include "panels/StylesHubPanel.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -12,6 +14,7 @@
 #include "../external/tools/OpenURL.h"
 #include "UIStrings.h"
 #include "frontend/views/Announcements.h"
+#include "frontend/views/Audio.h"
 #include "Hub.h"
 #include "frontend/panels/StreamingPanel.h"
 #include "qrcodegen.hpp"
@@ -64,14 +67,17 @@ void UIManager::ApplyProfessionalTheme()
     s.ScrollbarSize          =  6.0f;                   // era 8 — mas delgada
     s.GrabMinSize            =  8.0f;
  
-    // ── Redondeo — mas moderno ─────────────────────────────────────────────────
-    s.WindowRounding         = 16.0f;   // era 14
-    s.ChildRounding          = 12.0f;   // era 10
-    s.FrameRounding          =  9.0f;   // era 8
-    s.PopupRounding          = 14.0f;   // era 12
-    s.ScrollbarRounding      = 12.0f;
+    // ── Redondeo — mas cuadrado, esquinas apenas redondeadas (menos "liquid
+    //    glass", mas ProPresenter/OBS). El popup del click derecho en
+    //    particular quedaba con Rounding=14 sobre un fondo casi negro y se
+    //    veia como una burbuja fuera de lugar.
+    s.WindowRounding         =  8.0f;   // era 16
+    s.ChildRounding          =  6.0f;   // era 12
+    s.FrameRounding          =  6.0f;   // era 9
+    s.PopupRounding          =  6.0f;   // era 14
+    s.ScrollbarRounding      = 10.0f;   // era 12
     s.GrabRounding           =  6.0f;
-    s.TabRounding            =  9.0f;   // era 8
+    s.TabRounding            =  6.0f;   // era 9
     s.WindowMenuButtonPosition = ImGuiDir_None;
  
     // ── Bordes ────────────────────────────────────────────────────────────────
@@ -106,32 +112,32 @@ void UIManager::ApplyProfessionalTheme()
     c[ImGuiCol_ScrollbarBg]          = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
     c[ImGuiCol_ScrollbarGrab]        = ImVec4(1.000f, 1.000f, 1.000f, 0.110f);
     c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(1.000f, 1.000f, 1.000f, 0.185f);
-    c[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.369f, 0.420f, 1.000f, 0.880f);
+    c[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.550f, 0.560f, 0.580f, 0.880f);
  
     // ── Controles ─────────────────────────────────────────────────────────────
-    c[ImGuiCol_CheckMark]            = ImVec4(0.400f, 0.455f, 1.000f, 1.000f);
-    c[ImGuiCol_SliderGrab]           = ImVec4(0.400f, 0.455f, 1.000f, 1.000f);
-    c[ImGuiCol_SliderGrabActive]     = ImVec4(0.520f, 0.575f, 1.000f, 1.000f);
+    c[ImGuiCol_CheckMark]            = ImVec4(0.700f, 0.700f, 0.720f, 1.000f);
+    c[ImGuiCol_SliderGrab]           = ImVec4(0.700f, 0.700f, 0.720f, 1.000f);
+    c[ImGuiCol_SliderGrabActive]     = ImVec4(0.720f, 0.730f, 0.750f, 1.000f);
  
     // ── Botones ───────────────────────────────────────────────────────────────
     c[ImGuiCol_Button]               = ImVec4(1.000f, 1.000f, 1.000f, 0.048f);
     c[ImGuiCol_ButtonHovered]        = ImVec4(1.000f, 1.000f, 1.000f, 0.088f);
-    c[ImGuiCol_ButtonActive]         = ImVec4(0.369f, 0.420f, 1.000f, 1.000f);
+    c[ImGuiCol_ButtonActive]         = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
  
     // ── Headers (selectables, tree nodes) ────────────────────────────────────
-    c[ImGuiCol_Header]               = ImVec4(0.369f, 0.420f, 1.000f, 0.148f);
-    c[ImGuiCol_HeaderHovered]        = ImVec4(0.369f, 0.420f, 1.000f, 0.215f);
-    c[ImGuiCol_HeaderActive]         = ImVec4(0.369f, 0.420f, 1.000f, 0.375f);
+    c[ImGuiCol_Header]               = ImVec4(0.550f, 0.560f, 0.580f, 0.148f);
+    c[ImGuiCol_HeaderHovered]        = ImVec4(0.550f, 0.560f, 0.580f, 0.215f);
+    c[ImGuiCol_HeaderActive]         = ImVec4(0.550f, 0.560f, 0.580f, 0.375f);
  
     // ── Separadores ───────────────────────────────────────────────────────────
     c[ImGuiCol_Separator]            = ImVec4(1.000f, 1.000f, 1.000f, 0.055f);
-    c[ImGuiCol_SeparatorHovered]     = ImVec4(0.369f, 0.420f, 1.000f, 0.380f);
-    c[ImGuiCol_SeparatorActive]      = ImVec4(0.369f, 0.420f, 1.000f, 0.780f);
+    c[ImGuiCol_SeparatorHovered]     = ImVec4(0.550f, 0.560f, 0.580f, 0.380f);
+    c[ImGuiCol_SeparatorActive]      = ImVec4(0.550f, 0.560f, 0.580f, 0.780f);
  
     // ── Resize grip ───────────────────────────────────────────────────────────
-    c[ImGuiCol_ResizeGrip]           = ImVec4(0.369f, 0.420f, 1.000f, 0.095f);
-    c[ImGuiCol_ResizeGripHovered]    = ImVec4(0.369f, 0.420f, 1.000f, 0.360f);
-    c[ImGuiCol_ResizeGripActive]     = ImVec4(0.369f, 0.420f, 1.000f, 0.780f);
+    c[ImGuiCol_ResizeGrip]           = ImVec4(0.550f, 0.560f, 0.580f, 0.095f);
+    c[ImGuiCol_ResizeGripHovered]    = ImVec4(0.550f, 0.560f, 0.580f, 0.360f);
+    c[ImGuiCol_ResizeGripActive]     = ImVec4(0.550f, 0.560f, 0.580f, 0.780f);
  
     // ── Tabs ─────────────────────────────────────────────────────────────────
     c[ImGuiCol_Tab]                  = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
@@ -141,14 +147,14 @@ void UIManager::ApplyProfessionalTheme()
     c[ImGuiCol_TabUnfocusedActive]   = ImVec4(1.000f, 1.000f, 1.000f, 0.058f);
  
     // ── Docking ───────────────────────────────────────────────────────────────
-    c[ImGuiCol_DockingPreview]       = ImVec4(0.369f, 0.420f, 1.000f, 0.268f);
+    c[ImGuiCol_DockingPreview]       = ImVec4(0.550f, 0.560f, 0.580f, 0.268f);
     c[ImGuiCol_DockingEmptyBg]       = ImVec4(0.026f, 0.029f, 0.044f, 1.000f);
  
     // ── Graficos ──────────────────────────────────────────────────────────────
-    c[ImGuiCol_PlotLines]            = ImVec4(0.369f, 0.420f, 1.000f, 1.000f);
-    c[ImGuiCol_PlotLinesHovered]     = ImVec4(0.520f, 0.575f, 1.000f, 1.000f);
-    c[ImGuiCol_PlotHistogram]        = ImVec4(0.369f, 0.420f, 1.000f, 1.000f);
-    c[ImGuiCol_PlotHistogramHovered] = ImVec4(0.520f, 0.575f, 1.000f, 1.000f);
+    c[ImGuiCol_PlotLines]            = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
+    c[ImGuiCol_PlotLinesHovered]     = ImVec4(0.720f, 0.730f, 0.750f, 1.000f);
+    c[ImGuiCol_PlotHistogram]        = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
+    c[ImGuiCol_PlotHistogramHovered] = ImVec4(0.720f, 0.730f, 0.750f, 1.000f);
  
     // ── Tablas ────────────────────────────────────────────────────────────────
     c[ImGuiCol_TableHeaderBg]        = ImVec4(1.000f, 1.000f, 1.000f, 0.038f);
@@ -158,9 +164,9 @@ void UIManager::ApplyProfessionalTheme()
     c[ImGuiCol_TableRowBgAlt]        = ImVec4(1.000f, 1.000f, 1.000f, 0.022f);
  
     // ── Seleccion y navegacion ────────────────────────────────────────────────
-    c[ImGuiCol_TextSelectedBg]       = ImVec4(0.369f, 0.420f, 1.000f, 0.215f);
-    c[ImGuiCol_DragDropTarget]       = ImVec4(0.369f, 0.420f, 1.000f, 0.780f);
-    c[ImGuiCol_NavHighlight]         = ImVec4(0.369f, 0.420f, 1.000f, 1.000f);
+    c[ImGuiCol_TextSelectedBg]       = ImVec4(0.550f, 0.560f, 0.580f, 0.215f);
+    c[ImGuiCol_DragDropTarget]       = ImVec4(0.550f, 0.560f, 0.580f, 0.780f);
+    c[ImGuiCol_NavHighlight]         = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
     c[ImGuiCol_NavWindowingHighlight]= ImVec4(1.000f, 1.000f, 1.000f, 0.580f);
     c[ImGuiCol_NavWindowingDimBg]    = ImVec4(0.000f, 0.000f, 0.000f, 0.440f);
     c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.000f, 0.000f, 0.000f, 0.540f);
@@ -236,9 +242,20 @@ if (m_HubMode)
         if (m_ShowConfig)
             m_SettingsPanel.Render(&m_ShowConfig);
 
+        {
+            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+            if (general.showPerfPanel)
+            {
+                bool wasOpen = general.showPerfPanel;
+                m_PerformancePanel.Render(&general.showPerfPanel);
+                if (wasOpen && !general.showPerfPanel)
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+        }
+
         m_DatabasePanel.Render();   // <-- AGREGAR
         m_WikiPanel.Render();       // <-- AGREGAR
- 
+
         RenderMainMenuBar();
         return;
     }
@@ -259,9 +276,9 @@ if (m_HubMode)
 
     for (auto& panel : m_Panels)
         panel->Render();
-if (m_FocusControlNextFrame) {
-        ImGui::SetWindowFocus(str.control);
-        m_FocusControlNextFrame = false;
+if (m_FocusViewNextFrame) {
+        ImGui::SetWindowFocus("Vista en Vivo");
+        m_FocusViewNextFrame = false;
     }
 
     // ── Proyector ────────────────────────────────────────────────────────────
@@ -289,34 +306,34 @@ if (m_TransitionPanel) {
         m_TransitionPanel->GetDuration());
 }
 
+// FIX: disparaba con transitionTrigger, que tambien incrementaba con
+// cualquier cambio de FONDO/VIDEO — asi que cambiar el fondo animaba el
+// texto (aunque no hubiera cambiado) y cambiar el texto ensuciaba el
+// color de fondo recordado (m_LastBgColor), que despues aparecia como un
+// "flash" de un color sin relacion la proxima vez que el fondo cambiaba
+// de verdad. Ahora usa textTransitionTrigger, que SOLO cambia cuando el
+// texto (letras/Layer2 o nota rapida) realmente cambia — el fondo/video ya
+// tiene su propio crossfade automatico en BackgroundLayer, totalmente
+// independiente de esto.
+//
 // Disparo por CONTADOR, no por diff de contenido: asi tambien anima
 // cuando el slide "nuevo" es identico al anterior (mismo verso repetido).
-if (m_TransitionPanel && state.transitionTrigger != m_LastTransitionTrigger)
+if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
 {
-    m_LastTransitionTrigger = state.transitionTrigger;
+    m_LastTransitionTrigger = state.textTransitionTrigger;
 
-    // Guardamos TODO el contenido saliente (texto + fondo), no solo el
-    // texto, para poder dibujarlo blendeado durante la transicion.
-    m_OutgoingText        = m_LastProjectedText;
-    m_OutgoingBgColor[0]  = m_LastBgColor[0];
-    m_OutgoingBgColor[1]  = m_LastBgColor[1];
-    m_OutgoingBgColor[2]  = m_LastBgColor[2];
-    m_OutgoingBgWasVideo  = m_LastBgWasVideo;
+    std::string outgoing = m_LastProjectedText;
+    m_LastProjectedText   = state.currentText;
 
-    m_LastProjectedText = state.currentText;
-    m_LastBgColor[0] = state.bgColor[0];
-    m_LastBgColor[1] = state.bgColor[1];
-    m_LastBgColor[2] = state.bgColor[2];
-    m_LastBgWasVideo = (state.bgType == Core::PresentationState::BackgroundType::Video);
-
-m_TransitionPanel->Trigger();
+    // Ni al inicio ni al final de una cancion (texto vacio de un lado o
+    // del otro) hay animacion: se corta instantaneo. La transicion solo
+    // tiene sentido ENTRE dos lineas reales.
+    if (!outgoing.empty() && !state.currentText.empty())
+    {
+        m_OutgoingText = outgoing;
+        m_TransitionPanel->Trigger();
+    }
 }
-
-// Cada frame, mientras la transicion este activa, empujamos el progreso
-// actual hacia BackgroundLayer para que pueda blendear Active/Standby.
-if (m_TransitionPanel)
-    Core::PresentationCore::Get().SetBackgroundTransitionProgress(
-        m_TransitionPanel->IsActive() ? m_TransitionPanel->GetProgress() : 1.0f);
 
                 ImGui::SetNextWindowPos(ImVec2((float)mx, (float)my));
                 ImGui::SetNextWindowSize(ImVec2((float)mode->width, (float)mode->height));
@@ -336,23 +353,51 @@ ImGui::SetNextWindowClass(&projectorClass);
 
 ImGui::Begin("ProjectorLive", nullptr, flags);
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
-// Fondo de color solido, con crossfade si venimos de otro color solido
+
+// Pantalla de carga (ver Ajustes > Proyeccion > Logo): mientras un fondo o
+// la cola de Monitor esta cargando (PresentationCore::
+// ShouldShowLoadingScreen), el publico ve el logo configurado en vez de un
+// frame entrecortado/desactualizado o texto encima de eso. Reemplaza TODO
+// el bloque de fondo+texto de mas abajo, no se dibuja nada mas encima.
+bool showingLoadingScreen = Core::PresentationCore::Get().ShouldShowLoadingScreen();
+if (showingLoadingScreen)
+{
+    drawList->AddRectFilled(
+        ImVec2((float)mx, (float)my),
+        ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+        IM_COL32(0, 0, 0, 255));
+
+    void* logoTex = Core::PresentationCore::Get().GetLoadingLogoTexture();
+    int   logoW   = Core::PresentationCore::Get().GetLoadingLogoWidth();
+    int   logoH   = Core::PresentationCore::Get().GetLoadingLogoHeight();
+    if (logoTex && logoW > 0 && logoH > 0)
+    {
+        float destX = (float)mx, destY = (float)my;
+        float destW = (float)mode->width, destH = (float)mode->height;
+        float logoRatio   = (float)logoW / (float)logoH;
+        float screenRatio = destW / destH;
+
+        if (logoRatio > screenRatio + 0.001f) {
+            destH = destW / logoRatio;
+            destY = (float)my + ((float)mode->height - destH) * 0.5f;
+        } else if (logoRatio < screenRatio - 0.001f) {
+            destW = destH * logoRatio;
+            destX = (float)mx + ((float)mode->width - destW) * 0.5f;
+        }
+
+        drawList->AddImage(logoTex, ImVec2(destX, destY), ImVec2(destX + destW, destY + destH),
+                           ImVec2(0, 0), ImVec2(1, 1));
+    }
+}
+else
+{
+// Fondo de color solido — corte directo, sin animacion (la transicion
+// del operador es solo para el texto, ver el FIX mas arriba).
 if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
 {
-    ImU32 colFrom = IM_COL32(
-        (int)(m_OutgoingBgColor[0]*255), (int)(m_OutgoingBgColor[1]*255),
-        (int)(m_OutgoingBgColor[2]*255), 255);
-    ImU32 colTo = IM_COL32(
+    ImU32 finalCol = IM_COL32(
         (int)(state.bgColor[0]*255), (int)(state.bgColor[1]*255),
         (int)(state.bgColor[2]*255), 255);
-
-    bool transActive = m_TransitionPanel && m_TransitionPanel->IsActive();
-    ImU32 finalCol = transActive
-        ? ImGui::ColorConvertFloat4ToU32(ImLerp(
-              ImGui::ColorConvertU32ToFloat4(colFrom),
-              ImGui::ColorConvertU32ToFloat4(colTo),
-              m_TransitionPanel->GetProgress()))
-        : colTo;
 
     drawList->AddRectFilled(
         ImVec2((float)mx, (float)my),
@@ -393,11 +438,18 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                     }
 
                     const auto& projSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().projection;
+                    auto qualityMode = static_cast<ProyecThor::Settings::OutputQualityMode>(projSettings.outputQualityMode);
                     int qualityW = 0, qualityH = 0;
                     ProyecThor::Settings::ResolveQualityTarget(
-                        static_cast<ProyecThor::Settings::OutputQualityMode>(projSettings.outputQualityMode),
+                        qualityMode,
                         projSettings.outputPresetIndex, projSettings.outputWidth, projSettings.outputHeight,
                         mode->width, mode->height, qualityW, qualityH);
+
+                    // El PerformanceGovernor solo recorta mas el target cuando el
+                    // usuario dejo la calidad en Auto — jamas pisa un preset o
+                    // tamano custom elegido a mano (ver PerformanceGovernor.h).
+                    if (qualityMode == ProyecThor::Settings::OutputQualityMode::Auto)
+                        Core::PerformanceGovernor::Get().ApplyCap(qualityW, qualityH);
 
                     void* texID = Core::PresentationCore::Get().GetProcessedBackgroundTexture(
                         qualityW, qualityH);
@@ -413,6 +465,52 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                             IM_COL32(0, 0, 0, 255));
                     }
+
+                    // FIX: este es el UNICO rendering real del proyector
+                    // publico ("ProjectorLive" es la unica ventana — ver mas
+                    // abajo, migrado igual que ya se hizo con Stage). Antes
+                    // solo dibujaba GetProcessedBackgroundTexture() (Active()
+                    // nada mas, sin nocion de Standby ni de swap), mientras
+                    // el crossfade de verdad vivia en BackgroundLayer::Render(),
+                    // que corria en una SEGUNDA ventana nativa (SecondaryOutputWindow)
+                    // compitiendo por "siempre encima" con esta — el publico
+                    // podia ver cualquiera de las dos, sin blend, con el
+                    // fondo de la OTRA ventana quedando "sin relacion"
+                    // durante el swap. Blendear el standby directo aca es lo
+                    // que hace que el cambio de fondo se vea fluido de
+                    // verdad en la salida que el publico realmente ve.
+                    auto& core = Core::PresentationCore::Get();
+                    if (core.IsBackgroundSwapPending() && core.IsBackgroundStandbyReady())
+                    {
+                        void* standbyTex = core.GetStandbyBackgroundTexture();
+                        if (standbyTex)
+                        {
+                            float progress = std::clamp(core.GetBackgroundBlendProgress(), 0.0f, 1.0f);
+                            ImU32 tint = IM_COL32(255, 255, 255, (int)(progress * 255.0f));
+                            drawList->AddImage(standbyTex,
+                                ImVec2(destX, destY),
+                                ImVec2(destX + destW, destY + destH),
+                                ImVec2(0, 0), ImVec2(1, 1), tint);
+                        }
+                    }
+                }
+
+                // Fondo "now playing" (audio en vivo desde el panel de audio
+                // de la biblioteca) — ver PresentationCore::SetBackgroundAudio
+                // y AudioPanel::RenderLiveBackground. Se dibuja en ESTE
+                // drawlist (ventana "ProjectorLive"), por eso
+                // RenderLiveBackground puede usar ImGui::GetWindowDrawList()
+                // internamente sin que el caller le pase el drawlist.
+                if (state.bgType == Core::PresentationState::BackgroundType::Audio)
+                {
+                    drawList->AddRectFilled(
+                        ImVec2((float)mx, (float)my),
+                        ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                        IM_COL32(0, 0, 0, 255));
+
+                    if (auto* audioPanel = Core::PresentationCore::Get().GetAudioPanelRef())
+                        audioPanel->RenderLiveBackground((float)mx, (float)my,
+                                                          (float)mode->width, (float)mode->height);
                 }
 
                 // Texto con transicion
@@ -553,8 +651,11 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         DrawTextBlock(state.currentText, 0.0f, 0.0f, 1.0f, 1.0f);
                     }
                 }
+} // else (!showingLoadingScreen)
 
-                // Anuncios
+                // Anuncios (tampoco se dibujan sobre la pantalla de carga —
+                // mismo criterio que el texto en vivo, mas arriba)
+                if (!showingLoadingScreen)
                 {
                     static auto s_AnnLastTime = std::chrono::steady_clock::now();
                     auto        annNow        = std::chrono::steady_clock::now();
@@ -563,21 +664,23 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                     annDt = std::min(annDt, 0.1f);
 
                     for (auto& p : m_Panels) {
-                        if (p->GetName() == "Home") {
-                            auto* homePanel =
-                                static_cast<ProyecThor::UI::HomePanel*>(p.get());
+                        if (p->GetName() == "Diseño") {
+                            // Anuncios/Captura se movieron de Home a este hub
+                            // (StylesHubPanel, ver Diseño > Anuncios/Captura) —
+                            // ninguno de los dos es un IPanel propio, se llega
+                            // a ellos igual que antes se llegaba via HomePanel.
+                            auto* stylesHub =
+                                static_cast<ProyecThor::UI::StylesHubPanel*>(p.get());
 
-                            if (homePanel->m_Announcements.IsLive()) {
-                                homePanel->m_Announcements.RenderOnProjector(
+                            if (stylesHub->GetAnnouncements().IsLive()) {
+                                stylesHub->GetAnnouncements().RenderOnProjector(
                                     drawList,
                                     (float)mx, (float)my,
                                     (float)mode->width, (float)mode->height,
                                     annDt);
                             }
 
-                            // CapturePanel ya no es un IPanel propio: vive
-                            // adentro de HomePanel (seccion "Captura").
-                            homePanel->GetCapturePanel().RenderOnProjector(
+                            stylesHub->GetCapturePanel().RenderOnProjector(
                                 drawList,
                                 (float)mx, (float)my,
                                 (float)mode->width, (float)mode->height);
@@ -720,6 +823,18 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
     // Configuracion
     if (m_ShowConfig)
         m_SettingsPanel.Render(&m_ShowConfig);
+
+    // Rendimiento (menu Vista)
+    {
+        auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+        if (general.showPerfPanel)
+        {
+            bool wasOpen = general.showPerfPanel;
+            m_PerformancePanel.Render(&general.showPerfPanel);
+            if (wasOpen && !general.showPerfPanel)
+                ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+    }
 
     // Modal Acerca de
     if (g_ShowAbout)
@@ -927,6 +1042,21 @@ ImGui::Spacing();
                 ProyecThor::Settings::SettingsManager::Get().Save();
             }
 
+            if (ImGui::MenuItem("Rendimiento", nullptr, general.showPerfPanel))
+            {
+                general.showPerfPanel = !general.showPerfPanel;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+
+            // Riel de "Limpiar <tipo>" a la derecha del video en Vista en
+            // Vivo — opcional para operadores que prefieren mas ancho para
+            // el video en vez de los botones especificos.
+            if (ImGui::MenuItem("Botones de limpieza (Vista en Vivo)", nullptr, general.showViewQuickActions))
+            {
+                general.showViewQuickActions = !general.showViewQuickActions;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+
             ImGui::Spacing();
             ImGui::EndMenu();
         }
@@ -1038,10 +1168,22 @@ void UIManager::BeginDockspace()
         ImGuiID dock_left_top, dock_left_bottom;
         ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
 
+        // "Control" se elimino (ver ControlPanel, ahora en Ajustes >
+        // Proyeccion/Stage). dock_right ahora SI se divide de nuevo: arriba
+        // "Vista en Vivo" (video + transporte), abajo "Herramientas" (Control
+        // Overlays/Red/Notas/Reloj, ver ViewToolsPanel.cpp) — antes Control
+        // Overlays vivia dentro de Vista en Vivo y Red/Notas/Reloj eran
+        // secciones de Home; el operador las queria "al lado del video", asi
+        // que ahora tienen su propio hub debajo, en vez de mezcladas con la
+        // biblioteca de contenido (Home) o apretadas dentro del video.
         ImGuiID dock_right;
         ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.37f, &dock_right, &dock_main);
         ImGuiID dock_right_top, dock_right_bottom;
-        ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Down, 0.75f, &dock_right_bottom, &dock_right_top);
+        // 0.40 (antes 0.30): Herramientas (Overlays/Red/Notas/Reloj/Chat) le
+        // pedia mas alto — con el chat el contenido de esa pestaña dejo de
+        // ser un par de checkboxes y paso a necesitar espacio de verdad
+        // (QR + log de mensajes + composer).
+        ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Down, 0.40f, &dock_right_bottom, &dock_right_top);
 
         ImGuiID dock_center_right;
         ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.45f, &dock_center_right, &dock_main);
@@ -1057,11 +1199,10 @@ ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
 // de un unico panel "Home" (ver HomePanel.cpp).
 ImGui::DockBuilderDockWindow("Home",               dock_main_top);
 ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right_top);
-// Control ahora es el hub de Control + Stage Display (rail de iconos a la
-// derecha, ver ControlPanel.cpp), y "Diseño" el hub de Fondos + Estilos +
-// Transiciones (rail a la izquierda, ver StylesHubPanel.cpp) — cada grupo
-// que antes eran pestañas nativas de ImGui separadas ahora es un único panel.
-ImGui::DockBuilderDockWindow(str.control,          dock_right_bottom);
+ImGui::DockBuilderDockWindow("Herramientas",       dock_right_bottom);
+// "Diseño" es el hub de Fondos + Estilos + Overlays + Transiciones +
+// Anuncios + Captura (rail a la izquierda, ver StylesHubPanel.cpp) — antes
+// pestañas nativas de ImGui separadas, ahora un único panel.
         ImGui::DockBuilderDockWindow("Diseño",              dock_main_bottom);
 
 {
@@ -1079,10 +1220,7 @@ ImGui::DockBuilderDockWindow(str.control,          dock_right_bottom);
 
 ImGui::DockBuilderFinish(dockspace_id);
 
-        m_FocusControlNextFrame = true;
-        ImGuiDockNode* rightBottomNode = ImGui::DockBuilderGetNode(dock_right_bottom);
-        if (rightBottomNode)
-            rightBottomNode->SelectedTabId = ImHashStr(str.control, 0, 0);
+        m_FocusViewNextFrame = true;
     }
 }
 

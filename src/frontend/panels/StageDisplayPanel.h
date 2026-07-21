@@ -1,4 +1,5 @@
 #pragma once
+#include "backend/core/FrameEncodeWorker.h"
 #include <string>
 
 namespace ProyecThor::UI {
@@ -9,8 +10,9 @@ namespace ProyecThor::UI {
     // celdas). El render real de la grilla ocurre en UIManager.cpp (bloque
     // "StageLive"); este panel solo edita la configuracion persistida en
     // SettingsManager y controla el arranque/parada real via PresentationCore.
-    // Ya no es un IPanel independiente: vive como seccion del sidebar del
-    // hub de Control (ver ControlPanel.h/.cpp).
+    // Vive como categoria dentro de Ajustes (ver SettingsPanel::
+    // RenderCategoryStage) — el hub de Control se elimino porque su
+    // configuracion ya estaba duplicada en Ajustes > Proyeccion.
     class StageDisplayPanel {
     public:
         StageDisplayPanel()  = default;
@@ -29,14 +31,16 @@ namespace ProyecThor::UI {
         void CycleStageMonitor(int direction);
         void CaptureAndPushLANFrame(int w, int h, int quality);
 
-        // ── Estado del monitor de control (Stage / monitor de confianza) ─────
-        // El "activo" fisico vive en PresentationCore (SetStaging/IsStaging),
-        // no en un bool local — asi este panel y el viewport StageLive de
-        // UIManager.cpp siempre coinciden.
-        int        m_StageMonitorIndex   = 0;
-        bool       m_StageUseLAN         = false; // se sirve por LAN en vez de pantalla fisica
-        int        m_LANPort             = 8080;
+        // Pantalla/LAN/puerto elegidos: viven en SettingsManager (Settings::
+        // StageDisplaySettings) en vez de miembros efimeros aca, para que
+        // ViewPanel pueda prender/apagar Stage (ver el punto "Stage" en
+        // RenderLiveTransport) sin necesitar una instancia de esta clase.
         double     m_LANLastCaptureTime  = 0.0;
+
+        // Encode JPEG en hilo dedicado — ver FrameEncodeWorker.h. Evita que
+        // el encode bloquee el hilo de render/UI (el mismo que dibuja el
+        // proyector) cada ~125ms mientras el monitor de control se sirve LAN.
+        Core::FrameEncodeWorker m_EncodeWorker;
     };
 
 } // namespace ProyecThor::UI

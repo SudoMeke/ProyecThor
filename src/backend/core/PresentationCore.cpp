@@ -1,6 +1,7 @@
 #include "PresentationCore.h"
 #include "BackgroundLayer.h"
 #include "OverlayLayer.h"
+#include "frontend/panels/stb_image.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -16,6 +17,8 @@
 #include <shlobj.h>
 #endif
 #include "NetworkStreamServer.h"
+#include "PreviewLoadWorker.h"
+#include "frontend/views/Audio.h"
 
 namespace ProyecThor::Core {
 
@@ -36,6 +39,11 @@ namespace ProyecThor::Core {
         // que estructuralmente NUNCA puede sonar, sin importar que boton
         // de UI la toque (ver VLCBasePlayer::m_ForceSilent).
         BackgroundLayer preview{ true };
+
+        // Ver PreviewLoadWorker.h: saca el Play()/Stop() del Preview del
+        // hilo principal, para que una carga lenta ahi nunca le robe
+        // tiempo al hilo que actualiza/dibuja el video en vivo al publico.
+        PreviewLoadWorker previewLoader;
     };
 
     PresentationCore::PresentationCore()
@@ -67,7 +75,12 @@ void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*
     m_State.showText      = !text.empty();
     m_State.showQuickNote = true;
     m_State.isProjecting  = true;
-    ++m_State.transitionTrigger; 
+    // FIX: esto muta currentText (el mismo campo que las letras/Layer2), asi
+    // que dispara textTransitionTrigger, no transitionTrigger (ese es solo
+    // para fondo/video — ver PresentationState). Antes compartian un unico
+    // contador y un cambio de fondo animaba el texto sin que este hubiera
+    // cambiado, y viceversa.
+    ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
 
@@ -76,7 +89,7 @@ void PresentationCore::ClearQuickNote() {
     m_State.currentText   = "";
     m_State.showText      = false;
     m_State.showQuickNote = false;
-    ++m_State.transitionTrigger;   // NUEVO
+    ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
 
@@ -125,12 +138,26 @@ bool PresentationCore::GetGlobalMute() const {
         if (m_Impl) m_Impl->preview.SetSolidColor(0.0f, 0.0f, 0.0f);
     }
 
+    void PresentationCore::RequestPreviewLoad(const std::string& path, bool loop, bool startMuted) {
+        if (!m_Impl) return;
+        m_Impl->previewLoader.RequestLoad(m_Impl->preview.GetPlayer(), path, loop, startMuted);
+    }
+
+    void PresentationCore::RequestPreviewStop() {
+        if (!m_Impl) return;
+        m_Impl->previewLoader.RequestStop(m_Impl->preview.GetPlayer());
+    }
+
     void* PresentationCore::GetProcessedBackgroundTexture(int targetW, int targetH) {
         return m_Impl ? m_Impl->background.GetProcessedTexture(targetW, targetH) : nullptr;
     }
 
     void* PresentationCore::GetOverlayTexture() {
         return m_Impl ? m_Impl->overlay.GetTextureID() : nullptr;
+    }
+
+    bool PresentationCore::IsOverlayActive() const {
+        return m_Impl && m_Impl->overlay.IsActive();
     }
 
     void PresentationCore::SetFSREnabled(bool enabled) {
@@ -165,6 +192,7 @@ bool PresentationCore::GetGlobalMute() const {
             m_Impl->overlay.Update();
             m_Impl->preview.Update();
         }
+        m_MacroPlayer.Update();
     }
 
     void PresentationCore::RenderBackground(int outputW, int outputH) {
@@ -174,8 +202,18 @@ bool PresentationCore::GetGlobalMute() const {
 
     void PresentationCore::RenderProjectorWindow() {
     if (m_Impl) {
-        m_Impl->background.Render(m_ProjectorWidth, m_ProjectorHeight);
-        m_Impl->overlay.Render();
+        if (ShouldShowLoadingScreen()) {
+            // Pantalla de carga: se muestra el logo en vez del fondo/overlay
+            // mientras algo esta cargando, para que el publico nunca vea un
+            // frame entrecortado o desactualizado (ver Ajustes > Proyeccion
+            // > Logo).
+            m_Impl->background.RenderLogo(
+                static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
+                m_LoadingLogoW, m_LoadingLogoH, m_ProjectorWidth, m_ProjectorHeight);
+        } else {
+            m_Impl->background.Render(m_ProjectorWidth, m_ProjectorHeight);
+            m_Impl->overlay.Render();
+        }
     }
 }
     // ── Ventanas secundarias, API generica ──────────────────────────────
@@ -279,11 +317,23 @@ bool PresentationCore::GetGlobalMute() const {
         return (it != m_SecondaryWindows.end()) ? it->second.window.GetWindow() : nullptr;
     }
 
+// Unico lugar que escribe m_State.bgType — ver comentario en el header.
+void PresentationCore::SetBgTypeLocked(PresentationState::BackgroundType newType)
+{
+    if (m_State.bgType == PresentationState::BackgroundType::Audio &&
+        newType != PresentationState::BackgroundType::Audio &&
+        m_AudioPanelRef)
+    {
+        m_AudioPanelRef->SetLiveBackground(false);
+    }
+    m_State.bgType = newType;
+}
+
 void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.bgPath = path;
-        m_State.bgType = PresentationState::BackgroundType::Video;
+        SetBgTypeLocked(PresentationState::BackgroundType::Video);
         ++m_State.transitionTrigger;   // NUEVO
         ++m_StreamVersion;
     }
@@ -295,13 +345,116 @@ void PresentationCore::StopBackgroundMedia() {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.bgPath     = "";
-        m_State.bgType     = PresentationState::BackgroundType::SolidColor;
+        SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgColor[0] = 0.0f; m_State.bgColor[1] = 0.0f; m_State.bgColor[2] = 0.0f;
         ++m_State.transitionTrigger;   // NUEVO
         ++m_StreamVersion;
     }
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
+
+// Ver comentario en el header (junto a la declaracion) para el porque.
+void PresentationCore::SetBackgroundAudio() {
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.bgPath = "";
+        SetBgTypeLocked(PresentationState::BackgroundType::Audio);
+        ++m_State.transitionTrigger;
+        ++m_StreamVersion;
+    }
+    // Mismo criterio que StopBackgroundMedia: un video de fondo previo no
+    // debe seguir sonando por debajo del audio que se acaba de mandar en vivo.
+    if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
+}
+
+    void PresentationCore::PreloadNextBackgroundMedia(const std::string& path, bool allowAudio) {
+        // A proposito NO toca m_State/transitionTrigger: este preload debe
+        // ser invisible para el operador y para TransitionPanel — solo
+        // adelanta la carga en standby (ver BackgroundLayer::Prefetch).
+        if (m_Impl) m_Impl->background.Prefetch(path, allowAudio);
+    }
+
+    void PresentationCore::CommitNextBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_State.bgPath = path;
+            SetBgTypeLocked(PresentationState::BackgroundType::Video);
+            ++m_State.transitionTrigger;
+            ++m_StreamVersion;
+        }
+        if (m_Impl)
+            m_Impl->background.CommitPrefetch(path, allowAudio);
+    }
+
+    bool PresentationCore::IsBackgroundSwapPending() const {
+        return m_Impl && m_Impl->background.IsSwapPending();
+    }
+
+    float PresentationCore::GetBackgroundSwapEta() const {
+        return m_Impl ? m_Impl->background.GetEstimatedLoadSeconds() : 0.0f;
+    }
+
+    void* PresentationCore::GetStandbyBackgroundTexture() {
+        return m_Impl ? m_Impl->background.GetStandbyTextureID() : nullptr;
+    }
+
+    float PresentationCore::GetBackgroundBlendProgress() const {
+        return m_Impl ? m_Impl->background.GetTransitionProgress() : 1.0f;
+    }
+
+    bool PresentationCore::IsBackgroundStandbyReady() {
+        return m_Impl && m_Impl->background.StandbyHasFrame();
+    }
+
+    void PresentationCore::SetLoadingLogoPath(const std::string& path) {
+        if (path == m_LoadingLogoPath) return; // sin cambios, no recargar cada frame
+
+        if (m_LoadingLogoTex != 0) {
+            GLuint old = m_LoadingLogoTex;
+            glDeleteTextures(1, &old);
+            m_LoadingLogoTex = 0;
+        }
+        m_LoadingLogoPath = path;
+        m_LoadingLogoW = 0;
+        m_LoadingLogoH = 0;
+
+        if (path.empty()) return;
+
+        int w = 0, h = 0, ch = 0;
+        unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
+        if (!data) {
+            std::cerr << "[PresentationCore] No se pudo cargar el logo: " << path << "\n";
+            return;
+        }
+
+        GLuint tex;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+
+        m_LoadingLogoTex = tex;
+        m_LoadingLogoW   = w;
+        m_LoadingLogoH   = h;
+    }
+
+    void* PresentationCore::GetLoadingLogoTexture() const {
+        return m_LoadingLogoTex != 0 ? reinterpret_cast<void*>(static_cast<uintptr_t>(m_LoadingLogoTex)) : nullptr;
+    }
+
+    bool PresentationCore::ShouldShowLoadingScreen() const {
+        // Se elimino el logo/pantalla de carga: sumado al preflight de la
+        // cola, era una fuente constante de cortes y arranques lentos —
+        // BackgroundLayer::Render() ya sigue mostrando el frame actual de
+        // Active() mientras un swap esta en curso (asi funciona el
+        // crossfade), asi que nunca hace falta tapar la salida con un logo.
+        return false;
+    }
+
     void PresentationCore::BlockBackgroundPath(const std::string& path) {
         if (m_Impl) m_Impl->background.BlockPath(path);
     }
@@ -314,7 +467,7 @@ void PresentationCore::SetLayer0_Color(float r, float g, float b) {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.bgColor[0] = r; m_State.bgColor[1] = g; m_State.bgColor[2] = b;
-        m_State.bgType     = PresentationState::BackgroundType::SolidColor;
+        SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgPath     = "";
         ++m_State.transitionTrigger;   // NUEVO
         ++m_StreamVersion;
@@ -376,7 +529,7 @@ void PresentationCore::SetLayer2_Text(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
-    ++m_State.transitionTrigger;
+    ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
 
@@ -385,9 +538,59 @@ void PresentationCore::ClearLayer2() {
     m_State.currentText = "";
     m_State.showText    = false;
     m_State.nextText    = "";
-    ++m_State.transitionTrigger;   // NUEVO
+    ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
+
+void PresentationCore::SetClockStyleCue(const std::string& styleName) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_PendingClockStyleCue = styleName;
+    m_HasClockStyleCue     = true;
+}
+
+std::string PresentationCore::ConsumeClockStyleCue() {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (!m_HasClockStyleCue) return {};
+    m_HasClockStyleCue = false;
+    return m_PendingClockStyleCue;
+}
+
+void PresentationCore::SetPendingTransitionOverride(const std::string& name, float duration) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_PendingTransitionName     = name;
+    m_PendingTransitionDuration = duration;
+    m_HasTransitionOverride     = true;
+}
+
+bool PresentationCore::ConsumePendingTransitionOverride(std::string& outName, float& outDuration) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (!m_HasTransitionOverride) return false;
+    m_HasTransitionOverride = false;
+    outName     = m_PendingTransitionName;
+    outDuration = m_PendingTransitionDuration;
+    return true;
+}
+
+// ── Macros ───────────────────────────────────────────────────────────────
+void PresentationCore::PlayMacro(const std::string& name, bool autoAdvance) {
+    Macro m;
+    if (!LoadMacro(name, m)) {
+        std::cerr << "[PresentationCore] No se pudo cargar el macro \"" << name << "\".\n";
+        return;
+    }
+    m_MacroPlayer.Play(m, autoAdvance);
+}
+
+void PresentationCore::StopMacro()               { m_MacroPlayer.Stop(); }
+void PresentationCore::NextMacroCue()            { m_MacroPlayer.Next(); }
+void PresentationCore::PrevMacroCue()            { m_MacroPlayer.Previous(); }
+void PresentationCore::SetMacroAutoAdvance(bool a) { m_MacroPlayer.SetAutoAdvance(a); }
+bool PresentationCore::GetMacroAutoAdvance() const { return m_MacroPlayer.IsAutoAdvance(); }
+bool PresentationCore::IsMacroPlaying() const      { return m_MacroPlayer.IsPlaying(); }
+std::string PresentationCore::GetActiveMacroName() const { return m_MacroPlayer.GetMacro().name; }
+int   PresentationCore::GetMacroCueIndex() const   { return m_MacroPlayer.GetCurrentCueIndex(); }
+int   PresentationCore::GetMacroCueCount() const   { return m_MacroPlayer.GetCueCount(); }
+float PresentationCore::GetMacroElapsed() const    { return m_MacroPlayer.GetElapsed(); }
 
 void PresentationCore::SetNextText(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
@@ -487,6 +690,16 @@ void PresentationCore::SetNextText(const std::string& text) {
         }
         if (m_Impl)
             m_Impl->background.SetLiveMute(mute);
+    }
+
+    bool PresentationCore::GetLiveLoop() {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_State.liveLoop;
+    }
+
+    void PresentationCore::SetLiveLoop(bool loop) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.liveLoop = loop;
     }
 void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     std::lock_guard<std::mutex> lock(m_Mutex);
@@ -801,11 +1014,12 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return ResolveFontFilePath(fontName);
     }
 
-    void PresentationCore::SetSelection(const LibrarySelection& selection)
+    void PresentationCore::SetSelection(const LibrarySelection& selection, bool fromQueue)
     {
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
-            m_CurrentSelection = selection;
+            m_CurrentSelection    = selection;
+            m_SelectionFromQueue  = fromQueue;
         }
 
         if (selection.type != ItemType::Song && selection.type != ItemType::Bible)
@@ -859,73 +1073,88 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         ++m_StreamVersion;
     }
 
-    void PresentationCore::ToggleNetworkStream(bool enable, int port)
+    // Arma los providers de un NetworkStreamServer recien creado. Lo llaman
+    // tanto ToggleNetworkStream como ToggleChatServer cuando les toca ser
+    // los que crean el server compartido (el primero de los dos en pedirlo).
+    void PresentationCore::WireNetworkServerProviders(NetworkStreamServer& srv)
     {
-        if (enable)
+        srv.SetSnapshotProvider([this]() -> StreamSnapshot
         {
-            if (m_NetworkServer && m_NetworkServer->IsRunning())
-                return;
+            PresentationState st = GetState();
 
-            m_NetworkServer = std::make_unique<NetworkStreamServer>();
-
-            m_NetworkServer->SetSnapshotProvider([this]() -> StreamSnapshot
-            {
-                PresentationState st = GetState();
-
-                StreamSnapshot snap;
-                // El cliente web usa "isProjecting" solo para decidir si oculta el overlay
+            StreamSnapshot snap;
+            // El cliente web usa "isProjecting" solo para decidir si oculta el overlay
 // de idle y muestra el texto. No debe confundirse con el "isProjecting"
 // real que controla el proyector principal y el audio publico — por eso
 // aqui se OR-ea con showLanQuickNote: si hay una nota SOLO-LAN activa,
 // el cliente de red debe mostrarla aunque la pantalla principal este idle.
 snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
-                if (st.showLanQuickNote) {
-                    snap.currentText = st.lanQuickNoteText;
-                    snap.showText    = true;
-                } else {
-                    snap.currentText = st.currentText;
-                    snap.showText    = st.showText;
-                }
+            if (st.showLanQuickNote) {
+                snap.currentText = st.lanQuickNoteText;
+                snap.showText    = true;
+            } else {
+                snap.currentText = st.currentText;
+                snap.showText    = st.showText;
+            }
 
-                snap.textSize      = st.textSize;
-                snap.textAlignment = st.textAlignment;
-                snap.transitionTrigger  = st.transitionTrigger;
+            snap.textSize      = st.textSize;
+            snap.textAlignment = st.textAlignment;
+            snap.transitionTrigger  = st.transitionTrigger;
   snap.transitionType     = st.transitionType;
   snap.transitionDuration = st.transitionDuration;
-                snap.vAlignment    = st.vAlignment;
-                snap.autoScale     = st.autoScale;
-                snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);
-                snap.version       = m_StreamVersion.load();
-                snap.hasFrame      = m_FrameProviderActive.load();
+            snap.vAlignment    = st.vAlignment;
+            snap.autoScale     = st.autoScale;
+            snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);
+            snap.version       = m_StreamVersion.load();
+            snap.hasFrame      = m_FrameProviderActive.load();
 
-                snap.refW = m_ProjectorWidth;
-                snap.refH = m_ProjectorHeight;
+            snap.refW = m_ProjectorWidth;
+            snap.refH = m_ProjectorHeight;
 
-                for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
+            for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
 
-                {
-                    std::lock_guard<std::mutex> lock(m_Mutex);
-                    snap.fontFamily = m_ActiveFontName;
-                }
-                snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
-
-                for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
-                for (int i = 0; i < 3; i++) snap.bgColor[i]   = st.bgColor[i];
-
-                return snap;
-            });
-
-            m_NetworkServer->SetFrameProvider([this]() -> std::vector<uint8_t>
             {
-                std::lock_guard<std::mutex> lk(m_FrameMutex);
-                return m_LatestFrame;
-            });
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                snap.fontFamily = m_ActiveFontName;
+            }
+            snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
 
-            m_NetworkServer->SetFontPathProvider([this]() -> std::string
+            for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
+            for (int i = 0; i < 3; i++) snap.bgColor[i]   = st.bgColor[i];
+
+            return snap;
+        });
+
+        srv.SetFrameProvider([this]() -> std::vector<uint8_t>
+        {
+            std::lock_guard<std::mutex> lk(m_FrameMutex);
+            return m_LatestFrame;
+        });
+
+        srv.SetFontPathProvider([this]() -> std::string
+        {
+            return GetActiveFontFilePath();
+        });
+    }
+
+    void PresentationCore::ToggleNetworkStream(bool enable, int port)
+    {
+        if (enable)
+        {
+            if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
-                return GetActiveFontFilePath();
-            });
+                // Ya esta corriendo (lo pudo haber arrancado el Chat) —
+                // Streaming solo se "suma" como usuario, no reinicia nada.
+                std::lock_guard<std::mutex> lk(m_Mutex);
+                m_State.isStreamingNet = true;
+                m_State.networkURL     = m_NetworkServer->GetBaseURL();
+                return;
+            }
+
+            m_NetworkServer = std::make_unique<NetworkStreamServer>();
+            m_NetworkServer->SetChatStore(&m_ChatMessageStore);
+            WireNetworkServerProviders(*m_NetworkServer);
 
             if (!m_NetworkServer->Start(port))
             {
@@ -940,10 +1169,10 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         }
         else
         {
-            if (m_NetworkServer)
             {
-                m_NetworkServer->Stop();
-                m_NetworkServer.reset();
+                std::lock_guard<std::mutex> lk(m_Mutex);
+                m_State.isStreamingNet = false;
+                m_State.networkURL.clear();
             }
 
             m_FrameProviderActive.store(false);
@@ -952,9 +1181,15 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 m_LatestFrame.clear();
             }
 
-            std::lock_guard<std::mutex> lk(m_Mutex);
-            m_State.isStreamingNet = false;
-            m_State.networkURL.clear();
+            // El server entero solo se apaga si Chat tampoco lo esta usando
+            // — si esta activo, se queda arriba para el (sin video: dejamos
+            // de pushear frames arriba, asi que /frame y /stream vuelven a
+            // quedar "vacios" para quien mire el video por LAN).
+            if (m_NetworkServer && !IsChatRunning())
+            {
+                m_NetworkServer->Stop();
+                m_NetworkServer.reset();
+            }
         }
     }
 
@@ -962,6 +1197,60 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
     {
         std::lock_guard<std::mutex> lk(m_Mutex);
         return m_State.isStreamingNet;
+    }
+
+    void PresentationCore::ToggleChatServer(bool enable, int port)
+    {
+        if (enable)
+        {
+            if (m_NetworkServer && m_NetworkServer->IsRunning())
+            {
+                // Ya esta corriendo (lo pudo haber arrancado Streaming) —
+                // solo conectamos el store de mensajes si todavia no estaba.
+                m_NetworkServer->SetChatStore(&m_ChatMessageStore);
+                std::lock_guard<std::mutex> lk(m_Mutex);
+                m_State.isChatRunning = true;
+                m_State.chatURL       = m_NetworkServer->GetBaseURL() + "/chat";
+                return;
+            }
+
+            m_NetworkServer = std::make_unique<NetworkStreamServer>();
+            m_NetworkServer->SetChatStore(&m_ChatMessageStore);
+            WireNetworkServerProviders(*m_NetworkServer);
+
+            if (!m_NetworkServer->Start(port))
+            {
+                m_NetworkServer.reset();
+                std::cerr << "[ChatServer] No se pudo iniciar en puerto " << port << ".\n";
+                return;
+            }
+
+            std::lock_guard<std::mutex> lk(m_Mutex);
+            m_State.isChatRunning = true;
+            m_State.chatURL       = m_NetworkServer->GetBaseURL() + "/chat";
+        }
+        else
+        {
+            {
+                std::lock_guard<std::mutex> lk(m_Mutex);
+                m_State.isChatRunning = false;
+                m_State.chatURL.clear();
+            }
+
+            // Igual que del otro lado: el server entero solo se apaga si
+            // Streaming tampoco lo esta usando.
+            if (m_NetworkServer && !IsStreamingNet())
+            {
+                m_NetworkServer->Stop();
+                m_NetworkServer.reset();
+            }
+        }
+    }
+
+    bool PresentationCore::IsChatRunning() const
+    {
+        std::lock_guard<std::mutex> lk(m_Mutex);
+        return m_State.isChatRunning;
     }
 
     void PresentationCore::EnsureFBO(int w, int h)
@@ -1054,8 +1343,16 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        m_Impl->background.Render(w, h);
-        m_Impl->overlay.Render();
+        // Mismo criterio que RenderProjectorWindow(): el stream de red
+        // tampoco debe mostrar un frame entrecortado mientras algo carga.
+        if (ShouldShowLoadingScreen()) {
+            m_Impl->background.RenderLogo(
+                static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
+                m_LoadingLogoW, m_LoadingLogoH, w, h);
+        } else {
+            m_Impl->background.Render(w, h);
+            m_Impl->overlay.Render();
+        }
 
         outRGB.resize(static_cast<size_t>(w) * h * 3);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);

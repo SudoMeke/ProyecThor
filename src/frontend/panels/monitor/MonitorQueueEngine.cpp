@@ -3,6 +3,8 @@
 #include "MonitorQueueIO.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/media/VLCBasePlayer.h"
+#include "backend/settings/SettingsManager.h"
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <algorithm>
 #include <iostream>
@@ -118,11 +120,52 @@ void MonitorQueueEngine::PlayIndex(int index)
         m_CurrentIndex  = index;
         m_SelectedIndex = index;
         m_State         = QueueState::Playing;
+        m_PrefetchedForCurrent = false;
+
+        auto& core = Core::PresentationCore::Get();
+
+        // FIX (orden): SetProjecting() es lo que pone m_IsLiveToPublic=true
+        // en BackgroundLayer, y SetBackgroundMedia()/SetVideo() SOLO habilita
+        // el audio si m_IsLiveToPublic YA es true en el momento en que
+        // corre. Antes SetBackgroundMedia() se llamaba primero: para el
+        // PRIMER video de una sesion (m_IsLiveToPublic todavia false en ese
+        // instante), el clip arrancaba mudo, y aunque SetProjecting()
+        // reaplicaba el audio un instante despues, en la practica el
+        // operador reportaba tener que mutear/desmutear a mano para que
+        // sonara. Invertir el orden hace que el permiso de audio ya este
+        // vigente ANTES de cargar el clip, sin depender de una segunda
+        // pasada de "auto-correccion".
+        core.SetProjecting(true);
+
+        // FIX: la cola marcaba isProjecting=true pero nunca se aseguraba de
+        // que el monitor destino estuviera configurado — eso solo pasaba si
+        // el operador ademas prendia a mano el punto "Publico" en Vista en
+        // Vivo (ViewPanel::ToggleAudience). Ahora la cola se asegura de
+        // tener el monitor destino fijado por su cuenta, igual que hace
+        // ToggleAudience (que tampoco crea ya una ventana nativa propia —
+        // ver el FIX en ViewPanel::ToggleAudience sobre por que se elimino).
+        {
+            auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+            int monitorCount = 0;
+            glfwGetMonitors(&monitorCount);
+            int monitorIndex = std::clamp(
+                settings.projection.targetMonitor < 0 ? 1 : settings.projection.targetMonitor,
+                0, std::max(0, monitorCount - 1));
+            core.SetTargetMonitor(monitorIndex);
+        }
 
         // loop = false SIEMPRE. La cola nunca debe pedirle al reproductor
         // que repita un clip a nivel nativo.
-        Core::PresentationCore::Get().SetBackgroundMedia(path, /*isVideo=*/true);
-        Core::PresentationCore::Get().SetProjecting(true);
+        //
+        // CommitNextBackgroundMedia (en vez de SetBackgroundMedia directo):
+        // si este mismo path ya se venia precargando en standby gracias a
+        // PreloadNextIfNeeded() (dandole toda la duracion del item anterior
+        // como margen, y quedando PAUSADO en su primer frame apenas listo,
+        // ver BackgroundLayer::Update()), esto solo arma el swap sobre lo
+        // que ya esta listo — corte instantaneo, sin recomenzar la carga
+        // desde cero. Si no hay nada precargado que coincida (salto manual,
+        // cola recien arrancada, reordenada), cae sola a una carga en frio.
+        core.CommitNextBackgroundMedia(path, /*isVideo=*/true, /*allowAudio=*/true);
 
         ApplyAV();
         p->SetPause(false);
@@ -131,7 +174,7 @@ void MonitorQueueEngine::PlayIndex(int index)
         Core::LibrarySelection sel;
         sel.title = displayName;
         sel.type  = Core::ItemType::Video;
-        Core::PresentationCore::Get().SetSelection(sel);
+        core.SetSelection(sel, /*fromQueue=*/true);
 
         std::cout << "[Queue] Reproduciendo " << (index + 1) << "/" << m_Items.size()
                   << ": " << path << "\n";
@@ -142,11 +185,42 @@ void MonitorQueueEngine::PlayIndex(int index)
     Stop();
 }
 
+std::string MonitorQueueEngine::FindNextValidPath(int fromIndexInclusive) const
+{
+    for (int i = fromIndexInclusive; i < (int)m_Items.size(); ++i)
+    {
+        std::string path = QueuePath(m_Items[i]);
+        if (!path.empty()) return path;
+    }
+    return "";
+}
+
+void MonitorQueueEngine::PreloadNextIfNeeded()
+{
+    if (m_PrefetchedForCurrent) return;
+
+    auto& core = Core::PresentationCore::Get();
+
+    // Espera a que el swap del item ACTUAL ya haya terminado (Standby()
+    // queda libre recien ahi) — precargar mientras el propio swap del
+    // actual sigue en curso pisaria el player que esta por pasar a Active
+    // (ver el guard dentro de BackgroundLayer::Prefetch).
+    if (core.IsBackgroundSwapPending()) return;
+
+    std::string nextPath = FindNextValidPath(m_CurrentIndex + 1);
+    if (!nextPath.empty())
+        core.PreloadNextBackgroundMedia(nextPath, /*allowAudio=*/true);
+
+    m_PrefetchedForCurrent = true;
+}
+
 void MonitorQueueEngine::TogglePlayStop()
 {
-    if (m_State == QueueState::Playing) { Stop(); return; }
-    if (!m_Items.empty())
-        PlayIndex(0); // siempre desde el principio: reproduce TODA la lista
+    if (m_State != QueueState::Stopped) { Stop(); return; }
+    if (!m_Items.empty()) {
+        m_ConsecutiveErrors = 0; // arranque manual: reset del contador de errores
+        PlayIndex(0); // arranque directo, sin preflight: el primer item se carga como cualquier otro
+    }
 }
 
 void MonitorQueueEngine::Stop()
@@ -154,7 +228,10 @@ void MonitorQueueEngine::Stop()
     Core::PresentationCore::Get().StopBackgroundMedia();
     m_CurrentIndex = -1;
     m_State        = QueueState::Stopped;
+    m_PrefetchedForCurrent = false;
 }
+
+static constexpr int kMaxConsecutiveQueueErrors = 3;
 
 void MonitorQueueEngine::Update()
 {
@@ -164,6 +241,12 @@ void MonitorQueueEngine::Update()
     auto* p = ActivePlayer();
     if (!p) { Stop(); return; }
 
+    // Precarga del siguiente item mientras el actual todavia esta
+    // reproduciendose (ver PreloadNextIfNeeded) — le da al siguiente clip
+    // toda la duracion restante del actual como margen, en vez de recien
+    // empezar a cargar en el instante en que este termina.
+    PreloadNextIfNeeded();
+
     // Unica condicion de avance: el evento REAL de fin de clip que reporta
     // VLC. ConsumeEndReached() solo puede devolver true una vez por clip,
     // asi que este avance ocurre exactamente una vez, de forma instantanea,
@@ -171,7 +254,25 @@ void MonitorQueueEngine::Update()
     if (!p->ConsumeEndReached())
         return;
 
+    // Distingue un error real (codec no soportado, archivo corrupto) de un
+    // fin de clip normal: antes ambos se trataban igual y la cola podia
+    // saltar en silencio para siempre si todos los items estaban rotos.
+    if (p->ConsumeHadError()) {
+        ++m_ConsecutiveErrors;
+        std::cerr << "[Queue] Error reproduciendo item " << (m_CurrentIndex + 1) << "/"
+                  << m_Items.size() << " (codec no soportado o archivo corrupto).\n";
+
+        if (m_ConsecutiveErrors >= kMaxConsecutiveQueueErrors) {
+            std::cerr << "[Queue] " << m_ConsecutiveErrors
+                      << " errores seguidos: se detiene la cola en vez de seguir saltando.\n";
+            Stop();
+            return;
+        }
+    } else {
+        m_ConsecutiveErrors = 0;
+    }
+
     PlayIndex(m_CurrentIndex + 1);
-};
 }
- // namespace ProyecThor::UI
+
+} // namespace ProyecThor::UI

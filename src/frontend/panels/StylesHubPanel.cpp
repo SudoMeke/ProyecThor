@@ -4,14 +4,71 @@
 #include "DesignSystem.h"
 #include "frontend/ui/IconRail.h"
 #include "frontend/ui/AppIcons.h"
+#include "frontend/panels/home/HomeIcons.h"
 #include "backend/settings/SettingsManager.h"
+#include "backend/core/PresentationCore.h"
 #include <imgui.h>
 
 namespace ProyecThor::UI {
 
 StylesHubPanel::StylesHubPanel(UIManager* uiManager)
     : m_UIManager(uiManager)
-{}
+{
+    // Se registra a si mismo (direccion de sus propios miembros) para que
+    // ViewPanel pueda pedir "Limpiar anuncios"/"Limpiar captura" sin
+    // depender de StylesHubPanel directamente — ver PresentationCore::
+    // SetAnnouncementsRef/SetCapturePanelRef.
+    Core::PresentationCore::Get().SetAnnouncementsRef(&m_Announcements);
+    Core::PresentationCore::Get().SetCapturePanelRef(&m_Capture);
+}
+
+void StylesHubPanel::RenderTransitionQuickBar()
+{
+    if (!m_TransitionsRef) return;
+
+    const ImU32 kAccent = IM_COL32(94, 107, 255, 255);
+    const float w        = ImGui::GetContentRegionAvail().x;
+    const float gap      = 8.0f;
+    const float btnW     = (w - gap * 2.0f) / 3.0f;
+
+    float duration = m_TransitionsRef->GetDuration();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.68f, 0.78f, 1.0f));
+    ImGui::Text("Duracion de la transicion de texto   %.2f s", duration);
+    ImGui::PopStyleColor();
+    if (DS::ModernSlider("##quickTransDur", &duration, 0.1f, 3.0f, -1.0f, kAccent))
+        m_TransitionsRef->SetDuration(duration);
+
+    ImGui::Spacing();
+
+    TransitionType current = m_TransitionsRef->GetCurrentType();
+
+    if (DS::GlassButton("Sin transicion", ImVec2(btnW, 0.0f),
+                        current == TransitionType::None ? kAccent : DS::AccentColor))
+        m_TransitionsRef->SetType(TransitionType::None);
+
+    ImGui::SameLine(0.0f, gap);
+    if (DS::GlassButton("Disolver", ImVec2(btnW, 0.0f),
+                        current == TransitionType::Fade ? kAccent : DS::AccentColor))
+        m_TransitionsRef->SetType(TransitionType::Fade);
+
+    ImGui::SameLine(0.0f, gap);
+    bool isAdvanced = current != TransitionType::None && current != TransitionType::Fade;
+    if (DS::GlassButton("Avanzado...", ImVec2(btnW, 0.0f), isAdvanced ? kAccent : DS::AccentColor))
+        ImGui::OpenPopup("##transAdvancedPopup");
+
+    if (ImGui::BeginPopup("##transAdvancedPopup"))
+    {
+        ImGui::SetNextItemWidth(340.0f);
+        m_TransitionsRef->RenderContent();
+        ImGui::EndPopup();
+    }
+
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.06f));
+    ImGui::Separator();
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+}
 
 void StylesHubPanel::Render()
 {
@@ -38,15 +95,20 @@ void StylesHubPanel::Render()
     ImGui::PopStyleColor();
 
     {
+        // Transiciones ya no es una pestaña propia: sus controles (duracion +
+        // 3 botones) ahora viven arriba del contenido de Estilos (ver mas
+        // abajo), con el panel completo (tipos complejos: Zoom, Slide,
+        // Cover...) disponible como popup desde el 3er boton.
         static const IconRailItem kItems[] = {
-            { (int)StylesSection::Backgrounds,  AppIcons::DrawIcon_Layers,  "Fondos"   },
-            { (int)StylesSection::Styles,       AppIcons::DrawIcon_Palette,"Estilos"  },
-            { (int)StylesSection::Overlays,     AppIcons::DrawIcon_Overlay,"Overlays" },
-            { (int)StylesSection::Transitions,  AppIcons::DrawIcon_Swap,   "Trans."   },
+            { (int)StylesSection::Backgrounds,   AppIcons::DrawIcon_Layers,    "Fondos"   },
+            { (int)StylesSection::Styles,        AppIcons::DrawIcon_TextAa,    "Estilos"  },
+            { (int)StylesSection::Overlays,      AppIcons::DrawIcon_Overlay,   "Overlays" },
+            { (int)StylesSection::Announcements, HomeIcons::DrawIcon_Megaphone,"Anuncios" },
+            { (int)StylesSection::Capture,       HomeIcons::DrawIcon_Camera,   "Captura"  },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 4, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (StylesSection)currentIndex;
     }
 
@@ -77,10 +139,19 @@ void StylesHubPanel::Render()
     switch (m_CurrentSection)
     {
         case StylesSection::Backgrounds: m_Backgrounds.RenderContent(); break;
-        case StylesSection::Styles:      m_Styles.RenderContent();     break;
+        case StylesSection::Styles:
+            RenderTransitionQuickBar();
+            m_Styles.RenderContent();
+            break;
         case StylesSection::Overlays:    m_Overlays.RenderContent();   break;
         case StylesSection::Transitions:
             if (m_TransitionsRef) m_TransitionsRef->RenderContent();
+            break;
+        case StylesSection::Announcements:
+            if (m_UIManager) m_Announcements.Render(m_UIManager->GetGlassRenderer());
+            break;
+        case StylesSection::Capture:
+            m_Capture.RenderContent();
             break;
     }
 

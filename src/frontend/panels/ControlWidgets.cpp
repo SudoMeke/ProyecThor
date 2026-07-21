@@ -26,8 +26,41 @@ ImVec4 Brighten(const ImVec4& c, float amount) {
         c.w);
 }
 
+ImVec4 LerpColor(const ImVec4& a, const ImVec4& b, float t) {
+    return ImVec4(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                   a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t);
+}
+
+// ── Progreso animado (0..1) de hover/press por-item, mismo patron que
+//    IconRail.cpp (ImGuiStorage + lerp con DeltaTime) ───────────────────────
+static float AnimHoverT(ImGuiID baseId, bool hovered, float speed = 12.0f) {
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* t = storage->GetFloatRef(baseId ^ 0x7A11C0DEu, 0.0f);
+    float target = hovered ? 1.0f : 0.0f;
+    *t += (target - *t) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+    return *t;
+}
+
 // =============================================================================
-//  VectorIconButton
+//  DrawStatusDot — punto solido + halo pulsante (sine) para estados "en vivo"
+// =============================================================================
+void DrawStatusDot(ImDrawList* dl, ImVec2 center, float r, ImU32 col, bool pulse)
+{
+    if (pulse) {
+        float t     = (float)ImGui::GetTime();
+        float glow  = 0.35f + 0.30f * std::abs(std::sin(t * 2.4f));
+        ImVec4 c    = ToVec4(col);
+        ImVec4 halo1 = c; halo1.w = glow * 0.30f;
+        ImVec4 halo2 = c; halo2.w = glow * 0.55f;
+        dl->AddCircleFilled(center, r * 2.6f, ImGui::ColorConvertFloat4ToU32(halo1), 16);
+        dl->AddCircleFilled(center, r * 1.6f, ImGui::ColorConvertFloat4ToU32(halo2), 14);
+    }
+    dl->AddCircleFilled(center, r, col, 12);
+}
+
+// =============================================================================
+//  VectorIconButton — dibujo manual (no ImGui::Button) para poder animar el
+//  hover/press con un lerp suave en vez de un salto instantaneo de color.
 // =============================================================================
 bool VectorIconButton(const char* id, DrawIconFn drawIcon, const char* tooltip,
                       ImVec2 size, ImVec4 bgColor, ImVec4 hoverColor,
@@ -35,57 +68,83 @@ bool VectorIconButton(const char* id, DrawIconFn drawIcon, const char* tooltip,
 {
     ImVec4 restColor = toggledOn ? activeColor : bgColor;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
-    ImGui::PushStyleColor(ImGuiCol_Button,        restColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  activeColor);
+    std::string bid = std::string("##") + id;
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton(bid.c_str(), size);
+    bool hoveredForTip = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal);
+    bool hovered = ImGui::IsItemHovered();
+    bool active  = ImGui::IsItemActive();
 
-    std::string label = std::string("##") + id;
-    bool clicked = ImGui::Button(label.c_str(), size);
+    float t = AnimHoverT(ImGui::GetID(id), hovered);
+    ImVec4 fill = active ? activeColor : LerpColor(restColor, hoverColor, t);
 
-    ImVec2 bMin = ImGui::GetItemRectMin();
-    ImVec2 bMax = ImGui::GetItemRectMax();
-    ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 pMax = { pos.x + size.x, pos.y + size.y };
+    dl->AddRectFilled(pos, pMax, ImGui::ColorConvertFloat4ToU32(fill), DS::RadiusSmall);
+
+    ImVec2 center = { (pos.x + pMax.x) * 0.5f, (pos.y + pMax.y) * 0.5f };
     float  radius = std::min(size.x, size.y) * 0.32f;
     if (drawIcon)
-        drawIcon(ImGui::GetWindowDrawList(), center, radius, ImGui::ColorConvertFloat4ToU32(iconColor));
+        drawIcon(dl, center, radius, ImGui::ColorConvertFloat4ToU32(iconColor));
 
-    ImGui::PopStyleColor(3);
-    ImGui::PopStyleVar();
-
-    if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+    if (tooltip && hoveredForTip)
         ImGui::SetTooltip("%s", tooltip);
 
     return clicked;
 }
 
+// =============================================================================
+//  IconLabelButton — capsula (rounding = mitad de la altura), icono + label
+//  centrados, hover animado y halo pulsante opcional para estados "activos".
+// =============================================================================
 bool IconLabelButton(const char* id, const char* label, DrawIconFn icon, ImVec2 size,
-                     ImVec4 bgColor, ImVec4 hoverColor, ImVec4 activeColor, ImVec4 textColor)
+                     ImVec4 bgColor, ImVec4 hoverColor, ImVec4 activeColor, ImVec4 textColor,
+                     bool pulseGlow)
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-    ImGui::PushStyleColor(ImGuiCol_Button,        bgColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  activeColor);
-    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // el label lo dibujamos nosotros
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f) sz.x = ImGui::GetContentRegionAvail().x;
 
     std::string bid = std::string("##") + id;
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool clicked = ImGui::Button(bid.c_str(), size);
+    bool clicked = ImGui::InvisibleButton(bid.c_str(), sz);
+    bool hovered = ImGui::IsItemHovered();
+    bool active  = ImGui::IsItemActive();
 
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar();
+    float t = AnimHoverT(ImGui::GetID(id), hovered, 10.0f);
+    ImVec4 fill = active ? activeColor : LerpColor(bgColor, hoverColor, t);
 
-    ImDrawList* dl  = ImGui::GetWindowDrawList();
-    ImU32       col = ImGui::ColorConvertFloat4ToU32(textColor);
-    float       iconBoxSide = size.y;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 pMax = { pos.x + sz.x, pos.y + sz.y };
+    float  rounding = sz.y * 0.5f; // capsula
 
-    if (icon) {
-        ImVec2 iconCenter = { pos.x + iconBoxSide * 0.5f, pos.y + size.y * 0.5f };
-        icon(dl, iconCenter, size.y * 0.24f, col);
+    if (pulseGlow) {
+        float pulse = 0.5f + 0.5f * std::abs(std::sin((float)ImGui::GetTime() * 2.2f));
+        ImVec4 glowCol = bgColor;
+        glowCol.w = 0.20f + 0.18f * pulse;
+        dl->AddRectFilled({ pos.x - 4.0f, pos.y - 4.0f }, { pMax.x + 4.0f, pMax.y + 4.0f },
+                          ImGui::ColorConvertFloat4ToU32(glowCol), rounding + 4.0f);
     }
 
-    ImVec2 textSz  = ImGui::CalcTextSize(label);
-    ImVec2 textPos = { pos.x + iconBoxSide, pos.y + (size.y - textSz.y) * 0.5f };
+    dl->AddRectFilled(pos, pMax, ImGui::ColorConvertFloat4ToU32(fill), rounding);
+
+    ImVec4 hi = Brighten(fill, 0.16f); hi.w = 0.55f;
+    float hx0 = pos.x + rounding, hx1 = pMax.x - rounding;
+    if (hx1 > hx0)
+        dl->AddLine({ hx0, pos.y + 1.0f }, { hx1, pos.y + 1.0f }, ImGui::ColorConvertFloat4ToU32(hi), 1.0f);
+
+    ImU32  col     = ImGui::ColorConvertFloat4ToU32(textColor);
+    float  iconDiam = sz.y * 0.46f;
+    ImVec2 textSz   = ImGui::CalcTextSize(label);
+    float  gap      = icon ? 10.0f : 0.0f;
+    float  contentW = (icon ? iconDiam : 0.0f) + gap + textSz.x;
+    float  startX   = pos.x + (sz.x - contentW) * 0.5f;
+
+    if (icon) {
+        ImVec2 iconCenter = { startX + iconDiam * 0.5f, pos.y + sz.y * 0.5f };
+        icon(dl, iconCenter, iconDiam * 0.5f, col);
+    }
+
+    ImVec2 textPos = { startX + (icon ? iconDiam + gap : 0.0f), pos.y + (sz.y - textSz.y) * 0.5f };
     dl->AddText(textPos, col, label);
 
     return clicked;
@@ -208,7 +267,7 @@ bool BeginCard(const char* id, float minHeight)
     ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(0.f, 0.f, 0.f, 0.f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, DS::RadiusMedium);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f, 14.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.f, 16.f));
 
     bool open = ImGui::BeginChild(id,
                              minHeight > 0.0f ? ImVec2(0.f, minHeight) : ImVec2(0.f, 0.f),
@@ -217,14 +276,11 @@ bool BeginCard(const char* id, float minHeight)
 
     ImVec2 p1 = ImVec2(p0.x + w, p0.y + ImGui::GetWindowSize().y);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilledMultiColor(p0, p1, DS::GlassFillTop, DS::GlassFillTop, DS::GlassFillBot, DS::GlassFillBot);
-    dl->AddRect(p0, p1, DS::GlassBorder, DS::RadiusMedium, 0, 1.0f);
-
-    float hx0 = p0.x + DS::RadiusMedium, hx1 = p1.x - DS::RadiusMedium;
-    if (hx1 > hx0) {
-        dl->AddLine(ImVec2(hx0, p0.y + 1.0f), ImVec2(hx1, p0.y + 1.0f), DS::GlassHighlight, 1.0f);
-        dl->AddLine(ImVec2(hx0, p1.y - 1.0f), ImVec2(hx1, p1.y - 1.0f), IM_COL32(0, 0, 0, 255), 1.0f);
-    }
+    // Plano: un solo tono de relleno (antes era un degrade top->bottom) y un
+    // borde fino de un solo color sin lineas de brillo/sombra arriba/abajo
+    // (ese combo de highlight+shadow era lo que daba el aspecto "en relieve").
+    dl->AddRectFilled(p0, p1, DS::GlassFillTop, DS::RadiusMedium);
+    dl->AddRect(p0, p1, ColA(DS::GlassBorder, 50), DS::RadiusMedium, 0, 1.0f);
 
     return open;
 }

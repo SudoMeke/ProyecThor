@@ -2,7 +2,10 @@
 #include "SettingsManager.h"
 #include "ProjectionQualityPresets.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/AppPaths.h"
+#include "frontend/ui/FilePicker.h"
 #include <imgui.h>
+#include <filesystem>
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <vector>
@@ -196,6 +199,51 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
             }
             ImGui::SameLine();
             ImGui::TextDisabled("0=Max  2=Suave");
+        }
+
+        ImGui::Spacing();
+
+        // ── Logo (pantalla de carga) ─────────────────────────────────────────
+        SectionTitle("Logo");
+        {
+            std::string display = p.loadingLogoPath.empty()
+                ? "(sin logo)"
+                : std::filesystem::path(p.loadingLogoPath).filename().string();
+            ImGui::TextDisabled("%s", display.c_str());
+            HelpTooltip("Imagen que se muestra a la salida real (al publico) mientras un "
+                        "fondo o video esta cargando, en vez de dejar ver un frame "
+                        "entrecortado o desactualizado. Si no se elige ninguna, la pantalla "
+                        "simplemente mantiene el ultimo fondo listo hasta que el nuevo "
+                        "termine de cargar (comportamiento de siempre).");
+
+            if (ImGui::Button("Elegir imagen...")) {
+                std::string picked = ProyecThor::UI::PickImageFile();
+                if (!picked.empty()) {
+                    // Se copia a la carpeta de datos de la app (igual que ya
+                    // hace Fondos, ver LayersBgTab::ImportBackground) en vez
+                    // de guardar la ruta externa tal cual: asi el logo queda
+                    // junto con el resto de los assets de ProyecThor y no se
+                    // rompe si el archivo original se mueve, se borra, o el
+                    // perfil se usa en otra maquina.
+                    std::filesystem::path src(picked);
+                    std::filesystem::path destDir = ProyecThor::BrandingPath();
+                    std::error_code ec;
+                    std::filesystem::create_directories(destDir, ec);
+                    std::filesystem::path dest = std::filesystem::path(destDir) / src.filename();
+                    std::filesystem::copy_file(src, dest, std::filesystem::copy_options::overwrite_existing, ec);
+                    if (!ec) {
+                        p.loadingLogoPath = dest.string();
+                        changed = true;
+                    }
+                }
+            }
+            if (!p.loadingLogoPath.empty()) {
+                ImGui::SameLine();
+                if (ImGui::Button("Quitar##logo")) {
+                    p.loadingLogoPath.clear();
+                    changed = true;
+                }
+            }
         }
 
         ImGui::Spacing();

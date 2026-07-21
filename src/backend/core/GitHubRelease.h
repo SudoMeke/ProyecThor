@@ -22,4 +22,15 @@ std::string FetchGitHubJson(const std::string& path);
 // published_at, message).
 std::string ExtractJsonField(const std::string& json, const std::string& key);
 
+// Busca, dentro del array "assets" de un release, el asset cuyo "name" sea
+// exactamente assetName y devuelve su "browser_download_url" (o "" si el
+// release no tiene ese asset). Pensado para instalacion automatica de apps
+// hermanas (ver LayersOverlayTab::InstallAndLaunchFoudreVue).
+std::string ExtractAssetUrl(const std::string& json, const std::string& assetName);
+
+// Descarga "url" (siguiendo redirecciones, ej. hacia el CDN de GitHub) y lo
+// guarda en destPath. Solo implementado en _WIN32 por ahora (via WinHTTP);
+// en el resto de plataformas siempre devuelve false.
+bool DownloadFile(const std::string& url, const std::string& destPath);
+
 } // namespace ProyecThor::Core

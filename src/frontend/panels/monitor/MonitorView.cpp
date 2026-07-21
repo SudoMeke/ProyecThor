@@ -15,6 +15,11 @@ namespace ProyecThor::UI {
 
 using namespace MonitorTheme;
 
+void MonitorView::Update()
+{
+    m_QueueEngine.Update();
+}
+
 void MonitorView::Render(Core::VLCBasePlayer* player)
 {
     if (!player) {
@@ -27,14 +32,33 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
     Core::VLCBasePlayer* bg            = Core::PresentationCore::Get().GetBackgroundPlayer();
     bool                 isSharedPlayer = (player == bg);
 
+    // Antes se recalculaba al principio de RenderLiveControls (ahora vive en
+    // ViewPanel::RenderLiveTransport). RenderCenterColumn y RenderPreviewControls
+    // siguen dependiendo de que estos 3 esten frescos cada frame.
+    m_LivePlaying = bg && !bg->IsPaused();
+    m_LiveMuted   = Core::PresentationCore::Get().GetLiveMute();
+    m_LiveVolume  = static_cast<float>(Core::PresentationCore::Get().GetLiveVolume()) * 0.01f;
+
     // ── Cambio de seleccion → cargar en preview ────────────────────────────
     static std::string s_LastTitle;
     auto currentSel = Core::PresentationCore::Get().PeekSelection();
+
+    // FIX (crash en Windows/Wine): la cola del Monitor tambien pasa por
+    // SetSelection() al arrancar/avanzar cada item (ver MonitorQueueEngine::
+    // PlayIndex), solo para que el titulo se muestre en pantalla — no es
+    // una eleccion manual del operador en la Biblioteca. Antes este bloque
+    // no distinguia el origen, asi que cada avance de la cola disparaba
+    // TAMBIEN una carga en el reproductor de Preview del mismo archivo que
+    // la cola ya esta reproduciendo (o precargando en standby) — dos/tres
+    // instancias de VLC abriendo el mismo archivo a la vez, lo que
+    // crasheaba en Windows.
+    bool fromQueue = Core::PresentationCore::Get().IsSelectionFromQueue();
+
     if (currentSel.title != s_LastTitle)
     {
         s_LastTitle = currentSel.title;
 
-        if (!isSharedPlayer)
+        if (!isSharedPlayer && !fromQueue)
         {
            if (currentSel.type == Core::ItemType::Video && !currentSel.title.empty())
 {
@@ -42,7 +66,10 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
     if (path.rfind("http", 0) != 0)
         path = GetAssetsPath() + "/videos/" + path;
 
-    player->Play(path, /*loop=*/false, /*startMuted=*/true);
+    // Carga en un hilo aparte (ver PresentationCore::RequestPreviewLoad):
+    // el video en vivo al publico nunca debe esperar a que el Preview
+    // termine de abrir un archivo.
+    Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/true);
     m_PreviewPlaying = true;
 }
             else
@@ -67,12 +94,15 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
     }
 
     // ── Layout ────────────────────────────────────────────────────────────────
+    // El monitor "PGM"/Live (video + meters + transporte del player general)
+    // se movio a ViewPanel — aca solo queda Preview + columna central +
+    // Queue, lo que le da mas aire al Monitor en pantallas chicas.
     const float totalW   = ImGui::GetContentRegionAvail().x;
     const float totalH   = ImGui::GetContentRegionAvail().y;
     const float queueW   = std::min(320.0f, totalW * 0.32f);
     const float mainW    = totalW - queueW - 6.0f;
     const float centerW  = k_CenterW;
-    const float sideW    = std::max(80.0f, (mainW - centerW) * 0.5f);
+    const float previewW = std::max(160.0f, mainW - centerW);
     const float ctrlH    = k_ControlsH;
     const float rowGap   = 6.0f;
     const float monitorH = std::max(totalH - ctrlH - rowGap * 2.0f, 60.0f);
@@ -84,23 +114,11 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0.0f, rowGap });
 
-    RenderPreviewMonitor(player, sideW, monitorH);
+    RenderPreviewMonitor(player, previewW, monitorH);
     ImGui::SameLine(0, 0);
     RenderCenterColumn(centerW, monitorH, player);
-    ImGui::SameLine(0, 0);
-    RenderLiveMonitor(player, sideW, monitorH);
 
-    RenderPreviewControls(player, sideW);
-    ImGui::SameLine(0, 0);
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.0f, 0.0f, 0.0f, 0.0f });
-    ImGui::BeginChild("##ctr_spacer", { centerW, ctrlH }, false,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    ImGui::SameLine(0, 0);
-    RenderLiveControls(player, sideW);
+    RenderPreviewControls(player, previewW);
 
     ImGui::PopStyleVar();
     ImGui::EndChild();

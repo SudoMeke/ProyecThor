@@ -93,19 +93,24 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
     switch (preset) {
 
     case ThemePreset::Dark: {
-        t.base[0]=0.055f; t.base[1]=0.060f; t.base[2]=0.075f; t.base[3]=1.0f;
-        t.surface0[0]=0.075f; t.surface0[1]=0.082f; t.surface0[2]=0.100f; t.surface0[3]=1.0f;
-        t.surface1[0]=0.095f; t.surface1[1]=0.104f; t.surface1[2]=0.125f; t.surface1[3]=1.0f;
-        t.surface2[0]=0.115f; t.surface2[1]=0.125f; t.surface2[2]=0.150f; t.surface2[3]=1.0f;
-        t.surface3[0]=0.140f; t.surface3[1]=0.150f; t.surface3[2]=0.180f; t.surface3[3]=1.0f;
-        t.accent[0]=0.60f; t.accent[1]=0.52f; t.accent[2]=0.30f; t.accent[3]=1.0f;
-        t.accentLight[0]=0.70f; t.accentLight[1]=0.62f; t.accentLight[2]=0.40f; t.accentLight[3]=1.0f;
-        t.accentDim[0]=0.40f; t.accentDim[1]=0.34f; t.accentDim[2]=0.18f; t.accentDim[3]=1.0f;
-        t.accentFaint[0]=0.60f; t.accentFaint[1]=0.52f; t.accentFaint[2]=0.30f; t.accentFaint[3]=0.15f;
-        t.border[0]=0.20f; t.border[1]=0.215f; t.border[2]=0.260f; t.border[3]=0.20f;
+        // Gris neutro tipo ProPresenter/OBS: antes esto era un dorado/ambar
+        // saturado (t.accent 0.60/0.52/0.30) que no pegaba con el resto de
+        // la app. Ahora base/surfaces son gris puro (R=G=B, sin tinte de
+        // color) y el accent es un gris claro "plata" en vez de un color
+        // saturado, que es el look que se pidio como default.
+        t.base[0]=0.078f; t.base[1]=0.078f; t.base[2]=0.082f; t.base[3]=1.0f;
+        t.surface0[0]=0.098f; t.surface0[1]=0.098f; t.surface0[2]=0.102f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.130f; t.surface1[1]=0.130f; t.surface1[2]=0.136f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.165f; t.surface2[1]=0.165f; t.surface2[2]=0.172f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.205f; t.surface3[1]=0.205f; t.surface3[2]=0.213f; t.surface3[3]=1.0f;
+        t.accent[0]=0.55f; t.accent[1]=0.56f; t.accent[2]=0.58f; t.accent[3]=1.0f;
+        t.accentLight[0]=0.72f; t.accentLight[1]=0.73f; t.accentLight[2]=0.75f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.38f; t.accentDim[1]=0.39f; t.accentDim[2]=0.41f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.55f; t.accentFaint[1]=0.56f; t.accentFaint[2]=0.58f; t.accentFaint[3]=0.15f;
+        t.border[0]=1; t.border[1]=1; t.border[2]=1; t.border[3]=0.10f;
         t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
-        t.textPrimary[0]=0.88f; t.textPrimary[1]=0.87f; t.textPrimary[2]=0.84f; t.textPrimary[3]=1.0f;
-        t.textDim[0]=0.55f; t.textDim[1]=0.55f; t.textDim[2]=0.54f; t.textDim[3]=1.0f;
+        t.textPrimary[0]=0.92f; t.textPrimary[1]=0.92f; t.textPrimary[2]=0.93f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.58f; t.textDim[1]=0.58f; t.textDim[2]=0.60f; t.textDim[3]=1.0f;
         t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
         t.danger[0]=0.75f; t.danger[1]=0.25f; t.danger[2]=0.25f; t.danger[3]=1.0f;
         t.success[0]=0.35f; t.success[1]=0.60f; t.success[2]=0.35f; t.success[3]=1.0f;
@@ -261,6 +266,7 @@ void SettingsManager::ApplyProjection() {
     core.UpdateTextStyle(p.textSize, tc, p.textAlignment, p.vAlignment,
                           margins, p.autoScale, p.selectedFont);
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
+    core.SetLoadingLogoPath(p.loadingLogoPath);
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────
@@ -394,6 +400,7 @@ void SettingsManager::SaveSettings() {
     j["projection"]["targetFPS"]          = p.targetFPS;
     j["projection"]["outputQualityMode"]  = p.outputQualityMode;
     j["projection"]["outputPresetIndex"]  = p.outputPresetIndex;
+    j["projection"]["loadingLogoPath"]    = p.loadingLogoPath;
 
     const auto& sd = m_Settings.stageDisplay;
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
@@ -416,9 +423,14 @@ void SettingsManager::SaveSettings() {
             j["controlHub"]["categoryColor"][i][c] = chs.categoryColor[i][c];
 
     const auto& shs = m_Settings.stylesHub;
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 6; i++)
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
+
+    const auto& vts = m_Settings.viewTools;
+    for (int i = 0; i < 5; i++)
+        for (int c = 0; c < 4; c++)
+            j["viewTools"]["categoryColor"][i][c] = vts.categoryColor[i][c];
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -434,6 +446,8 @@ void SettingsManager::SaveSettings() {
     j["general"]["defaultBiblesFolder"] = m_Settings.general.defaultBiblesFolder;
     j["general"]["defaultMediaFolder"]  = m_Settings.general.defaultMediaFolder;
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
+    j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
+    j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -510,6 +524,7 @@ void SettingsManager::LoadSettings() {
             p.targetFPS          = jp.value("targetFPS",          60);
             p.outputQualityMode  = jp.value("outputQualityMode",  0);
             p.outputPresetIndex  = jp.value("outputPresetIndex",  3);
+            p.loadingLogoPath    = jp.value("loadingLogoPath",    "");
         }
 
         if (j.contains("stageDisplay")) {
@@ -561,9 +576,20 @@ void SettingsManager::LoadSettings() {
             const auto& jshs = j["stylesHub"];
             if (jshs.contains("categoryColor") && jshs["categoryColor"].is_array()) {
                 const auto& arr = jshs["categoryColor"];
-                for (int i = 0; i < 4 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 6 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         shs.categoryColor[i][c] = arr[i][c].get<float>();
+            }
+        }
+
+        if (j.contains("viewTools")) {
+            auto& vts = m_Settings.viewTools;
+            const auto& jvts = j["viewTools"];
+            if (jvts.contains("categoryColor") && jvts["categoryColor"].is_array()) {
+                const auto& arr = jvts["categoryColor"];
+                for (int i = 0; i < 5 && i < (int)arr.size(); i++)
+                    for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
+                        vts.categoryColor[i][c] = arr[i][c].get<float>();
             }
         }
 
@@ -583,6 +609,8 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.defaultBiblesFolder  = jg.value("defaultBiblesFolder", "");
             m_Settings.general.defaultMediaFolder   = jg.value("defaultMediaFolder",  "");
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
+            m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
+            m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
         }
 
         if (j.contains("audio")) {

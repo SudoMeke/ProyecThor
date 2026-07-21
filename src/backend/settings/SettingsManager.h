@@ -57,6 +57,13 @@ namespace ProyecThor::Settings {
         // 2=Custom (ver ProjectionQualityPresets.h).
         int   outputQualityMode = 0;
         int   outputPresetIndex = 3; // default: "1080p / 60 FPS"
+
+        // ── Logo (pantalla de carga) ─────────────────────────────────────
+        // Imagen que se muestra a la salida REAL (publico) mientras un
+        // fondo/video esta cargando (ver PresentationCore::
+        // ShouldShowLoadingScreen) en vez de dejar ver un frame
+        // entrecortado/viejo. Vacio = sin logo, comportamiento sin cambios.
+        std::string loadingLogoPath;
     };
 
     // ── Audio ────────────────────────────────────────────────────────────
@@ -85,6 +92,15 @@ namespace ProyecThor::Settings {
         // Titulos bajo los iconos de los 4 rails (Biblioteca/Home/Control/Diseño).
         // Apagarlo los deja solo-icono para ocupar menos espacio en pantalla.
         bool        showRailLabels      = true;
+        // Panel opcional de diagnostico (CPU/RAM/FPS/GPU), activable desde
+        // el menu Vista. Apagado por default: es una herramienta puntual,
+        // no algo que se quiera ver todo el tiempo.
+        bool        showPerfPanel       = false;
+        // Riel angosto de botones "Limpiar <tipo>" a la derecha del video en
+        // Vista en Vivo (ver ViewPanel::RenderQuickActions). Opcional desde
+        // el menu Vista para operadores que no lo necesitan y prefieren mas
+        // ancho para el video.
+        bool        showViewQuickActions = true;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -100,16 +116,19 @@ namespace ProyecThor::Settings {
     struct ThemeSettings {
         ThemePreset preset = ThemePreset::Dark;
 
-        float base[4]        = { 0.036f, 0.040f, 0.060f, 1.0f }; // ventana principal
-        float surface0[4]    = { 0.060f, 0.065f, 0.090f, 1.0f }; // paneles hijos
-        float surface1[4]    = { 0.080f, 0.085f, 0.115f, 1.0f }; // popups / inputs
-        float surface2[4]    = { 0.110f, 0.115f, 0.150f, 1.0f }; // hover
-        float surface3[4]    = { 0.140f, 0.145f, 0.185f, 1.0f }; // active
+        // Gris neutro tipo ProPresenter/OBS (ver MakeThemePreset(Dark) para
+        // el preset real que se aplica en runtime; estos son solo el
+        // fallback de construccion por defecto de la struct).
+        float base[4]        = { 0.078f, 0.078f, 0.082f, 1.0f }; // ventana principal
+        float surface0[4]    = { 0.098f, 0.098f, 0.102f, 1.0f }; // paneles hijos
+        float surface1[4]    = { 0.130f, 0.130f, 0.136f, 1.0f }; // popups / inputs
+        float surface2[4]    = { 0.165f, 0.165f, 0.172f, 1.0f }; // hover
+        float surface3[4]    = { 0.205f, 0.205f, 0.213f, 1.0f }; // active
 
-        float accent[4]      = { 0.369f, 0.420f, 1.000f, 1.0f };
-        float accentLight[4] = { 0.520f, 0.575f, 1.000f, 1.0f };
-        float accentDim[4]   = { 0.250f, 0.290f, 0.700f, 1.0f };
-        float accentFaint[4] = { 0.369f, 0.420f, 1.000f, 0.18f };
+        float accent[4]      = { 0.550f, 0.560f, 0.580f, 1.0f };
+        float accentLight[4] = { 0.720f, 0.730f, 0.750f, 1.0f };
+        float accentDim[4]   = { 0.380f, 0.390f, 0.410f, 1.0f };
+        float accentFaint[4] = { 0.550f, 0.560f, 0.580f, 0.18f };
 
         float border[4]      = { 1.000f, 1.000f, 1.000f, 0.08f };
         float borderFaint[4] = { 1.000f, 1.000f, 1.000f, 0.04f };
@@ -150,6 +169,14 @@ namespace ProyecThor::Settings {
         int cellWidget[kStageMaxCells] = {
             (int)StageWidgetType::LiveText, (int)StageWidgetType::Clock, 0, 0
         };
+
+        // Antes vivian como miembros efimeros de StageDisplayPanel (se
+        // reseteaban a 0/false en cada arranque). Se persisten aca para que
+        // el toggle "Stage" de ViewPanel (ver RenderLiveTransport/dots) los
+        // pueda usar sin depender de una instancia de StageDisplayPanel.
+        int  monitorIndex = -1;    // -1 = sin elegir aun -> default a la pantalla secundaria
+        bool useLAN        = false;
+        int  lanPort        = 8080;
     };
 
     // ── Sidebar de Biblioteca (Letra/Video/Imagen/Biblia/Doc/Audio) ──────
@@ -191,13 +218,28 @@ namespace ProyecThor::Settings {
         };
     };
 
-    // ── Sidebar del hub de Diseño (Fondos/Estilos/Transiciones) ──────────
+    // ── Sidebar del hub de Diseño (Fondos/Estilos/Overlays/Transiciones/
+    //    Anuncios/Captura) ──────────────────────────────────────────────
     struct StylesHubSettings {
-        float categoryColor[4][4] = {
+        float categoryColor[6][4] = {
             { 0.35f, 0.80f, 0.55f, 1.0f }, // Fondos
             { 0.65f, 0.31f, 0.94f, 1.0f }, // Estilos
             { 0.95f, 0.60f, 0.20f, 1.0f }, // Overlays
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Transiciones
+            { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
+            { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura
+        };
+    };
+
+    // ── Sidebar de Herramientas (debajo de Vista en Vivo): Control
+    //    Overlays / Red / Notas / Reloj / Chat ─────────────────────────────
+    struct ViewToolsSettings {
+        float categoryColor[5][4] = {
+            { 0.40f, 0.55f, 0.95f, 1.0f }, // Control Overlays
+            { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
+            { 0.35f, 0.80f, 0.55f, 1.0f }, // Notas
+            { 0.95f, 0.75f, 0.20f, 1.0f }, // Reloj
+            { 0.75f, 0.40f, 0.90f, 1.0f }, // Chat
         };
     };
 
@@ -213,6 +255,7 @@ namespace ProyecThor::Settings {
         HomeSidebarSettings    homeSidebar;
         ControlHubSettings     controlHub;
         StylesHubSettings      stylesHub;
+        ViewToolsSettings      viewTools;
     };
 
     class SettingsManager {

@@ -4,7 +4,6 @@
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/StageLayoutTemplates.h"
 #include "backend/core/PresentationCore.h"
-#include "stb_image_write.h"
 #include <imgui.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
@@ -72,6 +71,7 @@ void StageDisplayPanel::RenderContent() {
 // ─────────────────────────────────────────────────────────────────────────────
 void StageDisplayPanel::RenderActivationCard() {
     auto& core = Core::PresentationCore::Get();
+    auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
 
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
@@ -80,28 +80,33 @@ void StageDisplayPanel::RenderActivationCard() {
 
     // Sin segunda pantalla fisica, LAN es la unica opcion posible para el
     // monitor de control — no tiene sentido dejarlo "apagado" por eleccion.
-    if (!hasPhysicalOption) m_StageUseLAN = true;
-    if (hasPhysicalOption)  m_StageMonitorIndex = std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
+    if (!hasPhysicalOption) sd.useLAN = true;
+    // -1 = todavia sin elegir -> default a la pantalla secundaria (indice 1),
+    // nunca la principal (mismo criterio que Ajustes > Proyeccion).
+    const int stageMonitorIndex = hasPhysicalOption
+        ? std::clamp(sd.monitorIndex < 0 ? 1 : sd.monitorIndex, 0, monitorCount - 1)
+        : 0;
 
     // El estado real de "activo" se consulta a la fuente correspondiente en
     // vez de fiarse solo del booleano local: si el usuario tambien controla
     // la transmision LAN desde el panel "Transmisión en Red", este panel debe
     // reflejar eso igual (evita que ambos paneles queden desincronizados).
-    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : core.IsStaging();
+    const bool stageActive = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
 
     const int  lanItemIndex = hasPhysicalOption ? monitorCount : 0;
-    const int  sel          = m_StageUseLAN ? lanItemIndex : m_StageMonitorIndex;
-    const bool showLanPanel = m_StageUseLAN && stageActive;
+    const int  sel          = sd.useLAN ? lanItemIndex : stageMonitorIndex;
+    const bool showLanPanel = sd.useLAN && stageActive;
 
-    BeginCard("StageActivationCard", showLanPanel ? 226.0f : (hasPhysicalOption ? 190.0f : 168.0f));
+    // +4 vs antes en cada variante: compensa el padding interno mas generoso de BeginCard
+    BeginCard("StageActivationCard", showLanPanel ? 230.0f : (hasPhysicalOption ? 194.0f : 172.0f));
 
     ImGui::TextUnformatted(stageActive ? "Stage activo" : "Stage inactivo");
     ImGui::TextDisabled("Monitor de confianza: ");
     ImGui::SameLine();
-    if (m_StageUseLAN)
+    if (sd.useLAN)
         ImGui::TextColored(ToVec4(DS::TextPrimary), "Red (LAN)");
     else
-        ImGui::TextColored(ToVec4(DS::TextPrimary), "Pantalla %d", m_StageMonitorIndex + 1);
+        ImGui::TextColored(ToVec4(DS::TextPrimary), "Pantalla %d", stageMonitorIndex + 1);
     ImGui::Spacing();
 
     if (!hasPhysicalOption) {
@@ -114,23 +119,25 @@ void StageDisplayPanel::RenderActivationCard() {
     } else {
         MonitorSelector("stage", sel, -1, /*includeLAN*/true, currentAppMonitor,
             [this](int dir) { CycleStageMonitor(dir); },
-            [this, stageActive](int newSel) {
+            [stageActive](int newSel) {
                 int mc = 0;
                 glfwGetMonitors(&mc);
                 const bool wantLAN = (newSel >= mc);
                 auto& core = Core::PresentationCore::Get();
+                auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
 
                 if (stageActive) {
-                    if (m_StageUseLAN) core.ToggleNetworkStream(false);
-                    else               core.SetStaging(false);
+                    if (sd.useLAN) core.ToggleNetworkStream(false);
+                    else           core.SetStaging(false);
                 }
 
-                m_StageUseLAN = wantLAN;
-                if (!wantLAN) m_StageMonitorIndex = newSel;
+                sd.useLAN = wantLAN;
+                if (!wantLAN) sd.monitorIndex = newSel;
+                ProyecThor::Settings::SettingsManager::Get().Save();
 
                 if (stageActive) {
-                    if (wantLAN) core.ToggleNetworkStream(true, m_LANPort);
-                    else         core.SetStaging(true, m_StageMonitorIndex);
+                    if (wantLAN) core.ToggleNetworkStream(true, sd.lanPort);
+                    else         core.SetStaging(true, sd.monitorIndex);
                 }
             });
 
@@ -172,7 +179,7 @@ void StageDisplayPanel::RenderActivationCard() {
     ImVec4 hoverColor  = Brighten(btnColor, 0.06f);
     ImVec4 activeColor = Brighten(btnColor, -0.06f);
     ImVec4 tintCol     = stageActive ? ToVec4(DS::TextPrimary) : ToVec4(DS::TextHint);
-    DrawIconFn icon    = m_StageUseLAN ? ControlIcons::DrawBroadcast : ControlIcons::DrawStageMonitor;
+    DrawIconFn icon    = sd.useLAN ? ControlIcons::DrawBroadcast : ControlIcons::DrawStageMonitor;
 
     if (IconLabelButton("stageToggle", buttonText, icon, ImVec2(-1.0f, 44.0f),
                         btnColor, hoverColor, activeColor, tintCol)) {
@@ -195,6 +202,8 @@ void StageDisplayPanel::RenderActivationCard() {
 }
 
 void StageDisplayPanel::CycleStageMonitor(int direction) {
+    auto& sd = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
     const bool hasPhysicalOption = monitorCount >= 2;
@@ -203,38 +212,41 @@ void StageDisplayPanel::CycleStageMonitor(int direction) {
     if (totalItems <= 1)
         return; // sin pantallas fisicas, LAN es la unica opcion: nada que ciclar
 
+    const int stageMonitorIndex = std::clamp(sd.monitorIndex < 0 ? 1 : sd.monitorIndex, 0, monitorCount - 1);
     const int lanItemIndex = totalItems - 1;
-    const int current = m_StageUseLAN ? lanItemIndex : std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
+    const int current = sd.useLAN ? lanItemIndex : stageMonitorIndex;
     const int next     = (current + direction + totalItems) % totalItems;
     const bool wantLAN = (next == lanItemIndex);
 
     auto& core = Core::PresentationCore::Get();
-    const bool stageActive = m_StageUseLAN ? core.IsStreamingNet() : core.IsStaging();
+    const bool stageActive = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
 
     if (stageActive) {
-        if (m_StageUseLAN) core.ToggleNetworkStream(false);
-        else                core.SetStaging(false);
+        if (sd.useLAN) core.ToggleNetworkStream(false);
+        else           core.SetStaging(false);
     }
 
-    m_StageUseLAN = wantLAN;
-    if (!wantLAN) m_StageMonitorIndex = next;
+    sd.useLAN = wantLAN;
+    if (!wantLAN) sd.monitorIndex = next;
+    ProyecThor::Settings::SettingsManager::Get().Save();
 
     if (stageActive) {
-        if (wantLAN) core.ToggleNetworkStream(true, m_LANPort);
-        else          core.SetStaging(true, m_StageMonitorIndex);
+        if (wantLAN) core.ToggleNetworkStream(true, sd.lanPort);
+        else          core.SetStaging(true, sd.monitorIndex);
     }
 }
 
 void StageDisplayPanel::ToggleStageDisplay(bool active) {
     auto& core = Core::PresentationCore::Get();
+    auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
     if (active) {
-        if (m_StageUseLAN) {
-            core.ToggleNetworkStream(true, m_LANPort);
+        if (sd.useLAN) {
+            core.ToggleNetworkStream(true, sd.lanPort);
             if (core.IsStreamingNet())
-                std::cout << "[StageDisplayPanel] Monitor de control (LAN) iniciado en puerto " << m_LANPort << ".\n";
+                std::cout << "[StageDisplayPanel] Monitor de control (LAN) iniciado en puerto " << sd.lanPort << ".\n";
             else
                 std::cerr << "[StageDisplayPanel] No se pudo iniciar el monitor de control por LAN (puerto "
-                          << m_LANPort << " en uso?).\n";
+                          << sd.lanPort << " en uso?).\n";
             return;
         }
 
@@ -245,11 +257,13 @@ void StageDisplayPanel::ToggleStageDisplay(bool active) {
             return;
         }
 
-        m_StageMonitorIndex = std::clamp(m_StageMonitorIndex, 0, monitorCount - 1);
-        core.SetStaging(true, m_StageMonitorIndex);
-        std::cout << "[StageDisplayPanel] Monitor de control iniciado en monitor " << m_StageMonitorIndex << ".\n";
+        int stageMonitorIndex = std::clamp(sd.monitorIndex < 0 ? 1 : sd.monitorIndex, 0, monitorCount - 1);
+        sd.monitorIndex = stageMonitorIndex;
+        ProyecThor::Settings::SettingsManager::Get().Save();
+        core.SetStaging(true, stageMonitorIndex);
+        std::cout << "[StageDisplayPanel] Monitor de control iniciado en monitor " << stageMonitorIndex << ".\n";
     } else {
-        if (m_StageUseLAN) {
+        if (sd.useLAN) {
             core.ToggleNetworkStream(false);
             std::cout << "[StageDisplayPanel] Monitor de control (LAN) detenido.\n";
         } else {
@@ -259,6 +273,9 @@ void StageDisplayPanel::ToggleStageDisplay(bool active) {
     }
 }
 
+// La lectura de GPU (RenderProjectorToFBO, via PBO doble) es barata y se
+// queda en el hilo de render. El encode JPEG se delega al FrameEncodeWorker
+// (hilo dedicado) para que no bloquee ese mismo hilo — ver FrameEncodeWorker.h.
 void StageDisplayPanel::CaptureAndPushLANFrame(int w, int h, int quality) {
     if (w <= 0 || h <= 0) return;
 
@@ -266,17 +283,10 @@ void StageDisplayPanel::CaptureAndPushLANFrame(int w, int h, int quality) {
     std::vector<uint8_t> rgb;
     if (!core.RenderProjectorToFBO(w, h, rgb)) return;
 
-    std::vector<uint8_t> jpeg;
-    jpeg.reserve(static_cast<size_t>(w) * h / 4);
-
-    auto stbCb = [](void* ctx, void* data, int size) {
-        auto* buf = static_cast<std::vector<uint8_t>*>(ctx);
-        const uint8_t* p = static_cast<const uint8_t*>(data);
-        buf->insert(buf->end(), p, p + size);
-    };
-    stbi_write_jpg_to_func(stbCb, &jpeg, w, h, 3, rgb.data(), quality);
-
-    core.PushFrame(std::move(jpeg));
+    m_EncodeWorker.SubmitFrame(std::move(rgb), w, h, quality,
+        [](std::vector<uint8_t> jpeg) {
+            Core::PresentationCore::Get().PushFrame(std::move(jpeg));
+        });
 }
 
 void StageDisplayPanel::RenderTemplateSelector() {

@@ -1,5 +1,6 @@
 #pragma once
 #include "backend/core/NetworkStreamServer.h"
+#include "backend/core/FrameEncodeWorker.h"
 #include <string>
 #include <vector>
 #include <mutex>
@@ -46,6 +47,10 @@ private:
     // capturo/comprimio un frame. Usado en Render() para no capturar mas
     // rapido de lo que cada modo de transmision realmente necesita.
     double m_LastCaptureTime = 0.0;
+
+    // Encode JPEG en hilo dedicado — ver FrameEncodeWorker.h. Evita que el
+    // encode bloquee el hilo de render/UI (el mismo que dibuja el proyector).
+    Core::FrameEncodeWorker m_EncodeWorker;
 
     // QR
     std::string           m_QRCachedURL;

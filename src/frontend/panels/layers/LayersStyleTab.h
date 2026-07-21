@@ -39,6 +39,9 @@ private:
     void RenderTopBar();     // toolbar compacta (icon-only): nuevo / recargar fuentes / zoom / grid-lista
     void RenderThemeGrid();
     void RenderQuickAdjust();
+    // Ajustes rapidos ya no vive fijo debajo de la galeria: ahora es un
+    // icono en la toolbar que abre esto como popup flotante (ver RenderTopBar).
+    void RenderQuickAdjustPopup();
     void RenderStyleEditorModal();
 
     void RenderThemeCard(const std::string& name, float cardW, float cardH,

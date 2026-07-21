@@ -75,8 +75,11 @@ static void DrawBtnIcon(const char* iconName, float leftPad = 12.0f, float size 
 }
 void MonitorView::RenderQueue(float w)
 {
-    // ── Unico paso de logica por frame ───────────────────────────────────────
-m_QueueEngine.Update();
+    // El avance de la cola (MonitorQueueEngine::Update) ya NO se llama
+    // aca: si este panel no esta visible, RenderQueue() ni se ejecuta, y
+    // la cola se quedaba pegada apenas el operador miraba otra cosa. Ahora
+    // corre incondicionalmente desde MonitorView::Update() (ver
+    // HomePanel::Render(), pump incondicional junto a OClock::Update()).
     {
         Core::VLCBasePlayer* queuePlayer = Core::PresentationCore::Get().GetBackgroundPlayer();
         m_LivePlaying = m_QueueEngine.IsActive() && queuePlayer && !queuePlayer->IsPaused();
@@ -155,7 +158,8 @@ m_QueueEngine.Update();
     ImDrawList* dl     = ImGui::GetWindowDrawList();
     float       availW = ImGui::GetContentRegionAvail().x;
 
-    // Drop zone antes del primer item → mover al inicio
+    // Drop zone antes del primer item → mover al inicio (reorden) o agregar
+    // (si el payload viene de la Biblioteca: video o URL).
     ImGui::Dummy({ availW, 3.0f });
     if (ImGui::BeginDragDropTarget())
     {
@@ -163,6 +167,16 @@ m_QueueEngine.Update();
         {
             int src = *(const int*)p->Data;
             m_QueueEngine.Move(src, 0);
+        }
+        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("VIDEO_TO_QUEUE"))
+        {
+            std::string path(static_cast<const char*>(p->Data), p->DataSize - 1);
+            m_QueueEngine.Add(path);
+        }
+        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("URL_TO_QUEUE"))
+        {
+            std::string url(static_cast<const char*>(p->Data), p->DataSize - 1);
+            m_QueueEngine.AddURL(url);
         }
         ImGui::EndDragDropTarget();
     }
@@ -296,6 +310,16 @@ m_QueueEngine.Update();
                 m_QueueEngine.Move(src, i);
                 m_DragSrcIndex = -1;
             }
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("VIDEO_TO_QUEUE"))
+            {
+                std::string path(static_cast<const char*>(p->Data), p->DataSize - 1);
+                m_QueueEngine.Add(path);
+            }
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("URL_TO_QUEUE"))
+            {
+                std::string url(static_cast<const char*>(p->Data), p->DataSize - 1);
+                m_QueueEngine.AddURL(url);
+            }
             ImGui::EndDragDropTarget();
         }
 
@@ -344,7 +368,10 @@ m_QueueEngine.Update();
         ImGui::PopStyleColor();
     }
 
-    // Drop zone al final → mover al final
+    // Drop zone al final → mover al final (reorden) o agregar (Biblioteca).
+    // Esta es tambien la zona que cubre la mayor parte del area vacia de la
+    // lista cuando no hay items todavia, asi que es el target mas usado la
+    // primera vez que se arrastra un video/URL a una cola vacia.
     ImGui::Dummy({ availW, k_RowH * 0.5f });
     if (ImGui::BeginDragDropTarget())
     {
@@ -354,6 +381,16 @@ m_QueueEngine.Update();
             int lastIdx = static_cast<int>(items.size()) - 1;
             if (lastIdx >= 0)
                 m_QueueEngine.Move(src, lastIdx);
+        }
+        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("VIDEO_TO_QUEUE"))
+        {
+            std::string path(static_cast<const char*>(p->Data), p->DataSize - 1);
+            m_QueueEngine.Add(path);
+        }
+        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("URL_TO_QUEUE"))
+        {
+            std::string url(static_cast<const char*>(p->Data), p->DataSize - 1);
+            m_QueueEngine.AddURL(url);
         }
         ImGui::EndDragDropTarget();
     }

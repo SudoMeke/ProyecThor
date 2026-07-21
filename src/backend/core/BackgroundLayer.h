@@ -4,6 +4,7 @@
 #include "backend/shaders/PostProcessorFSR.h"
 #include <string>
 #include <vector>
+#include <deque>
 #include <algorithm>
 
 namespace ProyecThor::Core {
@@ -16,6 +17,60 @@ namespace ProyecThor::Core {
 
         bool   m_SwapPending      = false;
         double m_PendingSwapStart = 0.0;
+
+        // Momento (NowSeconds()) en que Standby() quedo Ready durante un
+        // swap pendiente — 0.0 mientras no lo esta. Desde ahi se cuenta un
+        // crossfade corto y fijo (kSwapBlendSeconds) antes de completar el
+        // swap de verdad, para que el cambio de fondo se vea como una
+        // transicion fluida (frame final -> frame inicial) en vez de un
+        // corte seco. Ver Update().
+        double m_SwapReadyAt = 0.0;
+        // Momento en que se cumplio el asentamiento (kSwapSettleSeconds
+        // despues de Ready) — 0.0 hasta entonces. Desde ahi se cuenta el
+        // crossfade real (kSwapBlendSeconds).
+        double m_SwapSettledAt = 0.0;
+
+        // Margen de "asentamiento": los primeros frames decodificados de un
+        // codec recien abierto a veces son artefactos del decoder
+        // "calentando" (frame parcial/negro/con colores mal, comun en
+        // hardware decode o con B-frames) — HasVideoFrame() ya da true con
+        // el primer frame, que puede ser justo uno de esos. Sin esperar un
+        // poco antes de empezar a MOSTRAR standby en el blend, el publico
+        // podia ver un flash breve de ese frame roto. Este margen NO
+        // demora el swap final (sigue siendo kSwapBlendSeconds despues de
+        // asentar) — solo demora el INICIO del blend visible. El mismo
+        // margen tambien se usa antes de PAUSAR el prefetch (ver Update()),
+        // asi que cuando llega a esta parte el standby ya viene de un
+        // frame confirmado estable, no solo del primero que aparecio.
+        static constexpr double kSwapSettleSeconds = 0.3;
+        static constexpr double kSwapBlendSeconds  = 0.2;
+        // Mismo rol que m_SwapReadyAt pero para el prefetch (ver Update()):
+        // momento en que el prefetch quedo Ready por primera vez, para
+        // saber cuando ya paso kSwapSettleSeconds y es seguro pausarlo.
+        double m_PrefetchReadyAt = 0.0;
+        // Limite de emergencia: si standby no llega a Ready ni a Error en
+        // este tiempo (carga realmente colgada), se abandona el swap y se
+        // sigue mostrando el fondo anterior — nunca se fuerza un corte a
+        // contenido que no esta listo (ver Update()).
+        static constexpr double kSwapGiveUpSeconds = 15.0;
+
+        // Precarga adelantada sin swap automatico (ver Prefetch()/
+        // CommitPrefetch()) — usada por la cola del Monitor para dejar el
+        // SIGUIENTE clip abierto y pausado en su primer frame mientras el
+        // actual todavia se esta reproduciendo, para que la transicion en
+        // CommitPrefetch() sea un corte instantaneo (nada que esperar) en
+        // vez de recien empezar a abrir el archivo en ese momento.
+        // Separado de m_SwapPending: Prefetch() llena standby pero NO arma
+        // el gate de Update(), asi que no se dispara solo.
+        bool        m_PrefetchArmed = false;
+        std::string m_PrefetchedPath;
+
+        // Historial de cuanto tardo en quedar listo (Ready) el ultimo
+        // puñado de swaps, para poder mostrarle al operador un tiempo
+        // estimado de carga (ver GetEstimatedLoadSeconds()).
+        std::deque<float> m_RecentLoadDurations;
+        static constexpr size_t kMaxLoadSamples = 8;
+        static constexpr float  kDefaultEtaSeconds = 1.5f;
 
         int  m_TargetVolume = 100;
         bool m_TargetMuted  = true;
@@ -76,6 +131,13 @@ namespace ProyecThor::Core {
         void Update();
         void Render(int outputW, int outputH);
 
+        // Dibuja una imagen (el logo de pantalla de carga, ver
+        // PresentationCore::ShouldShowLoadingScreen) letterboxeada dentro
+        // del viewport de salida, reusando el mismo blit raw-GL que el
+        // fondo normal (BlitTexture) — para la salida REAL al publico,
+        // llamado en vez de Render() mientras el logo esta activo.
+        void RenderLogo(unsigned int logoTex, int logoW, int logoH, int outputW, int outputH);
+
         void  SetFSREnabled(bool enabled);
         bool  GetFSREnabled() const;
         void  SetFSRSharpness(float sharpness);
@@ -86,13 +148,39 @@ namespace ProyecThor::Core {
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();
 
+        // Textura cruda de Standby() (sin FSR) + progreso de blend, para que
+        // un rendering ImGui (ver UIManager "ProjectorLive") pueda blendear
+        // el mismo crossfade que ya hace Render() via BlitTexture, sin
+        // duplicar la logica de decidir CUANDO blendear (ver IsSwapPending/
+        // HasVideoFrame ya expuestos).
+        void*  GetStandbyTextureID();
+        float  GetTransitionProgress() const { return m_TransitionProgress; }
+        bool   StandbyHasFrame();
+
         VLCBasePlayer* GetPlayer();
 
         void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
 
         // allowAudio=false para fondos decorativos (BackgroundsPanel):
-        // estructuralmente no podran sonar aunque se este "al aire".
-        void SetVideo(const std::string& path, bool allowAudio = true);
+        // estructuralmente no podran sonar aunque se este "al aire". Default
+        // false: el caller tiene que pedir audio explicitamente (monitor).
+        void SetVideo(const std::string& path, bool allowAudio = false);
+
+        // Precarga path en standby, pausado apenas decodifica su primer
+        // frame (ver el guard de pausa en Update()) — SIN armar el swap
+        // automatico (a diferencia de SetVideo()). Llamar a
+        // CommitPrefetch() cuando corresponda mostrarlo: como ya esta
+        // listo y quieto en el frame 0, el corte es instantaneo.
+        void Prefetch(const std::string& path, bool allowAudio = false);
+
+        // Arma el swap para lo que ya este precargado via Prefetch() (lo
+        // despausa en el instante del swap). Si no hay nada precargado (o
+        // no coincide, ej. la cola se reordeno), cae a SetVideo(path,...)
+        // como carga en frio normal.
+        void CommitPrefetch(const std::string& path, bool allowAudio = false);
+
+        bool  IsSwapPending() const { return m_SwapPending; }
+        float GetEstimatedLoadSeconds() const;
 
         void SetSolidColor(float r, float g, float b);
 

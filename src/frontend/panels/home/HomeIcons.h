@@ -106,4 +106,19 @@ inline void DrawIcon_Broadcast(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     }
 }
 
+inline void DrawIcon_Chat(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+    // Globo de dialogo (rect redondeado) + colita apuntando abajo-izquierda
+    dl->AddRect(IcPt(o, sz, 0.12f, 0.14f), IcPt(o, sz, 0.88f, 0.68f),
+                col, sz * 0.10f, ImDrawFlags_RoundCornersAll, thick);
+    ImVec2 tail[3] = {
+        IcPt(o, sz, 0.24f, 0.64f), IcPt(o, sz, 0.20f, 0.86f), IcPt(o, sz, 0.40f, 0.64f),
+    };
+    dl->AddTriangleFilled(tail[0], tail[1], tail[2], col);
+    // Puntitos de "escribiendo..." adentro del globo
+    for (float x : { 0.34f, 0.50f, 0.66f })
+        dl->AddCircleFilled(IcPt(o, sz, x, 0.41f), sz * 0.045f, col, 8);
+}
+
 } // namespace ProyecThor::UI::HomeIcons

@@ -12,6 +12,7 @@
 #include "GlassRenderer.h"
 #include "panels/DatabasePanel.h"
 #include "panels/WikiPanel.h"
+#include "panels/PerformancePanel.h"
 
 namespace ProyecThor::UI {
 
@@ -25,11 +26,9 @@ class UIManager {
 public:
     UIManager();
     ~UIManager();
+// textTransitionTrigger visto en el ultimo frame (ver RenderAll()) —
+// solo texto: el fondo/video tiene su propio crossfade independiente.
 uint64_t m_LastTransitionTrigger = 0;
-float    m_LastBgColor[3]        = { 0.0f, 0.0f, 0.0f };
-float    m_OutgoingBgColor[3]    = { 0.0f, 0.0f, 0.0f };
-bool     m_LastBgWasVideo        = false;
-bool     m_OutgoingBgWasVideo    = false;
     bool Initialize(GLFWwindow* window);
     std::shared_ptr<TransitionPanel> GetTransitionPanelOwned() const { return m_TransitionPanelOwned; }
     void AddPanel(std::shared_ptr<ProyecThor::UI::IPanel> panel);
@@ -39,7 +38,9 @@ bool     m_OutgoingBgWasVideo    = false;
 
     GlassRenderer& GetGlassRenderer() { return m_GlassRenderer; }
 
-    bool m_FocusControlNextFrame = false;
+    // Antes enfocaba "Control" (eliminado) al resetear el layout; ahora
+    // enfoca "Vista en Vivo", que es el panel principal de ese dock.
+    bool m_FocusViewNextFrame = false;
 
     ActiveLeftPanel GetActiveLeftPanel() const { return m_ActiveLeftPanel; }
     void SetActiveLeftPanel(ActiveLeftPanel p) { m_ActiveLeftPanel = p; }
@@ -57,6 +58,7 @@ private:
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;
     Settings::SettingsPanel              m_SettingsPanel;
+    PerformancePanel                     m_PerformancePanel;
     ActiveLeftPanel                      m_ActiveLeftPanel      = ActiveLeftPanel::Library;
     std::shared_ptr<TransitionPanel>     m_TransitionPanelOwned;
     TransitionPanel*                     m_TransitionPanel      = nullptr;

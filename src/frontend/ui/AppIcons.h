@@ -72,6 +72,19 @@ inline void DrawIcon_Overlay(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddRectFilled(IcPt(o, sz, 0.20f, 0.80f), IcPt(o, sz, 0.80f, 0.88f), col, sz * 0.02f);
 }
 
+// Estilos — "Aa" (icono tipico de formato de texto/tipografia)
+inline void DrawIcon_TextAa(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    const char* label     = "Aa";
+    float       fontSize  = sz * 0.60f;
+    ImFont*     font      = ImGui::GetFont();
+    ImVec2      textSz    = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label);
+    ImVec2      pos       = IcPt(o, sz, 0.5f, 0.5f);
+    pos.x -= textSz.x * 0.5f;
+    pos.y -= textSz.y * 0.5f;
+    dl->AddText(font, fontSize, pos, col, label);
+}
+
 // Transiciones — flechas cruzadas (swap)
 inline void DrawIcon_Swap(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

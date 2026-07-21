@@ -20,6 +20,10 @@ public:
 
     bool IsLive() const { return m_IsLive && !m_Messages.empty(); }
 
+    // Para paneles externos (ej. ViewPanel > "Limpiar anuncios") que
+    // necesitan sacarlo de pantalla sin pasar por los controles internos.
+    void SetLive(bool live) { m_IsLive = live; }
+
 private:
     void               TickScroll(float deltaTime, float contentWidth, float screenW);
     const std::string& GetCurrentMessage() const;

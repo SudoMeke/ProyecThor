@@ -50,6 +50,10 @@ public:
 
     bool        IsLive()   const { return m_IsCapturing; }
 
+    // Para paneles externos (ej. ViewPanel > "Limpiar captura"/"Borrar
+    // Todo") que necesitan cortarla sin pasar por los controles internos.
+    void        Stop() { StopCapture(); }
+
 private:
     // ── Enumeración de fuentes ───────────────────────────────────────────────
     void EnumerateCameras();

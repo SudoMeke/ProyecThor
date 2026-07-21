@@ -17,7 +17,11 @@ namespace ProyecThor::Core {
 
     class OverlayLayer {
     private:
-        VLCBasePlayer m_Player;
+        // useHardwareDecode=false: mismo motivo que BackgroundLayer (ver su
+        // constructor) — este player corre a la par de los de Fondos, y
+        // pedir decode de hardware a todos a la vez puede pasarse del limite
+        // de sesiones NVDEC/VAAPI concurrentes de la GPU.
+        VLCBasePlayer m_Player{ 2, false, false };
         bool m_IsActive = false;
 
         std::filesystem::path GetAppDir() {

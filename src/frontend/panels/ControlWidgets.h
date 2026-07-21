@@ -19,19 +19,24 @@ using DrawIconFn = void(*)(ImDrawList*, ImVec2 center, float radius, ImU32 col);
 ImVec4 ToVec4(ImU32 col);
 ImU32  ColA(ImU32 col, int a);
 ImVec4 Brighten(const ImVec4& c, float amount);
+ImVec4 LerpColor(const ImVec4& a, const ImVec4& b, float t);
+
+// ── Punto de estado con halo pulsante (para indicadores "en vivo") ─────────
+void DrawStatusDot(ImDrawList* dl, ImVec2 center, float r, ImU32 col, bool pulse = false);
 
 // ── Boton de icono vectorial (reemplaza al viejo ThemeIconButton basado en
 //    texturas: los iconos se dibujan directo con ImDrawList, nitidos a
-//    cualquier tamano/DPI) ─────────────────────────────────────────────────
+//    cualquier tamano/DPI). Anima el hover/press con un lerp suave. ────────
 bool VectorIconButton(const char* id, DrawIconFn drawIcon, const char* tooltip,
                       ImVec2 size, ImVec4 bgColor, ImVec4 hoverColor,
                       ImVec4 activeColor, ImVec4 iconColor, bool toggledOn = false);
 
-// ── Boton grande de accion: icono a la izquierda (en un cuadro del alto del
-//    boton) + label — usado para "Iniciar/Detener Proyeccion",
-//    "Activar/Detener Stage", etc. ─────────────────────────────────────────
+// ── Boton grande de accion: icono + label centrados en una capsula, con
+//    hover animado y brillo pulsante opcional (halo) para estados "activos"
+//    — usado para "Iniciar/Detener Proyeccion", "Activar/Detener Stage". ───
 bool IconLabelButton(const char* id, const char* label, DrawIconFn icon, ImVec2 size,
-                     ImVec4 bgColor, ImVec4 hoverColor, ImVec4 activeColor, ImVec4 textColor);
+                     ImVec4 bgColor, ImVec4 hoverColor, ImVec4 activeColor, ImVec4 textColor,
+                     bool pulseGlow = false);
 
 // ── Iconos (convencion centro+radio, igual que LPDrawIconFn en LayersTheme.h) ─
 namespace ControlIcons {

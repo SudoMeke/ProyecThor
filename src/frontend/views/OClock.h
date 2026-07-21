@@ -58,6 +58,17 @@ public:
 
     void Render(GlassRenderer& glass);
 
+    // ── API publica para paneles externos (ej. ViewPanel > "Limpiar reloj") ──
+    // true mientras este transmitiendo a la pantalla principal y/o LAN (ver
+    // m_TransmitMode) — independiente de si el cronometro esta corriendo o
+    // en pausa, que es un concepto distinto (m_IsRunning).
+    bool IsLive() const { return m_TransmitMode != OClockTransmitMode::Off; }
+
+    // Saca el reloj de pantalla (m_TransmitMode = Off). La proxima Update()
+    // ya limpia el quick note principal/LAN via el diff wasMain/wasLAN que
+    // hace SyncTransmission — no hace falta tocar nada mas aca.
+    void StopTransmitting() { m_TransmitMode = OClockTransmitMode::Off; }
+
 private:
     void Start(int minutes, int seconds);
     void Stop();

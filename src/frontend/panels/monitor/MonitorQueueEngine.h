@@ -9,6 +9,10 @@ enum class QueueState { Stopped, Playing };
 // Motor de la cola. Regla unica: al reproducirse, recorre TODOS los items
 // en orden, uno por uno, sin loops y sin repetir ninguno. El avance es
 // estrictamente por evento (VLC reporta fin de clip), nunca por tiempo.
+// Arranque directo, sin preflight (el primer item se carga como cualquier
+// otro). Mientras un item reproduce, se precarga el siguiente en segundo
+// plano (ver Update()/PreloadNextIfNeeded) para que la transicion entre
+// clips sea un corte instantaneo.
 class MonitorQueueEngine {
 public:
     void Load();
@@ -58,6 +62,24 @@ private:
     QueueState m_State         = QueueState::Stopped;
     float      m_Volume        = 0.8f;
     bool       m_Muted         = false;
+
+    // Cuenta errores reales (codec/archivo corrupto) seguidos que hizo
+    // avanzar la cola sin que hubiera un fin de clip normal de por medio.
+    // Si toda la cola esta rota, evita girar en silencio para siempre.
+    int        m_ConsecutiveErrors = 0;
+
+    // true una vez que ya se intento precargar el SIGUIENTE item para el
+    // m_CurrentIndex actual (ver Update()/PreloadNextIfNeeded) — evita
+    // reintentar el prefetch en cada frame despues del primer intento
+    // exitoso. Se resetea a false cada vez que PlayIndex() cambia de item.
+    bool       m_PrefetchedForCurrent = false;
+
+    // Busca, desde fromIndexInclusive en adelante, la ruta del primer item
+    // valido (mismo criterio "sin ruta = se omite" que PlayIndex) sin
+    // mutar ningun estado — usado para saber que precargar. "" si no
+    // queda ningun item valido en lo que resta de la cola.
+    std::string FindNextValidPath(int fromIndexInclusive) const;
+    void        PreloadNextIfNeeded();
 };
 
 } // namespace ProyecThor::UI

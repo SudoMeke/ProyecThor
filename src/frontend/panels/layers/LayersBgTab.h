@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <imgui.h>
 #include "../BackgroundsPanel.h"
+#include "backend/core/ThumbnailWorker.h"
 
 namespace ProyecThor::UI {
 
@@ -38,8 +39,22 @@ private:
     float m_ContentFade = 1.0f;
 
     // ── Thumbnails ────────────────────────────────────────────────────────────
+    // Las miniaturas de video se generan en 2do plano (ThumbnailWorker, sin
+    // abrir ninguna ventana) y se cachean en disco — solo se regeneran la
+    // primera vez que se ve cada video, nunca en sesiones siguientes.
     std::unordered_map<std::string, ImTextureID> m_ThumbnailCache;
+    Core::ThumbnailWorker                        m_ThumbWorker;
     ImTextureID GetThumbnail(const std::string& path, bool isVideo);
+    void        DrainThumbnailResults(); // llamar una vez por frame desde Render()
+
+    // ── Preview al mantener presionado ───────────────────────────────────────
+    // Mientras el usuario mantiene el click sobre una tarjeta/fila, se
+    // muestra en grande (sin aplicarlo) para que pueda verlo antes de
+    // soltar. Se recalcula cada frame en RenderContentArea (se limpia al
+    // empezar y la tarjeta/fila activa lo vuelve a fijar si sigue presionada).
+    std::string m_HeldPreviewPath;
+    bool        m_HeldPreviewIsVideo = false;
+    void RenderHoldPreview();
 
     // ── Vistas ────────────────────────────────────────────────────────────────
     bool  m_GridMode  = true;

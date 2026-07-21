@@ -35,12 +35,12 @@ static bool GlassIconButton(const char* id,
                              const char* fallbackGlyph,
                              const char* tooltip,
                              ImVec2      size,
-                             ImVec4      tint = ImVec4(0.80f, 0.84f, 0.96f, 1.0f))
+                             ImVec4      tint = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary))
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.09f, 0.10f, 0.19f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.18f, 0.32f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.19f, 0.24f, 0.42f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
     ImGui::PushStyleColor(ImGuiCol_Text,          tint);
 
     auto it = StyleGeneralApp::Icons.find(iconKey);

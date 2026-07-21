@@ -3,6 +3,7 @@
 #include <imgui_internal.h>
 #include <algorithm>
 #include <cmath>
+#include "DesignSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersTheme — paleta de colores y widgets compartidos por todos los tabs
@@ -228,18 +229,12 @@ inline void LPDrawRefresh(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
 }
 
 // ── Slider compacto para controlar el zoom de las miniaturas (grid) ────────
+// Antes: ImGui::SliderFloat con estilos pisados (barra gruesa, y encima con
+// el acento violeta-azul de LP::Accent, que ya no combina con el tema gris
+// del resto de la app). Ahora rutea a DS::ModernSlider (track fino + thumb
+// circular animado) con los tokens grises de DS::.
 inline bool LPZoomSlider(const char* id, float* zoom, float minZ, float maxZ, float width) {
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        LP::Surface1);
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, LP::Surface2);
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  LP::Surface2);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       LP::Accent);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, LP::AccentHov);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding,  8.0f);
-    ImGui::SetNextItemWidth(width);
-    bool changed = ImGui::SliderFloat(id, zoom, minZ, maxZ, "");
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(5);
+    bool changed = ProyecThor::UI::DS::ModernSlider(id, zoom, minZ, maxZ, width);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("Tamano de las miniaturas");
     return changed;

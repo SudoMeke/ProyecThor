@@ -2,20 +2,23 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <atomic>
-#include <thread>
 #include <imgui.h>
+#include "backend/core/MacroTypes.h"
 
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  LayersOverlayTab — galeria de Overlays guardados. La CREACION/edicion de
-//  overlays vive en FoudreVue (app hermana, open source, editor profesional
-//  de overlays con Pexels/rotacion/etc — ver /FoudreVue en el repo). Esta
-//  pestana en ProyecThor solo consume overlays ya renderizados: los muestra,
-//  permite proyectarlos (click = fondo, igual que un Fondo comun) y ofrece
-//  importar el paquete portable que FoudreVue exporta (ver ImportBundle) —
-//  el mismo patron de interoperabilidad "tipo Adobe" entre apps de una suite.
+//  LayersOverlayTab — dos modos:
+//   - Galeria: overlays estaticos (.png), propios o leidos automaticamente
+//     de la carpeta de datos de FoudreVue si esta instalado (sigue siendo
+//     posible generarlos ahi, pero ya no hay boton para abrir/instalar
+//     FoudreVue ni para importar un paquete a mano — solo auto-deteccion).
+//   - Macros: secuencias de cues con tiempo (fondo/overlay/estilo de
+//     reloj/texto) que se ejecutan en orden al reproducir, tipo "playlist
+//     de comandos" (ver backend/core/MacroTypes.h). La reproduccion en si
+//     vive en PresentationCore (PlayMacro/NextMacroCue/...), no aca, para
+//     que el transporte "Control Overlays" de ViewPanel controle el mismo
+//     macro que se dispara desde este editor.
 // ─────────────────────────────────────────────────────────────────────────────
 class LayersOverlayTab {
 public:
@@ -58,28 +61,40 @@ private:
     std::string ResolvePngPath(const std::string& name);
     bool CopyExternalToMine(const OverlayEntry& e);
 
-    // "Abrir FoudreVue" (o instalar si no esta) e "Importar overlay..." (lee
-    // un paquete .foudrevue exportado — solo el render.png, sin depender de
-    // parsear el recipe.json interno de FoudreVue).
-    void OpenOrOfferFoudreVue();
-    void ImportBundle();
+    // ── Modo: Galeria / Macros ───────────────────────────────────────────
+    enum class TabMode { Gallery, Macros };
+    TabMode m_Mode = TabMode::Gallery;
 
-    // ── Modal de descarga cuando FoudreVue no esta instalado ────────────
-    // Chequea la ultima release por canal (estable/beta) contra el repo de
-    // GitHub y ofrece abrir esa release en el navegador (ver GitHubRelease.h
-    // y la decision de no auto-instalar un binario cuyo formato todavia no
-    // esta definido, ya que FoudreVue no tiene releases publicados aun).
-    enum class FvCheckStatus { Idle, Checking, Found, NoReleases, Error };
+    // ── Macros ────────────────────────────────────────────────────────────
+    // La reproduccion (Play/Stop/Next/Prev) vive en PresentationCore, no
+    // aca — este editor solo arma/persiste el Macro y le pide a
+    // PresentationCore que lo reproduzca.
+    std::vector<std::string> m_MacroNames;
+    bool                     m_MacrosLoaded = false;
+    Core::Macro              m_EditingMacro;
+    bool                     m_HasEditingMacro = false;
+    int                      m_EditingCueIndex = -1; // -1 = ninguno (formulario "agregar")
 
-    bool                          m_ShowFoudreVueModal = false;
-    std::atomic<FvCheckStatus>    m_FvStatus{ FvCheckStatus::Idle };
-    std::string                  m_FvVersion;
-    std::string                  m_FvHtmlUrl;
-    std::string                  m_FvPublishedAt;
-    std::thread                  m_FvThread;
+    void ReloadMacroList();
+    void RenderMacrosBrowser();
+    void RenderMacroEditor();
+    void RenderCueForm();
+    void NewMacro();
+    void OpenMacro(const std::string& name);
+    void SaveEditingMacro();
 
-    void StartFoudreVueCheck();
-    void RenderFoudreVueDownloadModal();
+    // Macros como tarjetas reproducibles DENTRO de la Galeria (ademas de la
+    // lista de RenderMacrosBrowser en la pestaña Macros, que ahora es solo
+    // para editar) — mismo esqueleto visual que RenderCard/RenderRow.
+    void RenderMacroCard(const std::string& macroName, float cardW, float cardH, int col, int cols);
+    void RenderMacroRow(const std::string& macroName, float panelW, float rowH);
+
+    // Path de imagen usado como thumbnail de una tarjeta de macro (primer
+    // cue ChangeBackground/SetOverlay con imagen), "" si no hay ninguno.
+    // Cacheado por nombre para no hacer LoadMacro() (lee+parsea JSON) en
+    // cada frame por cada tarjeta visible — se invalida en ReloadMacroList().
+    std::unordered_map<std::string, std::string> m_MacroThumbPathCache;
+    std::string ResolveMacroThumbPath(const std::string& macroName);
 };
 
 } // namespace ProyecThor::UI

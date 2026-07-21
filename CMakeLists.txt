@@ -7,6 +7,17 @@ project(ProyecThor
     LANGUAGES C CXX
 )
 
+# Sin esto, CMake no aplica ninguna optimizacion por defecto (equivale a
+# -O0): el binario resultante corre notablemente mas lento en PCs de bajos
+# recursos. Quien necesite un build de debug puede seguir pasando
+# -DCMAKE_BUILD_TYPE=Debug explicitamente.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O2)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -35,6 +46,21 @@ FetchContent_Declare(
     GIT_TAG 0.9.9.8
 )
 FetchContent_MakeAvailable(glm)
+
+# ── 1b. FOUDREVUE (app hermana, editor de overlays) ──────────────────────────
+# Vive como submodulo en la raiz (carpeta FoudreVue/, repo propio en
+# github.com/TheVixcho/FoudreVue). Se compila junto a ProyecThor como un
+# ejecutable aparte (target "FoudreVue"), no como libreria: cada app sigue
+# siendo standalone, solo comparten build system para facilitar desarrollo
+# en conjunto ("git submodule update --remote FoudreVue" trae los ultimos
+# cambios de la app hermana).
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FoudreVue/CMakeLists.txt")
+    add_subdirectory(FoudreVue)
+else()
+    message(WARNING
+        "FoudreVue/ no encontrado o vacio — corre 'git submodule update --init "
+        "--recursive' para traer el codigo de la app hermana.")
+endif()
 
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")

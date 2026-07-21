@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
+#include <functional>
 #include "stb_image.h"
 
 namespace fs = std::filesystem;
@@ -62,14 +63,6 @@ static fs::path BgRootDir() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers locales
 // ─────────────────────────────────────────────────────────────────────────────
-#ifdef _WIN32
-static std::wstring ToWide(const std::string& s) {
-    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
-    std::wstring r(n, 0);
-    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &r[0], n);
-    return r;
-}
-#endif
 static bool IsMedia(const std::string& ext) {
     return ext==".mp4"||ext==".mkv"||ext==".avi"||ext==".mov"
           ||ext==".jpg"||ext==".jpeg"||ext==".png";
@@ -78,55 +71,39 @@ static bool IsImage(const std::string& ext) {
     return ext==".jpg"||ext==".jpeg"||ext==".png";
 }
 
+// Cuanto hay que mantener presionado antes de que cuente como "hold" (mostrar
+// preview) en vez de un click normal. Ver RenderBgCard/RenderBgRow/RenderHoldPreview.
+static constexpr float kHoldPreviewThreshold = 0.18f;
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Thumbnails
 // ─────────────────────────────────────────────────────────────────────────────
-#ifdef _WIN32
-static ImTextureID LoadVideoThumb(const std::string& path) {
-    CoInitialize(nullptr);
-    std::wstring wp = ToWide(path);
-    IShellItemImageFactory* f = nullptr;
-    if (FAILED(SHCreateItemFromParsingName(wp.c_str(), nullptr, IID_PPV_ARGS(&f)))) return 0;
-    SIZE sz = {256, 256};
-    HBITMAP hbm = nullptr;
-    f->GetImage(sz, SIIGBF_RESIZETOFIT, &hbm);
-    f->Release();
-    if (!hbm) return 0;
+static ImTextureID LoadImageThumb(const char* path);
 
-    BITMAP bm; GetObject(hbm, sizeof(bm), &bm);
-    HDC hdc = GetDC(nullptr);
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = bm.bmWidth;
-    bmi.bmiHeader.biHeight = -bm.bmHeight;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    std::vector<unsigned char> px(bm.bmWidth * bm.bmHeight * 4);
-    GetDIBits(hdc, hbm, 0, bm.bmHeight, px.data(), &bmi, DIB_RGB_COLORS);
-    ReleaseDC(nullptr, hdc);
-    DeleteObject(hbm);
-    for (size_t i = 0; i < px.size(); i += 4) { std::swap(px[i], px[i+2]); px[i+3]=255; }
+// Miniaturas de video: se generan en 2do plano via ThumbnailWorker (ver
+// backend/core/ThumbnailWorker.h) — decodifica el primer frame real con
+// libVLC en modo callback puro, asi que nunca abre una ventana propia (a
+// diferencia de pedirle a libVLC un snapshot con salida de video por
+// defecto, que si la abre). El resultado se cachea en disco en
+// ThumbCacheDir(), asi que solo se paga el costo de decodificar una vez por
+// video en la vida de la instalacion, no en cada sesion de la app.
+static fs::path ThumbCacheDir() {
+    fs::path dir = GetAppDataDir() / "thumbnails";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    return dir;
+}
 
-    GLuint tex; glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bm.bmWidth, bm.bmHeight,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
-    return (ImTextureID)(intptr_t)tex;
+// Hash de path+tamaño (no solo path): si el archivo se reemplaza por otro
+// con el mismo nombre pero distinto contenido/tamaño, se regenera en vez de
+// mostrar para siempre la miniatura vieja.
+static std::string ThumbCachePathFor(const std::string& absVideoPath) {
+    std::error_code ec;
+    auto sz = fs::file_size(absVideoPath, ec);
+    size_t h = std::hash<std::string>{}(absVideoPath + "|" + std::to_string(ec ? 0 : sz));
+    return (ThumbCacheDir() / (std::to_string(h) + ".png")).string();
 }
-#else
-static ImTextureID LoadVideoThumb(const std::string& /*path*/) {
-    // No existe en Linux un generador de miniaturas de video equivalente al
-    // Shell de Windows sin depender de librerias externas (ffmpeg, GStreamer,
-    // etc.). Se devuelve 0 y la tarjeta/fila correspondiente cae en el
-    // dibujo de icono generico "VID" que ya contempla el codigo de render.
-    return 0;
-}
-#endif
+
 static ImTextureID LoadImageThumb(const char* path) {
     int w, h, n;
     unsigned char* d = stbi_load(path, &w, &h, &n, 4);
@@ -145,10 +122,59 @@ static ImTextureID LoadImageThumb(const char* path) {
 ImTextureID LayersBgTab::GetThumbnail(const std::string& path, bool isVideo) {
     auto it = m_ThumbnailCache.find(path);
     if (it != m_ThumbnailCache.end()) return it->second;
+
     std::string abs = fs::absolute(fs::path(path)).string();
-    ImTextureID t = isVideo ? LoadVideoThumb(abs) : LoadImageThumb(abs.c_str());
-    m_ThumbnailCache[path] = t;
-    return t;
+
+    if (!isVideo) {
+        ImTextureID t = LoadImageThumb(abs.c_str());
+        m_ThumbnailCache[path] = t;
+        return t;
+    }
+
+    // Video: si ya se genero en una sesion anterior, esta en el cache de
+    // disco — cargarlo de ahi es instantaneo (es una imagen mas, via
+    // LoadImageThumb) y no necesita tocar el worker para nada.
+    std::string cachePath = ThumbCachePathFor(abs);
+    std::error_code ec;
+    if (fs::exists(cachePath, ec)) {
+        ImTextureID t = LoadImageThumb(cachePath.c_str());
+        if (t) { m_ThumbnailCache[path] = t; return t; }
+    }
+
+    // Todavia no existe: se pide en 2do plano (ThumbnailWorker, sin abrir
+    // ninguna ventana ni trabar la UI) y por ahora se deja SIN entrar en
+    // m_ThumbnailCache — asi el proximo frame vuelve a preguntar y, cuando
+    // el worker termine, DrainThumbnailResults() ya habra puesto el
+    // resultado real ahi. Mientras tanto la tarjeta cae en el icono
+    // generico "VID" (texture id 0).
+    m_ThumbWorker.Request(path, abs, cachePath);
+    return 0;
+}
+
+// Llamar una vez por frame desde Render(): sube a textura GL los frames que
+// el worker haya terminado de decodificar desde el ultimo frame.
+void LayersBgTab::DrainThumbnailResults() {
+    std::vector<Core::ThumbnailWorker::Result> results;
+    m_ThumbWorker.DrainResults(results);
+    for (auto& r : results) {
+        ImTextureID t = 0;
+        if (!r.pixels.empty() && r.width > 0 && r.height > 0) {
+            GLuint tex; glGenTextures(1, &tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(r.width),
+                         static_cast<GLsizei>(r.height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                         r.pixels.data());
+            t = (ImTextureID)(intptr_t)tex;
+        }
+        // Si fallo (t == 0) igual lo dejamos en el cache: evita reintentar
+        // sin fin un archivo que no se puede decodificar, se queda con el
+        // icono generico "VID".
+        m_ThumbnailCache[r.key] = t;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -703,8 +729,22 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
         ImGui::EndDragDropSource();
     }
 
+    // Mantener presionado (mas de kHoldPreviewThreshold sin soltar) = mostrar
+    // el preview grande. Mientras se muestra el preview, soltar NO aplica el
+    // fondo (el usuario solo estaba mirando) — aplicar sigue pasando nada
+    // mas con un click corto (ver kHoldPreviewThreshold y MouseDownDurationPrev).
+    if (!wasDragged && ImGui::IsItemActive()
+        && ImGui::GetIO().MouseDownDuration[ImGuiMouseButton_Left] >= kHoldPreviewThreshold) {
+        m_HeldPreviewPath    = e.fullPath;
+        m_HeldPreviewIsVideo = !e.isImage;
+    }
+
     if (!wasDragged && !m_JustEnteredFolder
-        && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left)
+        && ImGui::GetIO().MouseDownDurationPrev[ImGuiMouseButton_Left] < kHoldPreviewThreshold)
+        // allowAudio=false: esta pestaña es "Fondos" (loops decorativos),
+        // nunca deben sonar. Solo "Enviar al monitor" (LibraryVideos) y la
+        // cola del Monitor pasan allowAudio=true — este tab no es eso.
         Core::PresentationCore::Get().SetBackgroundMedia(e.fullPath, !e.isImage, /*allowAudio=*/false);
 
     if (ImGui::BeginPopupContextItem(("BgCtx_"+e.fullPath).c_str())) {
@@ -773,8 +813,18 @@ void LayersBgTab::RenderBgRow(const BgEntry& e, float W, float rowH) {
         ImGui::EndDragDropSource();
     }
 
+    if (!wasDragged && ImGui::IsItemActive()
+        && ImGui::GetIO().MouseDownDuration[ImGuiMouseButton_Left] >= kHoldPreviewThreshold) {
+        m_HeldPreviewPath    = e.fullPath;
+        m_HeldPreviewIsVideo = !e.isImage;
+    }
+
     if (!wasDragged && !m_JustEnteredFolder
-        && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left)
+        && ImGui::GetIO().MouseDownDurationPrev[ImGuiMouseButton_Left] < kHoldPreviewThreshold)
+        // allowAudio=false: esta pestaña es "Fondos" (loops decorativos),
+        // nunca deben sonar. Solo "Enviar al monitor" (LibraryVideos) y la
+        // cola del Monitor pasan allowAudio=true — este tab no es eso.
         Core::PresentationCore::Get().SetBackgroundMedia(e.fullPath, !e.isImage, /*allowAudio=*/false);
 
     if (ImGui::BeginPopupContextItem(("BgRowCtx_"+e.fullPath).c_str())) {
@@ -790,6 +840,10 @@ void LayersBgTab::RenderBgRow(const BgEntry& e, float W, float rowH) {
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersBgTab::RenderContentArea(float w, float h) {
     (void)h;
+    // Se limpia al empezar el frame; si alguna tarjeta/fila sigue con el
+    // mouse presionado, se vuelve a fijar mas abajo (ver RenderBgCard/Row).
+    m_HeldPreviewPath.clear();
+
     std::vector<const BgEntry*> files;
     for (const auto& bg : m_AllBackgrounds) if (bg.folder == m_CurrentBgFolder) files.push_back(&bg);
 
@@ -817,19 +871,17 @@ void LayersBgTab::RenderContentArea(float w, float h) {
         float availWidth = w;
         int cols = std::max(1, static_cast<int>((availWidth + minGap) / (cW + minGap)));
 
-        float totalGaps = static_cast<float>(cols - 1);
-        float dynamicGap = minGap;
-        if (totalGaps > 0) {
-            float extraSpace = availWidth - (cols * cW);
-            dynamicGap = std::max(minGap, extraSpace / totalGaps);
-        }
-
+        // Gap fijo entre tarjetas: antes se estiraba para repartir TODO el
+        // ancho sobrante de la fila entre los huecos ya dibujados, asi que
+        // con pocos archivos (fila incompleta) el espacio entre tarjetas se
+        // inflaba muchisimo. El sobrante ahora queda como margen libre a la
+        // derecha/abajo, que es lo esperable en una grilla con pocos items.
         int currentCol = 0;
         for (size_t i = 0; i < files.size(); ++i) {
             RenderBgCard(*files[i], cW, cH, currentCol, cols);
             currentCol++;
             if (currentCol < cols) {
-                ImGui::SameLine(0.0f, dynamicGap);
+                ImGui::SameLine(0.0f, minGap);
             } else {
                 currentCol = 0;
                 ImGui::Dummy({0.0f, minGap});
@@ -842,15 +894,69 @@ void LayersBgTab::RenderContentArea(float w, float h) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Preview grande al mantener presionado — se dibuja centrado sobre la
+//  ventana actual del tab con el foreground draw list (no abre una ventana
+//  ImGui nueva: bajo ImGuiConfigFlags_ViewportsEnable, ese Begin/End termina
+//  creando su propia ventana de plataforma y no se ve de forma confiable).
+//  Solo existe mientras m_HeldPreviewPath no este vacio (ver reset en
+//  RenderContentArea y set en RenderBgCard/RenderBgRow). No aplica el fondo:
+//  eso sigue pasando solo con un click corto, ver kHoldPreviewThreshold.
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersBgTab::RenderHoldPreview() {
+    if (m_HeldPreviewPath.empty()) return;
+
+    ImTextureID thumb = GetThumbnail(m_HeldPreviewPath, m_HeldPreviewIsVideo);
+
+    ImVec2 winPos = ImGui::GetWindowPos();
+    ImVec2 winSz  = ImGui::GetWindowSize();
+    ImVec2 center(winPos.x + winSz.x * 0.5f, winPos.y + winSz.y * 0.5f);
+
+    ImVec2 sz(std::min(480.0f, winSz.x * 0.7f), 0.0f);
+    sz.y = std::min(sz.x * 9.0f / 16.0f, winSz.y * 0.7f);
+    ImVec2 p0 = { center.x - sz.x * 0.5f, center.y - sz.y * 0.5f };
+    ImVec2 p1 = { center.x + sz.x * 0.5f, center.y + sz.y * 0.5f };
+
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    dl->AddRectFilled({p0.x-4.0f, p0.y-4.0f}, {p1.x+4.0f, p1.y+4.0f}, IM_COL32(6,6,9,235), 14.0f);
+    if (thumb) {
+        dl->AddImageRounded(thumb, p0, p1, {0,0}, {1,1}, IM_COL32_WHITE, 10.0f);
+    } else {
+        // Sin miniatura todavia (se esta generando en 2do plano, o no se
+        // pudo decodificar el video): mismo fallback que la tarjeta chica.
+        dl->AddRectFilled(p0, p1, LPU32(LP::Surface1), 10.0f);
+        const char* lbl = m_HeldPreviewIsVideo ? "VID" : "IMG";
+        ImVec2 ts = ImGui::CalcTextSize(lbl);
+        dl->AddText({p0.x + (sz.x-ts.x)*0.5f, p0.y + (sz.y-ts.y)*0.5f}, LPU32(LP::TextMuted), lbl);
+    }
+    dl->AddRect(p0, p1, LPU32(LP::BorderHov), 10.0f, 0, 1.5f);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Render principal del tab — layout horizontal tipo ProPresenter:
 //  sidebar de carpetas a la izquierda + contenido al centro.
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersBgTab::Render() {
+    // Subir a textura GL las miniaturas de video que el worker en 2do plano
+    // haya terminado de decodificar desde el frame anterior — tiene que
+    // pasar por aca (hilo con contexto GL), no por el worker.
+    DrainThumbnailResults();
+
     // Limpiar flag de proteccion contra autoclick UNA vez al inicio del frame
     m_JustEnteredFolder = false;
     m_ContentFade = LPApproach(m_ContentFade, 1.0f, 9.0f);
 
     RenderTopBar();
+
+    // Aviso chico y no-bloqueante: mientras el worker todavia tiene videos
+    // por decodificar, se avisa sin frenar nada (las tarjetas ya visibles
+    // siguen andando, esto es solo informativo).
+    if (size_t pending = m_ThumbWorker.PendingCount(); pending > 0) {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
+        ImGui::Text("Generando miniaturas... (%zu restantes)", pending);
+        ImGui::PopStyleColor();
+    }
+
     ImGui::Spacing();
     LPSeparatorLine();
 
@@ -877,6 +983,8 @@ void LayersBgTab::Render() {
     RenderContentArea(ImGui::GetContentRegionAvail().x, totalH);
     ImGui::PopStyleVar();
     ImGui::EndChild();
+
+    RenderHoldPreview();
 
     // Modales (abrir popups debe ir fuera de los InvisibleButtons)
     RenderCreateFolderModal();

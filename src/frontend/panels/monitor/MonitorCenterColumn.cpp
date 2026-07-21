@@ -45,7 +45,10 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
         auto sel = Core::PresentationCore::Get().PeekSelection();
         if (!sel.title.empty())
         {
-            Core::PresentationCore::Get().StopBackgroundMedia();
+            // FIX: sin Stop() previo (corte a negro) — SetVideo() ya
+            // maneja carga en frio o crossfade, y el guard de reentrancia
+            // en Play() necesita que no se le limpie la ruta actual en
+            // cada click repetido de "TRANSMITIR".
             std::string finalPath = sel.title;
             if (finalPath.rfind("http", 0) != 0)
                 finalPath = VideosPath() + finalPath;
@@ -58,7 +61,7 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
             Core::PresentationCore::Get().SetLiveVolume(
                 m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
 
-            Core::PresentationCore::Get().SetBackgroundMedia(finalPath, true);
+            Core::PresentationCore::Get().SetBackgroundMedia(finalPath, true, /*allowAudio=*/true);
             Core::PresentationCore::Get().SetProjecting(true);
             m_LivePlaying = true;
 
@@ -76,16 +79,21 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + spacing);
 
     // ── LOOP ──────────────────────────────────────────────────────────────────
+    // El estado vive en PresentationCore (GetLiveLoop/SetLiveLoop) en vez de
+    // un bool local: el enforcement (auto-restart al llegar al final) ahora
+    // corre en ViewPanel::RenderLiveTransport, junto al resto de los
+    // controles del player "general" — este boton y ese enforcement
+    // necesitan ver el mismo flag aunque vivan en clases distintas.
+    bool loopEnabled = Core::PresentationCore::Get().GetLiveLoop();
     ImGui::SetCursorPosX(hPad);
-    ImVec4 loopBase = m_LoopEnabled ? MT::k_AmberBtn    : MT::k_NeutBtn;
-    ImVec4 loopHov  = m_LoopEnabled ? MT::k_AmberBtnHov : MT::k_NeutBtnHov;
-    ImVec4 loopAct  = m_LoopEnabled ? MT::k_AmberBtnAct : MT::k_NeutBtnAct;
+    ImVec4 loopBase = loopEnabled ? MT::k_AmberBtn    : MT::k_NeutBtn;
+    ImVec4 loopHov  = loopEnabled ? MT::k_AmberBtnHov : MT::k_NeutBtnHov;
+    ImVec4 loopAct  = loopEnabled ? MT::k_AmberBtnAct : MT::k_NeutBtnAct;
 
     ImGui::PushID("btn_loop");
-    // Pasamos m_LoopEnabled para mantener el estado "activo" visualmente hundido si es necesario
-    if (DrawIconButton("repeat", 18.0f, loopBase, loopHov, loopAct, { btnW, loopH }, m_LoopEnabled))
+    if (DrawIconButton("repeat", 18.0f, loopBase, loopHov, loopAct, { btnW, loopH }, loopEnabled))
     {
-        m_LoopEnabled = !m_LoopEnabled;
+        Core::PresentationCore::Get().SetLiveLoop(!loopEnabled);
     }
     ImGui::PopID();
 

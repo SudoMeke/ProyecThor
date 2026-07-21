@@ -1,4 +1,6 @@
 #include "TransitionPanel.h"
+#include "backend/core/PresentationCore.h"
+#include "DesignSystem.h"
 #include <imgui.h>
 #include <cfloat>
 #include <cmath>
@@ -7,6 +9,54 @@
 #include "UIStrings.h"
 
 namespace ProyecThor::UI {
+
+// =============================================================================
+//  Nombre <-> tipo — ver TransitionPanel.h. Nombres estables en ingles (no
+//  las etiquetas traducidas de RenderContent), usados para persistir la
+//  eleccion de transicion de un MacroCue.
+// =============================================================================
+const char* TransitionTypeToName(TransitionType t)
+{
+    switch (t) {
+        case TransitionType::None:         return "None";
+        case TransitionType::Fade:         return "Fade";
+        case TransitionType::ZoomIn:       return "ZoomIn";
+        case TransitionType::ZoomOut:      return "ZoomOut";
+        case TransitionType::SlideLeft:    return "SlideLeft";
+        case TransitionType::SlideRight:   return "SlideRight";
+        case TransitionType::SlideUp:      return "SlideUp";
+        case TransitionType::SlideDown:    return "SlideDown";
+        case TransitionType::CoverLeft:    return "CoverLeft";
+        case TransitionType::CoverRight:   return "CoverRight";
+        case TransitionType::CoverUp:      return "CoverUp";
+        case TransitionType::CoverDown:    return "CoverDown";
+        case TransitionType::UncoverLeft:  return "UncoverLeft";
+        case TransitionType::UncoverRight: return "UncoverRight";
+        case TransitionType::UncoverUp:    return "UncoverUp";
+        case TransitionType::UncoverDown:  return "UncoverDown";
+    }
+    return "None";
+}
+
+TransitionType TransitionTypeFromName(const std::string& name)
+{
+    if (name == "Fade")         return TransitionType::Fade;
+    if (name == "ZoomIn")       return TransitionType::ZoomIn;
+    if (name == "ZoomOut")      return TransitionType::ZoomOut;
+    if (name == "SlideLeft")    return TransitionType::SlideLeft;
+    if (name == "SlideRight")   return TransitionType::SlideRight;
+    if (name == "SlideUp")      return TransitionType::SlideUp;
+    if (name == "SlideDown")    return TransitionType::SlideDown;
+    if (name == "CoverLeft")    return TransitionType::CoverLeft;
+    if (name == "CoverRight")   return TransitionType::CoverRight;
+    if (name == "CoverUp")      return TransitionType::CoverUp;
+    if (name == "CoverDown")    return TransitionType::CoverDown;
+    if (name == "UncoverLeft")  return TransitionType::UncoverLeft;
+    if (name == "UncoverRight") return TransitionType::UncoverRight;
+    if (name == "UncoverUp")    return TransitionType::UncoverUp;
+    if (name == "UncoverDown")  return TransitionType::UncoverDown;
+    return TransitionType::None;
+}
 
 // =============================================================================
 //  EaseInOut — curva suave para la transicion
@@ -21,12 +71,51 @@ float TransitionPanel::EaseInOut(float t)
 // =============================================================================
 //  Trigger / Update
 // =============================================================================
+void TransitionPanel::RestoreAfterOverrideIfNeeded()
+{
+    if (!m_HasSavedForOverride) return;
+    m_SelectedType        = m_SavedType;
+    m_Duration            = m_SavedDuration;
+    m_HasSavedForOverride = false;
+}
+
 void TransitionPanel::Trigger()
 {
-    if (m_SelectedType == TransitionType::None) return;
+    // Override puntual desde un MacroCue: pisa el tipo/duracion SOLO para
+    // esta transicion (ver RestoreAfterOverrideIfNeeded, llamado cuando
+    // termina). No toca la eleccion persistente del operador en este panel.
+    std::string ovName;
+    float       ovDuration = -1.0f;
+    if (Core::PresentationCore::Get().ConsumePendingTransitionOverride(ovName, ovDuration))
+    {
+        if (!m_HasSavedForOverride) {
+            m_SavedType           = m_SelectedType;
+            m_SavedDuration       = m_Duration;
+            m_HasSavedForOverride = true;
+        }
+        m_SelectedType = TransitionTypeFromName(ovName);
+        if (ovDuration > 0.0f) m_Duration = ovDuration;
+    }
+
+    if (m_SelectedType == TransitionType::None) {
+        RestoreAfterOverrideIfNeeded();
+        return;
+    }
     m_Elapsed  = 0.0f;
     m_Progress = 0.0f;
-    m_Active   = true;
+    // FIX: antes esto esperaba a que PresentationCore::IsBackgroundSwapPending()
+    // fuera false antes de arrancar el cronometro (pensado para cuando este
+    // Trigger() podia venir de un cambio de fondo/video). Ahora que
+    // Trigger() SOLO se llama por cambios de texto (ver UIManager::
+    // RenderAll(), que dispara esto desde textTransitionTrigger, no desde
+    // el trigger de fondo/video), no hay ningun swap de video del que
+    // depender — el texto siempre esta listo de inmediato. Esperar a un
+    // swap de fondo ajeno hacia que, si habia uno en curso, el texto NUEVO
+    // ya se mostrara instantaneo (correcto) pero luego, tarde, la animacion
+    // arrancara igual trayendo de vuelta el texto VIEJO como "saliente" —
+    // se veia como si la letra "se repitiera" o apareciera una letra sin
+    // relacion por un instante.
+    m_Active = true;
 }
 
 void TransitionPanel::Update(float dt)
@@ -41,6 +130,7 @@ void TransitionPanel::Update(float dt)
         m_Elapsed  = 0.0f;
         m_Progress = 1.0f;
         m_Active   = false;
+        RestoreAfterOverrideIfNeeded();
     }
 }
 
@@ -379,20 +469,10 @@ void TransitionPanel::RenderContent()
         ImGui::Spacing();
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(kTextDim));
-        ImGui::TextUnformatted("Duración de la transición");
+        ImGui::Text("Duración de la transición   %.2f s", m_Duration);
         ImGui::PopStyleColor();
 
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,          ImVec4(0.05f, 0.06f, 0.10f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,   ImVec4(0.08f, 0.09f, 0.14f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrab,       ImGui::ColorConvertU32ToFloat4(kAccent));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImGui::ColorConvertU32ToFloat4(kAccentLight));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-
-        ImGui::SliderFloat("##dur", &m_Duration, 0.1f, 3.0f, "%.2f Segundos");
-
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(4);
+        DS::ModernSlider("##dur", &m_Duration, 0.1f, 3.0f, -1.0f, kAccent);
 
         // Barra de progreso dibujada a mano, pegada directo al slider (sin
         // Spacing() intermedio) para que se lea como una sola unidad

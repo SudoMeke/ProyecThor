@@ -40,4 +40,12 @@ namespace ProyecThor {
     inline std::string BiblesPath()    { return GetAssetsPath() + "/bibles/";    }
     inline std::string DocumentsPath() { return GetAssetsPath() + "/documents/"; }
 
+    // Imagenes propias de la app (ej. el Logo de pantalla de carga, ver
+    // Ajustes > Proyeccion): igual que Fondos (LayersBgTab::BgRootDir), los
+    // archivos elegidos se COPIAN aca en vez de guardar la ruta externa tal
+    // cual — asi quedan junto con el resto de los datos de la app y no se
+    // rompen si el archivo original se mueve/borra/no existe en otra
+    // maquina.
+    inline std::string BrandingPath()  { return GetAssetsPath() + "/branding/";  }
+
 } // namespace ProyecThor

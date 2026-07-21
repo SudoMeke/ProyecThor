@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstring>
+#include <cstdlib>
 
 namespace fs = std::filesystem;
 namespace DS = ProyecThor::UI::DS;
@@ -54,12 +55,12 @@ static bool GlassIconButton(const char* id,
                              const char* fallbackGlyph,
                              const char* tooltip,
                              ImVec2      size,
-                             ImVec4      tint = ImVec4(0.80f, 0.84f, 0.96f, 1.0f))
+                             ImVec4      tint = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary))
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.09f, 0.10f, 0.19f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.18f, 0.32f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.19f, 0.24f, 0.42f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
     ImGui::PushStyleColor(ImGuiCol_Text,          tint);
 
     auto it = StyleGeneralApp::Icons.find(iconKey);
@@ -100,25 +101,35 @@ static bool GlassIconButton(const char* id,
 // =============================================================================
 static void ApplyDefaultStyleIfSet(LibraryContext& ctx)
 {
-    Core::ItemType itemType;
-    bool applies = false;
+    if (ctx.currentCategoryInt == kCat_Songs)
+    {
+        // Preset por cancion (ver tarjeta de ajustes en SongView) tiene
+        // prioridad sobre el viejo default de categoria completa; si la
+        // cancion no tiene nada guardado, cae al default anterior (por si
+        // quedo alguno seteado de antes de este cambio).
+        if (ctx.selectedIndex < 0 || ctx.selectedIndex >= (int)ctx.items.size()) return;
+        const std::string& filename = ctx.items[ctx.selectedIndex];
 
-    if (ctx.currentCategoryInt == kCat_Songs) {
-        itemType = Core::ItemType::Song;
-        applies  = true;
-    } else if (ctx.currentCategoryInt == kCat_Bibles) {
-        itemType = Core::ItemType::Bible;
-        applies  = true;
+        std::string style = GetSongStyle(filename);
+        if (style.empty())
+            style = Core::PresentationCore::Get().GetCategoryDefaultStyle(Core::ItemType::Song);
+        if (!style.empty())
+            ctx.applyStyle(style);
+
+        SongBackground bg = GetSongBackground(filename);
+        if (!bg.path.empty())
+            Core::PresentationCore::Get().SetBackgroundMedia(bg.path, bg.isVideo, false);
+
+        return;
     }
 
-    if (!applies) return;
-
-    std::string defaultStyle =
-        Core::PresentationCore::Get().GetCategoryDefaultStyle(itemType);
-
-    if (defaultStyle.empty()) return;
-
-    ctx.applyStyle(defaultStyle);
+    if (ctx.currentCategoryInt == kCat_Bibles)
+    {
+        std::string defaultStyle =
+            Core::PresentationCore::Get().GetCategoryDefaultStyle(Core::ItemType::Bible);
+        if (!defaultStyle.empty())
+            ctx.applyStyle(defaultStyle);
+    }
 }
 
 // =============================================================================
@@ -270,6 +281,114 @@ void SetSongTags(const std::string& filename, const std::vector<std::string>& ta
     for (const auto& [k, v] : map)
         f << k << "=" << v << "\n";
 }
+
+// =============================================================================
+//  Preset por cancion (estilo + fondo) — mismo patron ini que autores/tags.
+// =============================================================================
+static std::string SongStyleFilePath()
+{
+    return GetAssetsPath() + "/../songs_style.ini";
+}
+
+static std::string SongBackgroundFilePath()
+{
+    return GetAssetsPath() + "/../songs_background.ini";
+}
+
+static std::string StanzaColorsFilePath()
+{
+    return GetAssetsPath() + "/../songs_stanza_colors.ini";
+}
+
+// Reutiliza el mismo formato "clave=valor" linea por linea que autores/tags;
+// esto ya se repite 4 veces (autores, tags, estilo, fondo) asi que se
+// generaliza en un par de helpers genericos en vez de copiar el mismo
+// load/save por cuarta vez.
+static std::unordered_map<std::string, std::string> LoadKeyValueIni(const std::string& path)
+{
+    std::unordered_map<std::string, std::string> map;
+    std::ifstream f(U8Path(path));
+    if (!f.is_open()) return map;
+
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        auto sep = line.find('=');
+        if (sep == std::string::npos) continue;
+        map[line.substr(0, sep)] = line.substr(sep + 1);
+    }
+    return map;
+}
+
+static void SaveKeyValueIni(const std::string& path, const std::unordered_map<std::string, std::string>& map)
+{
+    std::ofstream f(U8Path(path));
+    if (!f.is_open()) return;
+    for (const auto& [k, v] : map)
+        f << k << "=" << v << "\n";
+}
+
+std::string GetSongStyle(const std::string& filename)
+{
+    auto map = LoadKeyValueIni(SongStyleFilePath());
+    auto it = map.find(filename);
+    return it != map.end() ? it->second : "";
+}
+
+void SetSongStyle(const std::string& filename, const std::string& styleName)
+{
+    auto map = LoadKeyValueIni(SongStyleFilePath());
+    if (styleName.empty()) map.erase(filename);
+    else                   map[filename] = styleName;
+    SaveKeyValueIni(SongStyleFilePath(), map);
+}
+
+SongBackground GetSongBackground(const std::string& filename)
+{
+    auto map = LoadKeyValueIni(SongBackgroundFilePath());
+    auto it = map.find(filename);
+    if (it == map.end() || it->second.size() < 2 || it->second[1] != ':') return {};
+
+    SongBackground bg;
+    bg.isVideo = (it->second[0] == '1');
+    bg.path    = it->second.substr(2);
+    return bg;
+}
+
+void SetSongBackground(const std::string& filename, const std::string& path, bool isVideo)
+{
+    auto map = LoadKeyValueIni(SongBackgroundFilePath());
+    if (path.empty()) map.erase(filename);
+    else              map[filename] = std::string(isVideo ? "1:" : "0:") + path;
+    SaveKeyValueIni(SongBackgroundFilePath(), map);
+}
+
+void ClearSongBackground(const std::string& filename)
+{
+    SetSongBackground(filename, "", false);
+}
+
+unsigned int GetStanzaColor(const std::string& filename, int stanzaIndex)
+{
+    auto map = LoadKeyValueIni(StanzaColorsFilePath());
+    auto it = map.find(filename + "#" + std::to_string(stanzaIndex));
+    if (it == map.end()) return 0u;
+    return static_cast<unsigned int>(std::strtoul(it->second.c_str(), nullptr, 16));
+}
+
+void SetStanzaColor(const std::string& filename, int stanzaIndex, unsigned int colorU32)
+{
+    auto map = LoadKeyValueIni(StanzaColorsFilePath());
+    std::string key = filename + "#" + std::to_string(stanzaIndex);
+    if (colorU32 == 0u) {
+        map.erase(key);
+    } else {
+        std::ostringstream oss;
+        oss << std::hex << colorU32;
+        map[key] = oss.str();
+    }
+    SaveKeyValueIni(StanzaColorsFilePath(), map);
+}
 // =============================================================================
 //  RenderPaneHeader
 //  Titulo discreto de columna del grid (Canciones / Playlists), con un
@@ -329,9 +448,8 @@ static bool SongListRow(const char* label, bool selected,
 
     // ── Fondo de seleccion / hover (igual que GlassListRow) ─────────────────
     if (selected) {
-        dl->AddRectFilledMultiColor(rMin, rMax,
-            IM_COL32( 99, 112, 255, 55), IM_COL32( 99, 112, 255, 38),
-            IM_COL32( 99, 112, 255, 30), IM_COL32( 99, 112, 255, 46));
+        // Plano: un solo tono en vez del degrade de 4 colores ("liquid glass").
+        dl->AddRectFilled(rMin, rMax, IM_COL32(99, 112, 255, 42));
 
         dl->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y), DS::RowSelectedBar, 1.5f);
 
@@ -363,36 +481,20 @@ static bool SongListRow(const char* label, bool selected,
 
 // =============================================================================
 //  RenderToolbarRow
-//  Fila superior con el combo de "Estilo por defecto" (si la categoria
-//  activa lo soporta) y el boton de actualizar la lista, siempre en la
-//  esquina derecha, con un poco de aire respecto al combo o al borde.
+//  Combo de "Estilo por defecto" a nivel de categoria — solo le queda a
+//  Biblias. En Canciones se saco: ahora cada cancion tiene su propio
+//  estilo/fondo preset (ver la tarjeta de ajustes en SongView), que
+//  reemplaza al default compartido por toda la categoria. El boton
+//  "Actualizar" ya no vive aca: se movio junto al buscador (ver
+//  RenderSideList), asi que esta fila directamente no dibuja nada fuera de
+//  Biblias.
 // =============================================================================
 static void RenderToolbarRow(LibraryContext& ctx)
 {
-    const float iconBtnW = DS::ButtonHeight;
-    const float sp       = 10.0f;
+    if (ctx.currentCategoryInt != kCat_Bibles)
+        return;
 
-    const bool hasCombo = (ctx.currentCategoryInt == kCat_Songs ||
-                           ctx.currentCategoryInt == kCat_Bibles);
-
-    if (hasCombo)
-    {
-        RenderDefaultStyleCombo(ctx, iconBtnW + sp);
-        ImGui::SameLine(0.f, sp);
-    }
-    else
-    {
-        // Sin combo en esta categoria: el boton igual se ubica en la
-        // esquina derecha para mantener el layout consistente entre
-        // categorias.
-        float avail  = ImGui::GetContentRegionAvail().x;
-        float target = ImGui::GetCursorPosX() + avail - iconBtnW;
-        if (target > ImGui::GetCursorPosX())
-            ImGui::SetCursorPosX(target);
-    }
-
-    if (GlassIconButton("refreshTop", "repeat", "R", "Actualizar", { iconBtnW, DS::ButtonHeight }))
-        ctx.refreshList();
+    RenderDefaultStyleCombo(ctx, 0.0f);
 }
 
 // =============================================================================
@@ -472,25 +574,35 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         else
         {
             // ── Header: boton volver + titulo + contador ────────────────────
-            // FIX: usa DS::GlassButton en vez de ImGui::SmallButton para
-            // mantener el mismo lenguaje visual que el resto del panel
-            // (mismo estilo que "Cancelar" en los modales de abajo).
-            if (DS::GlassButton("< Volver", { 110.f, 28.f }, DS::TextSecondary))
+            // FIX: antes titulo y contador se posicionaban con SameLine(rightX)
+            // en la misma linea; en paneles angostos ese calculo daba un
+            // rightX menor al cursor real (tras dibujar el titulo) y las dos
+            // etiquetas terminaban superpuestas ("2acanciones" ilegible).
+            // Ahora van en lineas separadas: siempre legibles sin importar
+            // el ancho disponible, y el titulo se trunca con "..." si no
+            // entra en vez de desbordar el panel.
+            if (DS::GlassButton("< Volver", { 90.f, 26.f }, DS::TextSecondary))
                 openPlaylist.clear();
 
-            ImGui::SameLine(0.f, 10.f);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.92f, 1.00f, 1.0f));
-            ImGui::TextUnformatted(openPlaylist.c_str());
-            ImGui::PopStyleColor();
+            ImGui::Spacing();
+
+            {
+                float maxTitleW = std::max(20.0f, ImGui::GetContentRegionAvail().x);
+                std::string title = openPlaylist;
+                if (ImGui::CalcTextSize(title.c_str()).x > maxTitleW)
+                {
+                    while (!title.empty() &&
+                          ImGui::CalcTextSize((title + "...").c_str()).x > maxTitleW)
+                        title.pop_back();
+                    title += "...";
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.92f, 1.00f, 1.0f));
+                ImGui::TextUnformatted(title.c_str());
+                ImGui::PopStyleColor();
+            }
 
             auto songs = ctx.loadPlaylistSongs(openPlaylist);
             std::string countLabel = std::to_string(songs.size()) + " canciones";
-            float countW = ImGui::CalcTextSize(countLabel.c_str()).x;
-            float rightX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - countW;
-            if (rightX > ImGui::GetCursorPosX())
-                ImGui::SameLine(rightX);
-            else
-                ImGui::NewLine();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.62f, 1.0f));
             ImGui::TextUnformatted(countLabel.c_str());
             ImGui::PopStyleColor();
@@ -500,9 +612,11 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
             ImGui::Spacing();
             ImGui::Spacing();
 
-            // ── Tarjetas de canciones, con controles de orden y borrado ─────
-            const float cardH = 54.0f;
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 8.f));
+            // ── Filas de canciones, mismo estilo minimalista y plano que la
+            //    lista de Canciones (sin caja/borde en reposo, sin badge de
+            //    numero: lo que se ve es el NOMBRE de la cancion) ───────────
+            const float cardH = 34.0f;
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 2.f));
 
             for (int i = 0; i < (int)songs.size(); i++)
             {
@@ -521,10 +635,10 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 // (ImGui resuelve el mouse-capture por orden de declaracion,
                 // no por z-order visual). Por eso el InvisibleButton se
                 // limita a "selectW" en vez de ocupar todo "cardW".
-                const ImVec2 ctrlSize(28.f, 26.f);
-                const float  ctrlGap   = 8.0f;
-                const float  ctrlZoneW = 3.0f * ctrlSize.x + 2.0f * ctrlGap + 16.0f;
-                const float  selectW   = std::max(cardW - ctrlZoneW, cardW * 0.35f);
+                const ImVec2 ctrlSize(22.f, 22.f);
+                const float  ctrlGap   = 4.0f;
+                const float  ctrlZoneW = 3.0f * ctrlSize.x + 2.0f * ctrlGap + 10.0f;
+                const float  selectW   = std::max(cardW - ctrlZoneW, cardW * 0.4f);
 
                 ImGui::SetCursorScreenPos(p_min);
                 ImGui::InvisibleButton("##card", { selectW, cardH });
@@ -533,42 +647,34 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
                 ImDrawList* dl = ImGui::GetWindowDrawList();
 
-                ImU32 bg = isActive ? IM_COL32(20, 55, 30, 255)
-                         : isHovered ? IM_COL32(26, 28, 42, 255)
-                         : IM_COL32(16, 17, 28, 255);
-                ImU32 border = isActive ? IM_COL32(80, 200, 100, 200) : IM_COL32(255, 255, 255, 20);
+                // Mismo tratamiento plano y minimalista que SongListRow: en
+                // reposo no hay caja ni borde, solo texto sobre el fondo del
+                // panel. El acento se nota unicamente en hover (relleno +
+                // borde sutil) o activo (tinte translucido + barra lateral).
+                ImU32 bg = isActive ? IM_COL32(99, 112, 255, 42)
+                         : isHovered ? DS::RowHoverFill
+                         : IM_COL32(0, 0, 0, 0);
 
-                dl->AddRectFilled(p_min, p_max, bg, 8.0f);
-                dl->AddRect(p_min, p_max, border, 8.0f, 0, isActive ? 1.5f : 1.0f);
+                dl->AddRectFilled(p_min, p_max, bg, DS::RadiusSmall * 0.5f);
+                if (isHovered && !isActive)
+                    dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 18), DS::RadiusSmall * 0.5f, 0, 0.5f);
+                if (isActive)
+                    dl->AddRectFilled(p_min, { p_min.x + 3.0f, p_max.y }, DS::RowSelectedBar, 1.5f);
 
-                // Divisor sutil entre la zona de titulo/seleccion y la zona
-                // de controles, para que se entienda que son dos areas
-                // distintas.
-                dl->AddLine({ p_min.x + selectW, p_min.y + 8.f },
-                            { p_min.x + selectW, p_max.y - 8.f },
-                            IM_COL32(255, 255, 255, 16), 1.0f);
-
-                // Numero a la izquierda, en badge redondo
-                const float badgeR = 14.0f;
-                ImVec2 badgeC = { p_min.x + 26.f, p_min.y + cardH * 0.5f };
-                dl->AddCircleFilled(badgeC, badgeR, IM_COL32(40, 44, 68, 255), 16);
-                std::string numStr = std::to_string(i + 1);
-                ImVec2 numSz = ImGui::CalcTextSize(numStr.c_str());
-                dl->AddText({ badgeC.x - numSz.x * 0.5f, badgeC.y - numSz.y * 0.5f },
-                            IM_COL32(190, 200, 255, 255), numStr.c_str());
-
-                // Titulo, recortado para no invadir el divisor
+                // Titulo: el nombre de la cancion es el contenido principal
+                // de la fila (antes era un numero en un badge redondo y el
+                // titulo quedaba recortado a 1-2 letras).
                 std::string title = StripExtension(songs[i]);
-                ImVec2 titlePos = { p_min.x + 50.f, p_min.y + cardH * 0.5f - ImGui::GetTextLineHeight() * 0.5f };
-                dl->PushClipRect(p_min, { p_min.x + selectW - 10.f, p_max.y }, true);
-                dl->AddText(titlePos, IM_COL32(230, 232, 245, 255), title.c_str());
+                ImVec2 titlePos = { p_min.x + 12.f, p_min.y + std::floor((cardH - ImGui::GetTextLineHeight()) * 0.5f) };
+                dl->PushClipRect(p_min, { p_min.x + selectW - 8.f, p_max.y }, true);
+                dl->AddText(titlePos, isActive ? DS::TextPrimary : DS::TextSecondary, title.c_str());
                 dl->PopClipRect();
 
                 if (clicked) ctx.selectPlaylistSong(openPlaylist, i);
 
                 // ── Controles: subir / bajar / quitar ────────────────────────
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ctrlGap, 0.f));
-                ImGui::SetCursorScreenPos({ p_min.x + selectW + 10.0f, p_min.y + (cardH - ctrlSize.y) * 0.5f });
+                ImGui::SetCursorScreenPos({ p_min.x + selectW + 6.0f, p_min.y + (cardH - ctrlSize.y) * 0.5f });
 
                 ImGui::BeginDisabled(i == 0);
                 if (PillButton("^", ctrlSize, k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralA, k_BtnNeutralT))
@@ -591,7 +697,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 ImGui::PopID();
             }
 
-            ImGui::PopStyleVar(); // ItemSpacing tarjetas
+            ImGui::PopStyleVar(); // ItemSpacing filas
 
             if (songs.empty()) {
                 ImGui::Spacing();
@@ -995,98 +1101,72 @@ static void RenderItemsListPane(LibraryContext& ctx)
 // =============================================================================
 static void RenderSongsAndPlaylistsGrid(LibraryContext& ctx)
 {
-    const float totalW = ImGui::GetContentRegionAvail().x;
-    const float totalH = ImGui::GetContentRegionAvail().y;
+    // FIX: antes se mostraban Canciones y Playlists a la vez (en columnas o
+    // apiladas), lo que le dejaba poco espacio real a cada lista. Ahora es
+    // un toggle tipo pestaña: una sola lista visible por vez, con TODO el
+    // ancho/alto del panel para ella.
+    static bool showPlaylists = false;
 
+    // ── Selector Canciones / Playlists ───────────────────────────────────
+    {
+        const float tabH = 30.0f;
+        const float gap  = 6.0f;
+        const float tabW = std::floor((ImGui::GetContentRegionAvail().x - gap) * 0.5f);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+
+        // Boton "Canciones"
+        {
+            ImVec4 fill = ImGui::ColorConvertU32ToFloat4(!showPlaylists ? DS::AccentColorDim : DS::BtnDefaultFill);
+            ImVec4 hov  = ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill);
+            ImVec4 text = ImGui::ColorConvertU32ToFloat4(!showPlaylists ? DS::TextPrimary : DS::TextSecondary);
+            ImGui::PushStyleColor(ImGuiCol_Button,        fill);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hov);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  hov);
+            ImGui::PushStyleColor(ImGuiCol_Text,          text);
+            std::string songsLabel = "Canciones  (" + std::to_string(ctx.items.size()) + ")";
+            if (ImGui::Button(songsLabel.c_str(), { tabW, tabH }))
+                showPlaylists = false;
+            ImGui::PopStyleColor(4);
+        }
+
+        ImGui::SameLine(0.f, gap);
+
+        // Boton "Playlists"
+        {
+            ImVec4 fill = ImGui::ColorConvertU32ToFloat4(showPlaylists ? DS::AccentColorDim : DS::BtnDefaultFill);
+            ImVec4 hov  = ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill);
+            ImVec4 text = ImGui::ColorConvertU32ToFloat4(showPlaylists ? DS::TextPrimary : DS::TextSecondary);
+            ImGui::PushStyleColor(ImGuiCol_Button,        fill);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hov);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  hov);
+            ImGui::PushStyleColor(ImGuiCol_Text,          text);
+            std::string plLabel = "Playlists  (" + std::to_string(ctx.listPlaylists().size()) + ")";
+            if (ImGui::Button(plLabel.c_str(), { tabW, tabH }))
+                showPlaylists = true;
+            ImGui::PopStyleColor(4);
+        }
+
+        ImGui::PopStyleVar();
+    }
+
+    ImGui::Spacing();
+
+    const float contentH = ImGui::GetContentRegionAvail().y;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.f, 0.f, 0.f, 0.f));
 
-    constexpr float kMinWidthForColumns = 340.0f;
-
-    // FIX: alto minimo de "chrome" que cada seccion necesita para mostrar su
-    // header (RenderPaneHeader) y su footer de botones completos, sin
-    // importar cuanto contenido tenga la lista. Estos valores replican
-    // exactamente lo que consume RenderPaneHeader + reservedH dentro de
-    // RenderItemsListPane, y RenderPaneHeader + footerH dentro de
-    // RenderPlaylistsSection. La lista interna de cada seccion (ListChild /
-    // PlaylistsChild) ya tiene su propio scroll, asi que puede achicarse
-    // hasta casi 0 sin perder acceso a los botones.
-    const float paneHeaderH      = ImGui::GetTextLineHeight() + ImGui::GetStyle().ItemSpacing.y;
-    const float songsFooterH     = DS::ButtonHeight + ImGui::GetStyle().ItemSpacing.y * 2.0f + 10.0f;
-    const float playlistsFooterH = DS::ButtonHeight + ImGui::GetStyle().ItemSpacing.y + 12.0f;
-    const float songsMinH        = paneHeaderH + songsFooterH;
-    const float playlistsMinH    = paneHeaderH + playlistsFooterH;
-
-    if (totalW >= kMinWidthForColumns)
+    if (!showPlaylists)
     {
-        // ── Layout horizontal: Canciones | Playlists ─────────────────────────
-        // Aca cada columna ya recibe el alto COMPLETO (totalH), no hay
-        // reparto 55/45 que pueda dejar a una sin espacio para su chrome.
-        const float gap    = 18.0f;
-        const float leftW  = std::floor((totalW - gap) * 0.56f);
-        const float rightW = totalW - gap - leftW;
-
-        ImGui::BeginChild("SongsPane", ImVec2(leftW, totalH), false,
+        ImGui::BeginChild("SongsPaneOnly", ImVec2(0.f, contentH), false,
                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        RenderPaneHeader("Canciones", (int)ctx.items.size());
         RenderItemsListPane(ctx);
-        ImGui::EndChild();
-
-        ImGui::SameLine(0.f, 0.f);
-        {
-            ImVec2 p0 = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddLine(
-                ImVec2(p0.x + gap * 0.5f, p0.y + 4.f),
-                ImVec2(p0.x + gap * 0.5f, p0.y + totalH - 4.f),
-                IM_COL32(255, 255, 255, 18), 1.0f);
-            ImGui::Dummy(ImVec2(gap, totalH));
-        }
-        ImGui::SameLine(0.f, 0.f);
-
-        ImGui::BeginChild("PlaylistsPane", ImVec2(rightW, totalH), false,
-                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        RenderPaneHeader("Playlists", (int)ctx.listPlaylists().size());
-        RenderPlaylistsSection(ctx);
         ImGui::EndChild();
     }
     else
     {
-        // ── Layout vertical corregido ─────────────────────────
-        const float gap = 14.0f;
-        
-        // 1. Aseguramos el mínimo del top primero
-        float topH = std::max(songsMinH, std::floor((totalH - gap) * 0.55f));
-        
-        // 2. El botH es simplemente lo que sobra.
-        float botH = totalH - gap - topH;
-
-        // 3. Si el restante no alcanza para el mínimo del bot, 
-        // forzamos al bot a su mínimo y restamos al top.
-        if (botH < playlistsMinH) {
-            float deficit = playlistsMinH - botH;
-            botH = playlistsMinH;
-            topH = std::max(songsMinH, topH - deficit);
-        }
-
-        ImGui::BeginChild("SongsPaneV", ImVec2(0.f, topH), false,
+        ImGui::BeginChild("PlaylistsPaneOnly", ImVec2(0.f, contentH), false,
                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        RenderPaneHeader("Canciones", (int)ctx.items.size());
-        RenderItemsListPane(ctx);
-        ImGui::EndChild();
-
-        {
-            ImVec2 p0 = ImGui::GetCursorScreenPos();
-            float  w  = ImGui::GetContentRegionAvail().x;
-            ImGui::GetWindowDrawList()->AddLine(
-                ImVec2(p0.x + 4.f,     p0.y + gap * 0.5f),
-                ImVec2(p0.x + w - 4.f, p0.y + gap * 0.5f),
-                IM_COL32(255, 255, 255, 18), 1.0f);
-            ImGui::Dummy(ImVec2(w, gap));
-        }
-
-        ImGui::BeginChild("PlaylistsPaneV", ImVec2(0.f, botH), false,
-                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        RenderPaneHeader("Playlists", (int)ctx.listPlaylists().size());
         RenderPlaylistsSection(ctx);
         ImGui::EndChild();
     }
@@ -1139,15 +1219,20 @@ void RenderSideList(LibraryContext& ctx)
     ImGui::BeginChild("LibraryPad", ImGui::GetContentRegionAvail(), false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    // ── Barra de búsqueda ──────────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.08f, 0.09f, 0.18f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.13f, 0.24f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.14f, 0.16f, 0.30f, 1.0f));
+    // ── Barra de búsqueda + boton de actualizar (mismo renglon: antes el
+    //    refresh vivia en su propio renglon abajo, junto al combo de estilo
+    //    por defecto) ───────────────────────────────────────────────────────
+    const float refreshBtnW = DS::ButtonHeight;
+    const float refreshGap  = 8.0f;
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
     ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SetNextItemWidth(-(refreshBtnW + refreshGap));
     if (ImGui::InputTextWithHint("##search", str.libSearchHint,
                                  ctx.searchBuffer, ctx.searchBufferSize))
         ForceListUpdate() = true;
@@ -1170,9 +1255,14 @@ void RenderSideList(LibraryContext& ctx)
         }
     }
 
+    ImGui::SameLine(0.f, refreshGap);
+    if (GlassIconButton("refreshTop", "repeat", "R", "Actualizar", { refreshBtnW, DS::ButtonHeight }))
+        ctx.refreshList();
+
     ImGui::Spacing();
 
-    // ── Estilo por defecto (si aplica) + boton de actualizar en la esquina ──
+    // ── Estilo por defecto (solo Biblias: en Canciones ahora cada cancion
+    //    tiene su propio preset, ver la tarjeta de ajustes en SongView) ──────
     RenderToolbarRow(ctx);
 
     ImGui::Spacing();

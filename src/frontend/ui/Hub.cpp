@@ -52,9 +52,9 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
         7, "0.4.0",
         " ACTUALIZACION MAYOR ", "ACTUALIZACION MAYOR",
         "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Nueva seccion de Overlays con editor vectorial, Vista en Vivo con "
-        "acciones rapidas al estilo, y un rediseño completo de "
-        "Fondos y Estilos mas compacto y profesional."
+        "Cola de videos mucho mas estable, nueva seccion de Overlays, "
+        "Vista en Vivo con acciones rapidas, panel de Rendimiento y un "
+        "rediseño mas compacto de Fondos y Estilos."
     },
     {
         6, "0.3.5",
@@ -421,9 +421,15 @@ void Hub::RenderSidebar(float w, float h) {
         ImGui::PopStyleColor(4);
     };
 
+    // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia, 1=General,
+    // 2=Proyeccion, 3=Stage, 4=Audio, 5=Canciones, 6=Teclas, 7=Idioma,
+    // 8=Actualizaciones). Antes "Idioma"/"Actualizaciones" apuntaban a
+    // indices que ya no correspondian a esas categorias.
     QuickBtn("", "Apariencia",      0);
-    QuickBtn("", "Idioma",          4);
-    QuickBtn("", "Actualizaciones", 5);
+    QuickBtn("", "Proyección",      2);
+    QuickBtn("", "Stage",           3);
+    QuickBtn("", "Idioma",          7);
+    QuickBtn("", "Actualizaciones", 8);
 
     ImGui::EndChild();
 }
@@ -649,7 +655,7 @@ void Hub::RenderMainContent(float w, float h) {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(32, 32, 40, 255));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
     if (ImGui::Button("Buscar actualizaciones", ImVec2(180.0f, actionsRowH))) {
-        m_ActiveTab = 5; m_OpenSettingsRequested = true;
+        m_ActiveTab = 8; m_OpenSettingsRequested = true; // 8 = Actualizaciones (ver QuickBtn arriba)
     }
     ImGui::SameLine(0.0f, 15.0f);
     if (ImGui::Button("Foro / Soporte", ImVec2(180.0f, actionsRowH)))
@@ -915,130 +921,126 @@ void Hub::RenderMainContent(float w, float h) {
             // betas) y la 0.3.0 original. Cualquier otro id cae en el bloque
             // "else" de la 0.3.0 por seguridad.
             if (selectedUpdateVer == 7) { // v0.4.0
+                Cat("Cola de videos y video en vivo");
+                Bul("La cola de videos es mucho mas confiable: los clips pasan de uno a otro sin cortes ni pantallas de carga de por medio.");
+                Bul("Corregido: la app ya no se traba si hacias clic varias veces seguidas sobre el mismo video.");
+                Bul("Los videos de la cola ahora siempre arrancan desde el principio, nunca aparecen a mitad de camino.");
+                Bul("Corregido un cierre inesperado de la app en Windows al usar la Vista Previa mientras habia algo en vivo.");
+                Bul("La Vista Previa de la Biblioteca ya no puede trabar ni afectar al video que esta en vivo para el publico.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Nuevo panel de Rendimiento");
+                Bul("Panel opcional (menu Vista > Rendimiento) que muestra en vivo el uso de CPU, memoria RAM y los FPS de la app — util para saber si la computadora esta exigida durante un evento.");
+                ImGui::Dummy(ImVec2(0,12));
+
                 Cat("Overlays (nuevo)");
-                Bul("Nueva seccion \"Overlays\" dentro del hub de Diseño: un editor para crear imagenes con capas de texto (fuente, tamaño y color propios por capa) que se pueden arrastrar libremente sobre un lienzo.");
-                Bul("Galeria de overlays guardados con miniaturas: un click proyecta el overlay igual que un fondo comun.");
-                Bul("Menu contextual para editar o eliminar overlays guardados.");
+                Bul("Nueva seccion para crear tus propios overlays: imagenes con texto que podes acomodar libremente arrastrandolo por la pantalla.");
+                Bul("Guardá tus overlays y usalos despues con un solo clic, igual que un fondo.");
+                Bul("Podes editar o borrar los overlays guardados desde un menu rapido.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Vista en Vivo");
-                Bul("Nuevo riel de acciones rapidas a la derecha de la Vista en Vivo, al estilo ProPresenter: limpiar texto, quitar fondo, ajustar proporcion, silenciar audio y ajustes, con botones compactos solo-icono.");
-                Bul("El panel de Control ahora se enfoca solo en iniciar/detener la proyeccion y el enrutamiento de pantallas.");
+                Bul("Nuevos botones rapidos al costado de Vista en Vivo para limpiar el texto, quitar el fondo, ajustar la proporcion o silenciar el audio sin buscar en menus.");
+                Bul("El panel de Control quedo mas simple: solo iniciar/detener la proyeccion y elegir la pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Fondos y Estilos");
-                Bul("Rediseño completo al estilo: las carpetas de Fondos ahora viven en una columna lateral, con el contenido de la carpeta seleccionada al centro.");
-                Bul("Toolbars mas compactas y solo-icono (importar, nueva carpeta, grid/lista) para ocupar menos espacio en pantalla.");
-                Bul("Nuevo control deslizante de zoom para achicar o agrandar las miniaturas y ver mas fondos o estilos a la vez.");
-                Bul("Animaciones de hover y transiciones suaves en tarjetas y listas.");
+                Bul("Los Fondos ahora se organizan en carpetas, mas faciles de navegar.");
+                Bul("Nuevo control para agrandar o achicar las miniaturas y ver mas fondos o estilos a la vez.");
+                Bul("Animaciones mas suaves al pasar el mouse y cambiar de seccion.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Interfaz general");
-                Bul("Los 4 rieles de iconos (Biblioteca, Control, Home y Diseño) ahora son mas compactos y comparten exactamente el mismo tamaño.");
-                Bul("Nueva opcion en Vista > \"Titulos en barras de iconos\" para mostrar u ocultar los titulos de esos rieles y ganar aun mas espacio, con una transicion animada al activarla o desactivarla.");
+                Bul("Los 4 menus de iconos (Biblioteca, Control, Home y Diseño) se ven mas prolijos y del mismo tamaño entre si.");
+                Bul("Podes ocultar los titulos debajo de los iconos (menu Vista) para ganar espacio en pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 6) { // v0.3.5 — version estable, changelog consolidado
                 Cat("Audio");
-                Bul("Rework completo del sistema de audio: nueva interfaz, portadas (covers) por pista, ecualizador (EQ), control de ganancia y cola de reproduccion.");
-                Bul("Ahora es posible asignar autores a las canciones.");
-                Bul("El dispositivo de audio se abre una unica vez por reproductor; los cambios de pista solo reinician la cola en lugar de renegociar el hardware, reduciendo cortes y mejorando la fluidez.");
-                Bul("Reemplazo del modelo de hilos de reproduccion por un unico hilo de trabajo persistente con cola de solicitudes protegida, eliminando condiciones de carrera al cerrar el reproductor.");
+                Bul("Sonido renovado: nueva pantalla de audio, portada por cancion, ecualizador y control de volumen.");
+                Bul("Ahora podes asignar autores a las canciones.");
+                Bul("Cambiar de cancion es mas rapido y con menos cortes de audio.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Reproduccion y previsualizacion");
-                Bul("Separacion completa entre el reproductor de previsualizacion (biblioteca) y el reproductor del monitor en vivo: cada uno con su propio decodificador, salida de audio y textura.");
-                Bul("Solucionado el problema de pantallas negras en el monitor secundario, y correccion de las proporciones de pantalla.");
-                Bul("El reproductor de video se inicializa por defecto en modo estirado.");
-                Bul("Mejoras de estabilidad y rendimiento en el motor de video (VLC): inicializacion y liberacion de recursos, sincronizacion del motor multimedia, y bloqueo/desbloqueo de rutas al eliminar archivos en uso.");
+                Bul("La Vista Previa y el video en vivo ahora son totalmente independientes: uno ya no afecta al otro.");
+                Bul("Corregidas las pantallas negras en el segundo monitor y videos con la proporcion incorrecta.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Cola de reproduccion");
-                Bul("Avance mas confiable entre clips y manejo correcto de entradas invalidas o eliminadas.");
-                Bul("Correccion de condiciones donde la cola podia quedar desincronizada con lo que realmente se estaba proyectando.");
+                Bul("La cola avanza de forma mas confiable entre videos, incluso si hay algun archivo eliminado o roto.");
+                Bul("Corregidos casos donde la cola podia desincronizarse de lo que realmente se estaba mostrando.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca");
-                Bul("Biblioteca completamente renovada, con listas y playlists mas practicas.");
-                Bul("Nueva vista con pestañas «Canciones» y «Etiquetas» para organizar y navegar mas rapido.");
-                Bul("Sistema de etiquetas para canciones: se renderizan como grupos tipo carpeta con fondo de color, con asignacion por clic derecho.");
-                Bul("Busqueda mejorada, con resultados mas claros y refresco correcto de la lista al actualizar contenidos.");
-                Bul("Navegacion con flechas arriba/abajo corregida: ahora mueve solo la seleccion dentro de la lista, sin afectar el panel completo ni los botones inferiores.");
+                Bul("Biblioteca renovada, con listas y playlists mas faciles de usar.");
+                Bul("Nuevo sistema de etiquetas de colores para organizar tus canciones.");
+                Bul("Busqueda mejorada y navegacion con las flechas del teclado mas prolija.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblia");
-                Bul("Nuevos atajos de navegacion: Ctrl+F abre el buscador de libro/capitulo, un toque de Ctrl abre el salto rapido de capitulo y un toque de Alt el de versiculo.");
-                Bul("Se agrego una seccion dedicada en Ajustes con todos los atajos de navegacion documentados.");
-                Bul("Nuevos iconos y mejoras visuales en la navegacion biblica.");
+                Bul("Nuevos atajos de teclado para buscar libro, capitulo o versiculo mas rapido (Ctrl+F, Ctrl y Alt).");
+                Bul("Nueva seccion en Ajustes con todos los atajos disponibles.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Control de proyeccion");
-                Bul("Soporte multimonitor mas estable para proyector y stage.");
-                Bul("Panel de control reorganizado en una sola fila de botones, sin scroll interno.");
-                Bul("Sincronizacion correcta del mute y el volumen en vivo entre el control y el monitor.");
-                Bul("Mejor conmutacion entre fuentes y respuesta de los botones de control.");
+                Bul("Mejor soporte para varios monitores (proyector y stage).");
+                Bul("Panel de control mas simple, todo en una sola fila de botones.");
+                Bul("El mute y el volumen ahora se mantienen sincronizados entre el control y el monitor.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Red local y streaming");
-                Bul("Mayor estabilidad en la transmision LAN, con menos cortes y desconexiones.");
-                Bul("Correccion de un error que impedia a LAN capturar la imagen correctamente, y de problemas de marcas de agua y fuentes en el stream.");
-                Bul("Ajustes del servidor de red para manejar mejor conexiones, estado y reconexiones.");
+                Bul("Transmision por red local (LAN) mas estable, con menos cortes.");
+                Bul("Corregidos errores de imagen y de marca de agua en la transmision.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Estadisticas locales");
-                Bul("Nuevo panel de resumen local en el Hub, con total de proyecciones, FPS promedio y canciones mas proyectadas.");
-                Bul("Historial de FPS recientes para documentar la estabilidad de la aplicacion.");
+                Bul("Nuevo resumen en el Hub con el total de proyecciones y las canciones mas usadas.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Soporte para Linux");
-                Bul("ProyecThor corre de forma nativa en Linux, con build propio via CMake. Probado en Arch Linux y derivados (CachyOS).");
-                Bul("Deteccion y manejo del backend X11/XWayland para compatibilidad con GLEW en sesiones Wayland.");
-                Bul("Rutas de configuracion y assets siguen la convencion XDG en Linux ($XDG_CONFIG_HOME o ~/.config), en vez de asumir rutas de Windows.");
+                Bul("ProyecThor ahora funciona de forma nativa en Linux, probado en Arch Linux y derivados.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Atajos de teclado globales");
-                Bul("Ctrl+P, F1 y Alt+F4 funcionan ahora como atajos reales en toda la aplicacion, no solo como texto de referencia en los menus.");
-                Bul("F1 abre la documentacion, Ctrl+P abre Preferencias y Alt+F4 cierra ProyecThor desde cualquier pantalla.");
+                Bul("Ctrl+P, F1 y Alt+F4 ahora funcionan desde cualquier pantalla de la app (Preferencias, Ayuda y Cerrar).");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Interfaz y experiencia");
-                Bul("Iconografia y estilo actualizados en varias secciones para una apariencia mas profesional y consistente.");
-                Bul("Nuevas animaciones y transiciones mas fluidas en el Hub principal, y logo oficial renovado.");
-                Bul("Mayor consistencia de IDs de ImGui para evitar conflictos en listas y paneles, ademas de mejoras de usabilidad especificas para Linux.");
-                Bul("El boton «Nueva playlist» ya no se corta en el pie del panel de playlists, y se mejoro el comportamiento visual de popups y menus contextuales.");
+                Bul("Nuevo logo y mejoras visuales en varias secciones de la app.");
+                Bul("Animaciones mas fluidas en el Hub principal.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Sistema y ajustes");
-                Bul("Los ajustes y configuraciones se guardan y cargan correctamente entre sesiones.");
-                Bul("Personalizacion profunda: seleccion de idioma, apariencia (colores de la app) y ajustes varios.");
+                Bul("Tus ajustes y preferencias se guardan y cargan correctamente entre sesiones.");
+                Bul("Podes personalizar el idioma y la apariencia de la app.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Estabilidad general");
-                Bul("Multiples correcciones de estabilidad y prevencion de cuelgues en biblioteca, streaming y el sistema multimonitor.");
-                Bul("Correccion de un error de compilacion en la biblioteca de canciones relacionado con el orden de declaracion de funciones internas.");
+                Bul("Multiples correcciones para evitar que la app se cuelgue en biblioteca, streaming y multi-monitor.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Soporte y comunidad");
                 Bul("Canal oficial de comunicacion y soporte en WhatsApp y Discord.");
             } else { // v0.3.0
                 Cat("General");
-                Bul("Hub de administracion centralizado para gestionar la aplicacion de forma integral.");
-                Bul("Generacion automatica de codigo QR para visualizar la transmision desde dispositivos moviles.");
-                Bul("Nuevos splash screen al iniciar.");
+                Bul("Nuevo Hub central para administrar la app.");
+                Bul("Codigo QR automatico para ver la transmision desde el celular.");
+                Bul("Nuevas pantallas de bienvenida al iniciar la app.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Multimedia y Streaming");
-                Bul("Mejoras en transmision LAN, creacion de servidor y sincronizacion de clientes.");
-                Bul("Estilos predeterminados de letras por categoria de lista.");
-                Bul("Optimizacion del motor VLC para reproduccion de video mas fluida.");
-                Bul("Nueva opcion para transmitir fondos con orientacion corregida.");
-                Bul("Mejoras de rendimiento en biblioteca y area de previsualizacion.");
+                Bul("Mejoras en la transmision LAN y en la conexion de dispositivos.");
+                Bul("Estilos de letras predeterminados segun el tipo de lista.");
+                Bul("Reproduccion de video mas fluida.");
+                Bul("Nueva opcion para transmitir fondos con la orientacion correcta.");
+                Bul("Mejor rendimiento en la biblioteca y la vista previa.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Soporte y Estabilidad");
-                Bul("Mejor manejo de rutas y mayor estabilidad general.");
-                Bul("Edicion de canciones sin perdida de foco en pantalla.");
-                Bul("Correccion en cola de reproduccion y transiciones de vistas.");
-                Bul("Multiples correcciones de estabilidad y prevencion de cuelgues.");
+                Bul("Mejor manejo de archivos y mas estabilidad general.");
+                Bul("Podes editar canciones sin perder el foco en pantalla.");
+                Bul("Correcciones en la cola de reproduccion y en las transiciones.");
+                Bul("Varias correcciones para evitar que la app se cuelgue.");
             }
 
             ImGui::Dummy(ImVec2(0,24));

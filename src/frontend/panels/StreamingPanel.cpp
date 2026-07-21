@@ -11,8 +11,6 @@
 #include <string>
 #include <algorithm>
 
-#include "stb_image_write.h"
-
 #if __has_include("qrcodegen.hpp")
 #   define PROYECTHOR_HAS_QRCODEGEN 1
 #   include "qrcodegen.hpp"
@@ -47,16 +45,10 @@ static void DrawSoftShadow(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float rounding)
     }
 }
 
-// ── stb callback ──────────────────────────────────────────────────────────────
-static void StbCb(void* ctx, void* data, int size)
-{
-    auto* buf = static_cast<std::vector<uint8_t>*>(ctx);
-    const uint8_t* p = static_cast<const uint8_t*>(data);
-    buf->insert(buf->end(), p, p + size);
-}
-
 // ── CaptureAndPushFrame ───────────────────────────────────────────────────────
-// ── CaptureAndPushFrame ───────────────────────────────────────────────────────
+// La lectura de GPU (RenderProjectorToFBO, via PBO doble) es barata y se
+// queda en el hilo de render. El encode JPEG se delega al FrameEncodeWorker
+// (hilo dedicado) para que no bloquee ese mismo hilo — ver FrameEncodeWorker.h.
 void StreamingPanel::CaptureAndPushFrame(int w, int h, int quality)
 {
     if (w <= 0 || h <= 0) return;
@@ -65,15 +57,10 @@ void StreamingPanel::CaptureAndPushFrame(int w, int h, int quality)
     std::vector<uint8_t> rgb;
     if (!core.RenderProjectorToFBO(w, h, rgb)) return;
 
-    // Se eliminó la inversión manual (flipped). 
-    // Pasamos el buffer rgb directamente, ahorrando CPU y RAM en cada frame.
-    std::vector<uint8_t> jpeg;
-    jpeg.reserve(static_cast<size_t>(w) * h / 4);
-    
-    // Escribimos directamente desde rgb.data()
-    stbi_write_jpg_to_func(StbCb, &jpeg, w, h, 3, rgb.data(), quality);
-
-    core.PushFrame(std::move(jpeg));
+    m_EncodeWorker.SubmitFrame(std::move(rgb), w, h, quality,
+        [](std::vector<uint8_t> jpeg) {
+            Core::PresentationCore::Get().PushFrame(std::move(jpeg));
+        });
 }
 
 // ── RebuildQR ─────────────────────────────────────────────────────────────────

@@ -83,7 +83,11 @@ namespace ProyecThor::Core {
 
         void* GetTextureID();
         void  GetVideoSize(int& width, int& height);
-        void  UpdateTexture();
+        // Devuelve true si esta llamada realmente subio un frame NUEVO a
+        // GL (false si no habia nada pendiente que subir todavia) — usado
+        // por BackgroundLayer para contar frames reales del standby antes
+        // de empezar a mostrarlo en el crossfade (ver kSwapSettleFrames).
+        bool  UpdateTexture();
 
         // true si ya se decodifico al menos un frame de video real.
         bool HasVideoFrame() const;
@@ -116,12 +120,29 @@ namespace ProyecThor::Core {
         void SetAudioDevice(const std::string& deviceId);
         std::string GetCurrentAudioDeviceId() const { return m_AudioDeviceId; }
 
-        // Sin hilo de fondo, la carga ya terminó cuando Play() retorna,
-        // asi que esto siempre es false. Se mantiene por compatibilidad
-        // con quien lo consulte (ej. BackgroundLayer).
-        bool IsLoading() const { return false; }
+        // Ruta que esta activa o cargando en este momento en esta
+        // instancia (vacio si esta detenida). Usado por BackgroundLayer
+        // para detectar pedidos redundantes de reproducir lo que ya se
+        // esta mostrando (ver SetVideo()).
+        const std::string& GetCurrentPath() const { return m_CurrentPath; }
+
+        // Estado de carga real, derivado del evento libvlc_MediaPlayerPlaying
+        // (hilo interno de libVLC) + HasVideoFrame() (primer frame de video
+        // ya decodificado). Antes IsLoading() era un stub que devolvia
+        // false siempre — BackgroundLayer::Update() lo consultaba creyendo
+        // que reflejaba el estado real, asi que el gate de "esta listo el
+        // standby" corria solo a medias (ver HasVideoFrame() mas abajo).
+        enum class LoadState { Idle, Opening, Buffering, Ready, Error };
+        LoadState GetLoadState() const;
+        bool IsLoading() const;
 
         bool ConsumeEndReached();
+
+        // true si el ultimo ConsumeEndReached() vino de un error real
+        // (libvlc_MediaPlayerEncounteredError: codec no soportado, archivo
+        // corrupto, etc.) y no de un fin de clip normal. Se consume (se
+        // resetea a false) al leerlo, igual que ConsumeEndReached().
+        bool ConsumeHadError();
 
     private:
 
@@ -138,9 +159,19 @@ namespace ProyecThor::Core {
         std::atomic<float> m_VolumeMultiplier{1.0f};
         std::atomic<bool>  m_Muted{false};
         std::atomic<bool>  m_EndReached{false};
+        std::atomic<bool>  m_HadError{false};
         std::atomic<bool>  m_Paused{false};
         std::atomic<bool>  m_AudioActive{true};
         std::atomic<bool>  m_ForceSilent{false};
+
+        // Backing de LoadState/IsLoading (ver GetLoadState() en el .cpp):
+        // m_VlcIsPlaying refleja el evento libvlc_MediaPlayerPlaying del
+        // load EN CURSO (se resetea a false en cada LoadAndPlay), separado
+        // de m_HadError (que ConsumeHadError() consume para EndReached)
+        // para no pisar esa semantica existente.
+        std::atomic<bool>  m_HasEverPlayed{false};
+        std::atomic<bool>  m_VlcIsPlaying{false};
+        std::atomic<bool>  m_LoadHasError{false};
         unsigned int m_TextureID = 0;
         int          m_VideoW    = 0;
         int          m_VideoH    = 0;
@@ -152,6 +183,11 @@ namespace ProyecThor::Core {
 
         bool                    m_PathBlocked       = false;
         std::string             m_BlockedPath;
+
+        // Ruta actualmente activa o cargando en ESTA instancia. Vacio si el
+        // player esta detenido (Stop()) o nunca reprodujo nada. Ver guard de
+        // reentrancia en Play().
+        std::string m_CurrentPath;
 
         std::atomic<uint64_t> m_LoadGeneration{0};
         int m_InstanceId = -1;

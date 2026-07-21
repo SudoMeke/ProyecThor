@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <algorithm>
 
 namespace ProyecThor::UI {
 
@@ -24,6 +25,12 @@ enum class TransitionType
     UncoverDown     // El anterior sale hacia abajo revelando el nuevo
 };
 
+// Nombre estable (no traducido, no cambia si se retocan las etiquetas de
+// RenderContent) para persistir la eleccion de transicion de un MacroCue
+// (ver MacroTypes.h) sin que backend/core dependa de este enum.
+const char*    TransitionTypeToName(TransitionType t);
+TransitionType TransitionTypeFromName(const std::string& name);
+
 // Ya no es un IPanel independiente: vive como seccion del sidebar del hub de
 // Diseño (ver StylesHubPanel.h/.cpp). El ciclo de vida real (Update/Trigger,
 // llamados incondicionalmente cada frame para el crossfade del proyector)
@@ -37,6 +44,11 @@ public:
     void RenderContent();
 
     float GetDuration() const { return m_Duration; }
+    void  SetDuration(float seconds) { m_Duration = std::clamp(seconds, 0.1f, 3.0f); }
+
+    // Usado por el selector compacto (3 botones + slider) en Estilos: fijar
+    // el tipo directo, sin pasar por las tarjetas del panel completo.
+    void SetType(TransitionType t) { m_SelectedType = t; }
 
     // Llamado desde UIManager justo antes de dibujar el texto en el proyector.
     bool  IsActive()          const { return m_Active; }
@@ -95,6 +107,15 @@ private:
     float          m_Elapsed      = 0.0f;
     bool           m_Active       = false;
     float          m_Progress     = 0.0f;   // 0..1, eased
+
+    // Override puntual de un MacroCue (ver PresentationCore::
+    // ConsumePendingTransitionOverride): pisa m_SelectedType/m_Duration
+    // SOLO para la proxima transicion, y los restaura al terminar, para no
+    // alterar la eleccion persistente del operador en este panel.
+    bool           m_HasSavedForOverride = false;
+    TransitionType m_SavedType     = TransitionType::Fade;
+    float          m_SavedDuration = 1.0f;
+    void RestoreAfterOverrideIfNeeded();
 
     static float EaseInOut(float t);
 };

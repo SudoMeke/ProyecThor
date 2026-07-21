@@ -65,11 +65,20 @@ public:
     // Vista del reproductor (disco, controles, EQ) — se usa en HomePanel
     void RenderPlayerView();
 
-    // ── Proyeccion en pantalla completa ──────────────────────────────────
-    // Cuando esta activo, RenderPlayerView dibuja una vista fullscreen
-    // con el disco girando y las ondas de audio encima del fondo del proyector.
-    bool IsProjecting()    const { return m_Projecting; }
-    void SetProjecting(bool v)   { m_Projecting = v;   }
+    // ── "En vivo" en el proyector real ───────────────────────────────────
+    // true mientras este panel es la fuente del fondo del proyector (ver
+    // PresentationCore::SetBackgroundAudio/SetBgTypeLocked, que llama
+    // SetLiveBackground(false) automaticamente si el operador manda otra
+    // cosa en vivo desde otro lado — video, cancion, biblia).
+    bool IsLiveBackground()      const { return m_IsLiveBackground; }
+    void SetLiveBackground(bool v)     { m_IsLiveBackground = v;    }
+
+    // Dibuja el fondo "now playing" (disco + caratula + ondas) en el
+    // drawlist de la ventana ACTUAL — pensado para llamarse desde dentro
+    // del Begin("ProjectorLive") de UIManager (ver ese archivo), asi el
+    // ImGui::GetWindowDrawList() que usa RenderSpinningDisc() cae en el
+    // proyector real. (x,y,w,h) es el rectangulo completo del proyector.
+    void RenderLiveBackground(float x, float y, float w, float h);
 
     // Acceso a los datos del waveform para que el proyector los dibuje
     const std::vector<float>& GetWaveBars()  const { return m_WaveVec; }
@@ -113,9 +122,6 @@ private:
     void RenderVolumeRow();
     void RenderEqualizerSection();
     void RenderPlaylist();
-
-    // Vista de proyeccion fullscreen (disco grande + waveform)
-    void RenderProjectorView();
 
     // ── Helpers ───────────────────────────────────────────────────────────
     std::string FormatTime(int64_t ms) const;
@@ -171,8 +177,8 @@ private:
     // Vector para exponer el waveform al exterior (proyector)
     std::vector<float> m_WaveVec;
 
-    // ── Proyeccion ────────────────────────────────────────────────────────
-    bool m_Projecting = false;
+    // ── "En vivo" en el proyector real (ver IsLiveBackground/SetLiveBackground) ──
+    bool m_IsLiveBackground = false;
 
     // Tiempo de la ultima animacion
     float m_LastTime = 0.0f;

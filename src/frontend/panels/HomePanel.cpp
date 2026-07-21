@@ -4,7 +4,6 @@
 #include "frontend/ui/UIStrings.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/media/VLCBasePlayer.h"
-#include "frontend/ui/IconRail.h"
 #include <imgui.h>
 #include <algorithm>
 
@@ -64,52 +63,30 @@ void HomePanel::RenderHomeContent()
     }
     else
     {
-        ImVec2      sz  = ImGui::GetContentRegionAvail();
-        const char* msg = "Seleccione un archivo multimedia, cancion o pasaje";
-        ImVec2      ts  = ImGui::CalcTextSize(msg);
-        ImVec2      cur = ImGui::GetCursorPos();
-        ImGui::SetCursorPos(ImVec2(cur.x + (sz.x - ts.x) * 0.5f, cur.y + (sz.y - ts.y) * 0.5f));
-        ImGui::TextDisabled("%s", msg);
+        // FIX: antes esto era solo un cartel de "Seleccione algo" — la cola
+        // del Monitor (m_MonitorView) SOLO se dibujaba con selection.type
+        // == Video, asi que en cualquier otro momento (nada seleccionado,
+        // o una cancion/biblia/documento activo) la cola literalmente no
+        // estaba en pantalla: ni el boton Reproducir, ni el target de
+        // drag-and-drop para agregar videos, nada. Eso explicaba reportes
+        // de "agrego un video y no pasa nada" / "aprieto reproducir y no
+        // hace nada" — no era que la logica fallara, es que la UI de la
+        // cola no estaba ahi para interactuar. Ahora se muestra tambien
+        // aca (el estado por defecto de Home, sin nada mas seleccionado),
+        // asi la cola queda accesible de forma confiable sin depender de
+        // tener un video puntual seleccionado.
+        m_MonitorView.Render(previewPlayer);
     }
 }
 
 void HomePanel::Render()
 {
-    // ── Pump incondicional ──────────────────────────────────────────────────
-    // Estas tres llamadas deben correr SIEMPRE, sin importar que seccion del
-    // sidebar este activa: decodifican/avanzan el video en vivo del
-    // proyector, sincronizan el conteo de OClock hacia LAN/pantalla, y
-    // alimentan el streaming LAN. Si quedaran atadas a "esta pestaña esta
-    // seleccionada", se congelarian apenas el operador mira otra seccion.
-    Core::PresentationCore::Get().Update();
-    m_OClock.Update();
-    m_StreamingPanel.Update();
-
-    // ── GlassRenderer para el efecto "liquid glass" de OClock/Anuncios ──────
-    // Solo hace falta mientras esas dos secciones estan activas (es el fondo
-    // borroso detras de ellas, puramente cosmetico).
-    if (m_CurrentSection == HomeSection::Clock || m_CurrentSection == HomeSection::Announcements)
-    {
-        ImGuiIO& io   = ImGui::GetIO();
-        int      dispW = static_cast<int>(io.DisplaySize.x);
-        int      dispH = static_cast<int>(io.DisplaySize.y);
-
-        if (dispW > 0 && dispH > 0)
-        {
-            if (!m_GlassInitialized)
-            {
-                m_GlassRenderer.Initialize(dispW, dispH);
-                m_GlassInitialized = true;
-            }
-            else
-            {
-                m_GlassRenderer.Resize(dispW, dispH);
-            }
-
-            m_GlassRenderer.CaptureCurrentFrame();
-            m_GlassRenderer.Blur();
-        }
-    }
+    // Pump incondicional: la cola del Monitor (MonitorView::Update -> avanza
+    // al siguiente clip cuando VLC reporta fin real) tiene que correr
+    // siempre, no solo cuando Home esta dibujando su contenido (aunque en la
+    // practica Home ya no tiene otras pestañas que la tapen — esto se
+    // mantiene por si el panel se llega a colapsar/ocultar).
+    m_MonitorView.Update();
 
     bool visible = false;
     if (m_UIManagerRef)
@@ -131,61 +108,15 @@ void HomePanel::Render()
         return;
     }
 
-    const float k_BarH = IconRailThickness(false);
-    const float     totalW = ImGui::GetContentRegionAvail().x;
-
-    // ── Barra de iconos arriba ──────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-    ImGui::BeginChild("##homeTopBar", ImVec2(totalW, k_BarH), false,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
-
-    RenderHomeSidebar(m_CurrentSection);
-
-    ImGui::EndChild();
-
-    // ── Divisor horizontal con gradiente (mismo estilo que el vertical de
-    //    antes, ejes intercambiados: izquierda/derecha en vez de arriba/abajo) ──
-    {
-        ImVec2      p  = ImGui::GetCursorScreenPos();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImU32 colLeft  = IM_COL32(60, 80, 160,  0);
-        ImU32 colMid   = IM_COL32(60, 80, 160, 80);
-        ImU32 colRight = IM_COL32(60, 80, 160,  0);
-        float midX     = p.x + totalW * 0.5f;
-        // AddRectFilledMultiColor(p0, p1, upperLeft, upperRight, bottomRight, bottomLeft)
-        dl->AddRectFilledMultiColor(
-            p,               { midX, p.y + 1.f },
-            colLeft, colMid, colMid, colLeft);
-        dl->AddRectFilledMultiColor(
-            { midX, p.y },   { p.x + totalW, p.y + 1.f },
-            colMid, colRight, colRight, colMid);
-    }
-    ImGui::Dummy(ImVec2(totalW, 1.0f));
-
-    // ── Contenido de la seccion activa ───────────────────────────────────────
-    // Alto tomado recien aca (no precalculado) para que ya incluya cualquier
-    // ItemSpacing vertical consumido por la barra/divisor de arriba.
     constexpr float kContentMarginX = 18.0f;
     constexpr float kContentMarginY = 16.0f;
-    const float     contentH = ImGui::GetContentRegionAvail().y;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kContentMarginX, kContentMarginY));
-    ImGui::BeginChild("##homeContent", ImVec2(0.f, contentH),
+    ImGui::BeginChild("##homeContent", ImVec2(0.f, 0.f),
                       ImGuiChildFlags_AlwaysUseWindowPadding);
     ImGui::PopStyleVar();
 
-    switch (m_CurrentSection)
-    {
-        case HomeSection::Home:          RenderHomeContent();                     break;
-        case HomeSection::Clock:         m_OClock.Render(m_GlassRenderer);        break;
-        case HomeSection::Announcements: m_Announcements.Render(m_GlassRenderer); break;
-        case HomeSection::QuickNotes:    m_QuickNotes.Render();                   break;
-        case HomeSection::Capture:       m_CapturePanel.RenderContent();          break;
-        case HomeSection::Streaming:     m_StreamingPanel.RenderContent();        break;
-    }
+    RenderHomeContent();
 
     ImGui::EndChild();
 

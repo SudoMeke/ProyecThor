@@ -11,7 +11,10 @@
       "Bash(which xwininfo *)",
       "Bash(ldconfig -p)",
       "Bash(pkg-config --exists openssl)",
-      "Bash(DISPLAY=:0 magick import -window root /home/vixcho/Documentos/ProyecThor/pt_test.png)"
+      "Bash(DISPLAY=:0 magick import -window root /home/vixcho/Documentos/ProyecThor/pt_test.png)",
+      "Bash(kill 87284)",
+      "Bash(timeout 3 xdpyinfo)",
+      "Bash(grep -n \"m_ShowConfig\\)\\\\s*$\\\\|m_SettingsPanel.Render\\(&m_ShowConfig\\)\" src/frontend/ui/UIManager.cpp)"
     ]
   }
 }

@@ -235,6 +235,13 @@ void OClock::Update() {
     // llamar OClock::Update() una vez por frame de forma incondicional,
     // junto al resto de las actualizaciones de fondo de la aplicacion.
     SyncTransmission(GetFormattedTime());
+
+    // Cue de un MacroPlayer (ver MacroTypes.h): "consumir una vez", asi no
+    // pisa un cambio manual del operador en RenderStyleSelector salvo que
+    // realmente haya un macro corriendo que lo pida.
+    std::string clockCue = Core::PresentationCore::Get().ConsumeClockStyleCue();
+    if (!clockCue.empty())
+        m_StyleName = clockCue;
 }
 
 void OClock::RenderStyleSelector() {

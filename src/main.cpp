@@ -29,12 +29,14 @@
 #include "Version.h"
 #include "SettingsManager.h"
 #include "PresentationCore.h"
+#include "PerformanceGovernor.h"
+#include "SystemStats.h"
 #include "ui/UIManager.h"
 #include "frontend/panels/LibraryPanel.h"
 #include "frontend/panels/HomePanel.h"
-#include "frontend/panels/ControlPanel.h"
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
+#include "frontend/panels/ViewToolsPanel.h"
 #include "frontend/panels/StylesHubPanel.h"
 
 #ifdef _WIN32
@@ -704,13 +706,22 @@ ImGui::StyleColorsDark();
     auto homePanel    = std::make_shared<ProyecThor::UI::HomePanel>();
     auto libraryPanel = std::make_shared<ProyecThor::UI::LibraryPanel>();
 homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
+    ProyecThor::Core::PresentationCore::Get().SetAudioPanelRef(libraryPanel->GetAudioPanel());
     homePanel->m_UIManagerRef = &uiManager;
     libraryPanel->SetUIManager(&uiManager);
 
     uiManager.AddPanel(libraryPanel);
     uiManager.AddPanel(homePanel);
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ControlPanel>(&uiManager));
+    // ControlPanel se elimino: su config (enrutamiento/calidad, Stage) vive
+    // en Ajustes (ver SettingsPanel > Proyeccion/Stage), y arrancar/detener
+    // la proyeccion ahora se hace desde los puntos "Audience"/"Stage" de
+    // ViewPanel (ver ViewPanel::RenderLiveTransport / los dos toggles).
     uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>(&uiManager));
+
+    // "Herramientas" — Control Overlays (antes dentro de ViewPanel) + Red/
+    // Notas/Reloj (antes secciones de Home), agrupados en un hub propio
+    // debajo de "Vista en Vivo" (ver UIManager::BeginDockspace/dock_right_*).
+    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewToolsPanel>(&uiManager));
 
     auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
     stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
@@ -836,8 +847,12 @@ core.RenderAllSecondaryWindows();
         glfwSwapBuffers(mainWindow);
         FrameProfiler::Add(FrameProfiler::s_SwapBuffers, FrameProfiler::ElapsedMs(t5));
 
-        FrameProfiler::Add(FrameProfiler::s_FrameTotal, FrameProfiler::ElapsedMs(frameStart));
+        double frameTotalMs = FrameProfiler::ElapsedMs(frameStart);
+        FrameProfiler::Add(FrameProfiler::s_FrameTotal, frameTotalMs);
         FrameProfiler::ReportIfReady();
+
+        ProyecThor::Core::PerformanceGovernor::Get().ReportFrame(frameTotalMs);
+        ProyecThor::Core::SystemStats::Get().Update();
     }
 
     std::cerr << "[DIAG] Saliendo del loop principal, cerrando limpio\n";

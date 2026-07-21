@@ -25,13 +25,14 @@ static const Category k_Categories[] = {
     { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales"     },
     { "GEN", "General",         "Inicio, guardado y carpetas"             },
     { "PRY", "Proyección",      "Monitor, texto y márgenes"               },
+    { "STG", "Stage",           "Monitor de confianza para el equipo"     },
     { "SOU", "Audio",           "Volumen, dispositivo y fade"             },
     { "SNG", "Canciones",       "Etiquetas y opciones de canciones"       },
        { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles"           },
     { "LNG", "Idioma",          "Idioma de la interfaz"                   },
     { "UPD", "Actualizaciones", "Versión instalada y canales"             },
 };
-static constexpr int k_CategoryCount = 8;
+static constexpr int k_CategoryCount = 9;
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
 // ImVec4, con un multiplicador opcional de alpha.
@@ -313,11 +314,12 @@ void SettingsPanel::RenderContent() {
         case 0: RenderCategoryTheme();      break;
         case 1: RenderCategoryGeneral();    break;
         case 2: RenderCategoryProjection(); break;
-        case 3: RenderCategoryAudio();      break;
-        case 4: RenderCategorySongs();      break;
-         case 5: RenderCategoryShortcuts();  break;
-        case 6: RenderCategoryLanguage();   break;
-        case 7: RenderCategoryUpdates();    break;
+        case 3: RenderCategoryStage();      break;
+        case 4: RenderCategoryAudio();      break;
+        case 5: RenderCategorySongs();      break;
+        case 6: RenderCategoryShortcuts();  break;
+        case 7: RenderCategoryLanguage();   break;
+        case 8: RenderCategoryUpdates();    break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 

@@ -24,15 +24,7 @@ namespace ProyecThor::UI {
             // About
             "Software profesional para gestion de proyecciones.",
             "Sin fines de lucro. Funcionamos mediante donaciones\ndel equipo de desarrollo y la comunidad.",
-// TransitionPanel
-        "Efectos de Transicion",
-        "Sin transicion",
-        "Disolver",
-        "Zoom In",
-        "Zoom Out",
-        "Duracion de la transicion",
-        "Tip: Las transiciones se aplican al cambiar de estrofa o proyectar nuevo contenido.",
-    
+
             // LibraryPanel
             "Canciones", "Videos", "Imagenes", "Biblia", "Documentos",
             "Buscar por nombre o letra...", "Sin reproductor disponible.",
@@ -52,6 +44,15 @@ namespace ProyecThor::UI {
             "Proyectar Imagen",
             "Video listo: %s",
             "Usa los controles del monitor para proyectar.",
+
+            // TransitionPanel
+            "Efectos de Transicion",
+            "Sin transicion",
+            "Disolver",
+            "Zoom In",
+            "Zoom Out",
+            "Duracion de la transicion",
+            "Tip: Las transiciones se aplican al cambiar de estrofa o proyectar nuevo contenido.",
 
             // DocumentView
             "El documento no tiene paginas generadas.",
@@ -135,14 +136,7 @@ namespace ProyecThor::UI {
             "File", "Exit", "Edit", "Preferences...", "View",
             "Reset Layout", "Help", "Documentation", "Donations",
             "About ProyecThor",
-// TransitionPanel
-        "Transition Effects",
-        "No transition",
-        "Dissolve",
-        "Zoom In",
-        "Zoom Out",
-        "Transition duration",
-        "Tip: Transitions are applied when changing stanzas or projecting new content.",
+
             // About
             "Professional software for projection management.",
             "Non-profit. We operate through donations\nfrom the development team and community.",
@@ -166,6 +160,15 @@ namespace ProyecThor::UI {
             "Project Image",
             "Video ready: %s",
             "Use the monitor controls to project.",
+
+            // TransitionPanel
+            "Transition Effects",
+            "No transition",
+            "Dissolve",
+            "Zoom In",
+            "Zoom Out",
+            "Transition duration",
+            "Tip: Transitions are applied when changing stanzas or projecting new content.",
 
             // DocumentView
             "The document has no generated pages.",
@@ -257,14 +260,7 @@ namespace ProyecThor::UI {
             // LibraryPanel
             "Cancoes", "Videos", "Imagens", "Biblia", "Documentos",
             "Pesquisar por nome ou letra...", "Sem reprodutor disponivel.",
-// TransitionPanel
-        "Efeitos de Transicao",
-        "Sem transicao",
-        "Dissolver",
-        "Zoom In",
-        "Zoom Out",
-        "Duracao da transicao",
-        "Dica: As transicoes sao aplicadas ao mudar de estrofe ou ao projetar novo conteudo.",
+
             // BibleView
             "Biblia:", "Livros", "Capitulos",
             "Pesquisar livro, cap. ou vers. (Gn 1:1)", "Limpar Historico",
@@ -280,6 +276,15 @@ namespace ProyecThor::UI {
             "Projetar Imagem",
             "Video pronto: %s",
             "Use os controlos do monitor para projetar.",
+
+            // TransitionPanel
+            "Efeitos de Transicao",
+            "Sem transicao",
+            "Dissolver",
+            "Zoom In",
+            "Zoom Out",
+            "Duracao da transicao",
+            "Dica: As transicoes sao aplicadas ao mudar de estrofe ou ao projetar novo conteudo.",
 
             // DocumentView
             "O documento nao tem paginas geradas.",

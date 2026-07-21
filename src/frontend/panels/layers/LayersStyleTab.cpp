@@ -233,7 +233,7 @@ void LayersStyleTab::RenderTopBar() {
     const float btnSz = 26.0f;
     const float zoomW = 76.0f;
     const float gap   = 4.0f;
-    const float rowW  = zoomW + gap + btnSz*4 + gap*4;
+    const float rowW  = zoomW + gap + btnSz*5 + gap*5; // +1 boton: "Ajustes rapidos"
     const float avail = ImGui::GetWindowContentRegionMax().x;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
 
@@ -270,6 +270,20 @@ void LayersStyleTab::RenderTopBar() {
     ImGui::SameLine(0, gap);
     if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", {btnSz,btnSz}, true))
         m_StyleEditor->OpenNew(m_CurrentStyle);
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            // Tres sliders verticales — mismo lenguaje visual que
+            // ControlIcons::DrawQuality, para "ajustes rapidos".
+            float th = std::max(1.2f, r * 0.16f);
+            const float xs[3]    = { -0.5f, 0.0f, 0.5f };
+            const float knobY[3] = { 0.18f, -0.28f, 0.05f };
+            for (int i = 0; i < 3; i++) {
+                float x = c.x + xs[i] * r;
+                dl->AddLine({x, c.y - r*0.75f}, {x, c.y + r*0.75f}, col, th);
+                dl->AddCircleFilled({x, c.y + knobY[i]*r}, r*0.16f, col, 12);
+            }
+        }, "Ajustes rapidos", {btnSz,btnSz}))
+        ImGui::OpenPopup("##QuickAdjustPopup");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -555,6 +569,26 @@ void LayersStyleTab::RenderQuickAdjust() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Popup de Ajustes Rapidos — se abre desde el icono de sliders en la
+//  toolbar (ver RenderTopBar). Antes vivia fijo debajo de la galeria de
+//  temas, robandole ~45% del alto; ahora la galeria usa todo el espacio y
+//  esto aparece solo cuando el usuario lo pide.
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersStyleTab::RenderQuickAdjustPopup() {
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.10f, 0.11f, 0.14f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
+    if (ImGui::BeginPopup("##QuickAdjustPopup")) {
+        ImGui::BeginChild("##quickAdjustPopupContent", ImVec2(300.0f, 0.0f), false);
+        RenderQuickAdjust();
+        ImGui::EndChild();
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Modal del editor de estilos (Se mantiene igual)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderStyleEditorModal() {
@@ -573,21 +607,15 @@ void LayersStyleTab::RenderStyleEditorModal() {
 //  Render principal del tab (AHORA CON LAYOUT DE 2 COLUMNAS)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::Render() {
-    // ── GALERÍA DE TEMAS (arriba) ──────────────────────────────────────────
-    float availH    = ImGui::GetContentRegionAvail().y;
-    float topHeight = availH * 0.55f;   // 55% para la galería
-
-    ImGui::BeginChild("##ThemesListChild", ImVec2(0, topHeight), false);
+    // ── GALERÍA DE TEMAS — ahora ocupa todo el alto disponible. Ajustes
+    //    Rapidos se movio a un popup (icono de sliders en la toolbar) en
+    //    vez de robarle ~45% del espacio de forma fija (ver RenderTopBar /
+    //    RenderQuickAdjustPopup).
+    ImGui::BeginChild("##ThemesListChild", ImGui::GetContentRegionAvail(), false);
     RenderThemeGrid();
     ImGui::EndChild();
 
-    // Separador visual entre secciones
-    LPSeparatorLine();
-
-    // ── AJUSTES RÁPIDOS (abajo) ────────────────────────────────────────────
-    ImGui::BeginChild("##QuickAdjustChild", ImVec2(0, 0), false);
-    RenderQuickAdjust();
-    ImGui::EndChild();
+    RenderQuickAdjustPopup();
 
     // Modal del editor (siempre al final, fuera de children)
     RenderStyleEditorModal();

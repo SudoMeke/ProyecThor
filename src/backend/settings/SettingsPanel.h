@@ -1,6 +1,7 @@
 #pragma once
 #include <imgui.h>
 #include <string>
+#include "frontend/panels/StageDisplayPanel.h"
 
 namespace ProyecThor::UI::Settings {
 
@@ -31,11 +32,17 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryTheme();
         void RenderCategoryGeneral();
         void RenderCategoryProjection();
+        void RenderCategoryStage();
         void RenderCategoryAudio();
         void RenderCategoryLanguage();
         void RenderCategoryUpdates();
         void RenderCategoryShortcuts();
 void RenderCategorySongs();
+
+        // Antes vivia dentro del hub "Control" (ver ControlPanel, eliminado);
+        // ahora es directamente el contenido de la categoria Stage de Ajustes.
+        ProyecThor::UI::StageDisplayPanel m_StageDisplay;
+
         // Helpers
         void SectionTitle(const char* label);
         void HelpTooltip(const char* desc);
