@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.4.0
+    VERSION 0.3.7
     LANGUAGES C CXX
 )
 
@@ -309,6 +309,8 @@ if(WIN32)
         ws2_32
         iphlpapi
         winhttp
+        d3d11
+        dxgi
     )
 
     target_link_options(ProyecThor PRIVATE
@@ -514,6 +516,43 @@ if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
     target_link_libraries(ProyecThor PRIVATE ${X11_LIBRARIES})
     target_include_directories(ProyecThor PRIVATE ${X11_INCLUDE_DIR})
+
+    # XComposite: opcional. Sin ella, la captura de ventanas (CapturePanel)
+    # lee XGetImage directo sobre la ventana, que devuelve contenido
+    # indefinido/basura en las zonas tapadas por otras ventanas. Si esta
+    # disponible, la usamos para leer el pixmap ya compuesto por el
+    # servidor X y capturar bien aunque la ventana este solapada. Si no
+    # esta instalada (dev headers ausentes), el build sigue igual que
+    # antes — no es un requisito duro.
+    if(X11_Xcomposite_FOUND)
+        message(STATUS "libXcomposite encontrada: captura de ventanas correcta bajo solapamiento")
+        target_link_libraries(ProyecThor PRIVATE ${X11_Xcomposite_LIB})
+        target_include_directories(ProyecThor PRIVATE ${X11_Xcomposite_INCLUDE_PATH})
+        target_compile_definitions(ProyecThor PRIVATE PT_HAVE_XCOMPOSITE)
+    else()
+        message(STATUS "libXcomposite NO encontrada: captura de ventanas usara XGetImage directo (puede fallar si hay solapamiento)")
+    endif()
+
+    # Captura de pantalla/ventana en sesiones Wayland: XGetImage/XComposite
+    # (arriba) no sirven ahi -- el compositor Wayland no vuelca contenido
+    # real a la "ventana raiz" X11 heredada, es una restriccion de
+    # seguridad del protocolo. El camino nativo es el portal de escritorio
+    # (org.freedesktop.portal.ScreenCast) + PipeWire para consumir el
+    # stream. Opcional: sin estas dos libs, el build sigue igual que hoy y
+    # la captura de pantalla queda limitada a X11 puro.
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(PIPEWIRE libpipewire-0.3)
+        pkg_check_modules(DBUS dbus-1)
+    endif()
+    if(PIPEWIRE_FOUND AND DBUS_FOUND)
+        message(STATUS "libpipewire-0.3 y dbus-1 encontradas: captura de pantalla/ventana via portal Wayland habilitada")
+        target_link_libraries(ProyecThor PRIVATE ${PIPEWIRE_LIBRARIES} ${DBUS_LIBRARIES})
+        target_include_directories(ProyecThor PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${DBUS_INCLUDE_DIRS})
+        target_compile_definitions(ProyecThor PRIVATE PT_HAVE_WAYLAND_CAPTURE)
+    else()
+        message(STATUS "libpipewire-0.3 y/o dbus-1 NO encontradas: sin captura de pantalla/ventana nativa en Wayland")
+    endif()
 endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"

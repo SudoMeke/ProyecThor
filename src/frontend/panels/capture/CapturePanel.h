@@ -10,10 +10,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ProyecThor::UI {
 
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+class WaylandScreenCapture;
+#endif
+
 enum class CaptureSourceType {
     Camera,         // Cámara física (webcam, capturadora HDMI, etc.)
-    Window,         // Ventana específica del sistema operativo
-    Monitor,        // Monitor / pantalla completa
+    Window,         // Ventana específica del sistema operativo (X11 puro)
+    Monitor,        // Monitor / pantalla completa (X11 puro)
+    Screen,         // Pantalla o ventana mediada por el portal de escritorio
+                     // (Wayland) — ver WaylandScreenCapture. Window/Monitor
+                     // no sirven bajo Wayland: el compositor no vuelca
+                     // contenido real a la ventana raiz X11 heredada.
     Unknown         // Antes "None" — renombrado para no chocar con la
                      // macro None de X11 (Xlib.h la define como 0L)
 };
@@ -83,16 +91,44 @@ private:
     bool  m_IsCapturing     = false;
     bool  m_ProjectOnScreen = false;   // Si true, también envía al proyector
     float m_Opacity         = 1.0f;
-    bool  m_StretchToFill   = true;
+    bool  m_StretchToFill   = true;    // Solo aplica en PlacementMode::Fullscreen
+
+    // ── Ubicación en el proyector ─────────────────────────────────────────────
+    // Fullscreen: cubre todo el proyector (comportamiento de siempre, ver
+    // m_StretchToFill). Custom: un recuadro con bordes redondeados que el
+    // usuario mueve/redimensiona libremente, como una capa de canvas — ver
+    // RenderPlacementEditor().
+    enum class PlacementMode { Fullscreen, Custom };
+    PlacementMode m_PlacementMode = PlacementMode::Fullscreen;
+
+    // Recuadro en modo Custom, normalizado 0..1 respecto al proyector
+    // (x0,y0)=esquina superior izquierda, (x1,y1)=esquina inferior derecha.
+    float m_CustomX0 = 0.25f, m_CustomY0 = 0.25f;
+    float m_CustomX1 = 0.75f, m_CustomY1 = 0.75f;
+
+    void RenderPlacementEditor();
 
     // ── Textura de preview ───────────────────────────────────────────────────
     unsigned int m_PreviewTexID = 0;   // GLuint como uint para evitar include de GL aquí
     int          m_FrameW       = 0;
     int          m_FrameH       = 0;
 
+    // Evita re-capturar/re-subir la textura mas de una vez por frame real de
+    // ImGui: preview (RenderContent) y proyector (RenderOnProjector) piden
+    // ambos GetCurrentTexture() en el mismo frame, y sin este cache cada uno
+    // dispara su propio grab (para camara, un cap.read() real cada vez).
+    int  m_LastGrabFrameCount = -1;
+    void* m_LastGrabResult    = nullptr;
+
     // ── Backend de captura (opaco — implementado en .cpp) ────────────────────
     struct CaptureBackend;
     std::unique_ptr<CaptureBackend> m_Backend;
+
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+    // Captura de pantalla/ventana para sesiones Wayland (fuente Screen), via
+    // portal de escritorio + PipeWire. Ver WaylandScreenCapture.h.
+    std::unique_ptr<WaylandScreenCapture> m_WaylandCapture;
+#endif
 
     // ── Búsqueda / filtro ────────────────────────────────────────────────────
     char m_SearchBuf[128] = {};

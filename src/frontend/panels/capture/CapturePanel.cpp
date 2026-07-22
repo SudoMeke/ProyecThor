@@ -1,5 +1,8 @@
 #include "CapturePanel.h"
 #include "DesignSystem.h"
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+  #include "WaylandScreenCapture.h"
+#endif
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -21,6 +24,7 @@
   #endif
   #include <windows.h>
   #pragma comment(lib, "gdi32.lib")
+  #include "Win32ScreenCapture.h"
   #ifdef PT_USE_OPENCV
     #include <opencv2/videoio.hpp>
     #include <opencv2/imgproc.hpp>
@@ -30,6 +34,9 @@
   #include <X11/Xlib.h>
   #include <X11/Xutil.h>
   #include <X11/Xatom.h>
+  #ifdef PT_HAVE_XCOMPOSITE
+    #include <X11/extensions/Xcomposite.h>
+  #endif
   #ifdef PT_USE_OPENCV
     #include <opencv2/videoio.hpp>
     #include <opencv2/imgproc.hpp>
@@ -128,11 +135,48 @@ struct CapturePanel::CaptureBackend {
     // de sobra para proyeccion en vivo y evita cargar la CPU/X11 de mas.
     static constexpr double kMinScreenGrabInterval = 1.0 / 30.0;
 
+    // Cuando la fuente desaparece de forma transitoria (ventana minimizada,
+    // cambio de espacio de trabajo, monitor que tarda en re-enumerarse tras
+    // un hotplug), sostenemos el ultimo frame valido por un margen corto en
+    // vez de cortar el preview a "Sin señal" de golpe — ese corte abrupto es
+    // justamente lo que se percibe como parpadeo. Pasado el margen, si la
+    // fuente sigue sin responder, se admite que se perdio de verdad.
+    bool screenStale = false;
+    std::chrono::steady_clock::time_point lastGoodScreenGrab{};
+    static constexpr double kStaleGraceSeconds = 2.0;
+
+    const uint8_t* HoldStaleOrNull(int& w, int& h) {
+        using namespace std::chrono;
+        if (!screenPixels.empty() &&
+            duration<double>(steady_clock::now() - lastGoodScreenGrab).count() < kStaleGraceSeconds) {
+            screenStale = true;
+            w = screenW; h = screenH;
+            return screenPixels.data();
+        }
+        screenStale = false;
+        return nullptr;
+    }
+
 #ifdef PT_PLATFORM_WIN32
     HWND activeHwnd = nullptr;
+    // DXGI Desktop Duplication (ver Win32ScreenCapture.h) -- lee el
+    // framebuffer ya compuesto por DWM, a diferencia de BitBlt/PrintWindow
+    // sobre el DC de una ventana puntual, que queda en negro para apps con
+    // aceleracion de hardware (navegadores, Electron, juegos).
+    std::unique_ptr<Win32ScreenCapture> win32Capture;
 #elif defined(PT_PLATFORM_LINUX)
     Display*   xDisplay      = nullptr;
     ::Window   activeXWindow = 0;
+  #ifdef PT_HAVE_XCOMPOSITE
+    bool xcompositeRedirected = false;
+    // XComposite en modo "Automatic" delega el mantenimiento del pixmap
+    // fuera de pantalla al compositor activo (picom, KWin, Mutter...). Sin
+    // un compositor corriendo (WMs livianos: i3, dwm, openbox sin picom,
+    // etc.) ese pixmap nunca se llena de contenido real -- da negro -- y en
+    // algunos drivers hasta la ventana en pantalla se ve afectada. Por eso
+    // solo lo activamos si confirmamos un compositor via _NET_WM_CM_Sx.
+    bool compositorActive     = false;
+  #endif
 #endif
 
     bool OpenCamera(int index) {
@@ -193,6 +237,8 @@ struct CapturePanel::CaptureBackend {
 
 #ifdef PT_PLATFORM_WIN32
         activeHwnd = nullptr;
+        if (!win32Capture) win32Capture = std::make_unique<Win32ScreenCapture>();
+
         if (type == CaptureSourceType::Window) {
             if (windowHandle.empty()) return false;
             activeHwnd = reinterpret_cast<HWND>(
@@ -201,8 +247,15 @@ struct CapturePanel::CaptureBackend {
                 activeHwnd = nullptr;
                 return false;
             }
+            if (!win32Capture->OpenWindow(activeHwnd)) return false;
         } else if (type == CaptureSourceType::Monitor) {
             activeMonitorIndex = monitorIndex;
+            int mCount = 0;
+            GLFWmonitor** monitors = glfwGetMonitors(&mCount);
+            if (activeMonitorIndex < 0 || activeMonitorIndex >= mCount) return false;
+            int mx, my;
+            glfwGetMonitorPos(monitors[activeMonitorIndex], &mx, &my);
+            if (!win32Capture->OpenMonitor(mx, my)) return false;
         } else {
             return false;
         }
@@ -224,6 +277,26 @@ struct CapturePanel::CaptureBackend {
                 activeXWindow = 0;
                 return false;
             }
+#ifdef PT_HAVE_XCOMPOSITE
+            // Solo redirigimos si hay un compositor activo (ver comentario
+            // en la declaracion de compositorActive): sin uno, el pixmap
+            // fuera de pantalla no se llena de contenido real y el preview
+            // (o incluso la ventana original) se ve negro.
+            {
+                std::string cmPropName = "_NET_WM_CM_S" + std::to_string(DefaultScreen(xDisplay));
+                Atom cmAtom = XInternAtom(xDisplay, cmPropName.c_str(), False);
+                compositorActive = (cmAtom != None) && (XGetSelectionOwner(xDisplay, cmAtom) != None);
+            }
+            if (compositorActive) {
+                // Redirige la ventana a un pixmap fuera de pantalla
+                // mantenido por el compositor, para poder leer su contenido
+                // compuesto real en GrabScreenFrame incluso si otra ventana
+                // la tapa (sin esto, XGetImage directo sobre la ventana
+                // devuelve basura en las zonas solapadas).
+                XCompositeRedirectWindow(xDisplay, activeXWindow, CompositeRedirectAutomatic);
+                xcompositeRedirected = true;
+            }
+#endif
         } else if (type == CaptureSourceType::Monitor) {
             activeMonitorIndex = monitorIndex;
         } else {
@@ -242,12 +315,21 @@ struct CapturePanel::CaptureBackend {
     void CloseScreen() {
 #ifdef PT_PLATFORM_WIN32
         activeHwnd = nullptr;
+        if (win32Capture) win32Capture->Close();
 #elif defined(PT_PLATFORM_LINUX)
+  #ifdef PT_HAVE_XCOMPOSITE
+        if (xcompositeRedirected && xDisplay && activeXWindow) {
+            XCompositeUnredirectWindow(xDisplay, activeXWindow, CompositeRedirectAutomatic);
+        }
+        xcompositeRedirected = false;
+        compositorActive     = false;
+  #endif
         activeXWindow = 0;
 #endif
         activeScreenType   = CaptureSourceType::Unknown;
         activeMonitorIndex = -1;
         screenPixels.clear();
+        screenStale        = false;
         isOpen = false;
     }
 
@@ -266,99 +348,63 @@ struct CapturePanel::CaptureBackend {
         lastScreenGrab = now;
 
 #ifdef PT_PLATFORM_WIN32
-        RECT rect{};
-        HWND srcWnd  = nullptr;
-        int  srcX    = 0;
-        int  srcY    = 0;
+        if (!win32Capture) return HoldStaleOrNull(w, h);
 
-        if (activeScreenType == CaptureSourceType::Window) {
-            if (!activeHwnd || !IsWindow(activeHwnd)) return nullptr;
-            GetClientRect(activeHwnd, &rect);
-            srcWnd = activeHwnd;
-        } else if (activeScreenType == CaptureSourceType::Monitor) {
-            int mCount = 0;
-            GLFWmonitor** monitors = glfwGetMonitors(&mCount);
-            if (activeMonitorIndex < 0 || activeMonitorIndex >= mCount) return nullptr;
-            const GLFWvidmode* vm = glfwGetVideoMode(monitors[activeMonitorIndex]);
-            if (!vm) return nullptr;
-            int mx, my;
-            glfwGetMonitorPos(monitors[activeMonitorIndex], &mx, &my);
-            rect.left = 0; rect.top = 0;
-            rect.right = vm->width; rect.bottom = vm->height;
-            srcWnd = nullptr; // desktop
-            srcX = mx; srcY = my;
-        } else {
-            return nullptr;
-        }
+        int w32W = 0, w32H = 0;
+        const uint8_t* w32px = win32Capture->GrabFrame(w32W, w32H);
+        if (!w32px || w32W <= 0 || w32H <= 0) return HoldStaleOrNull(w, h);
 
-        int width  = rect.right  - rect.left;
-        int height = rect.bottom - rect.top;
-        if (width <= 0 || height <= 0) return nullptr;
-
-        HDC srcDC = srcWnd ? GetDC(srcWnd) : GetDC(nullptr);
-        if (!srcDC) return nullptr;
-
-        HDC     memDC  = CreateCompatibleDC(srcDC);
-        HBITMAP bitmap = CreateCompatibleBitmap(srcDC, width, height);
-        HGDIOBJ oldObj = SelectObject(memDC, bitmap);
-
-        BitBlt(memDC, 0, 0, width, height, srcDC, srcX, srcY, SRCCOPY | CAPTUREBLT);
-
-        BITMAPINFOHEADER bi{};
-        bi.biSize        = sizeof(BITMAPINFOHEADER);
-        bi.biWidth       = width;
-        bi.biHeight      = -height; // top-down: evita tener que voltear despues
-        bi.biPlanes      = 1;
-        bi.biBitCount    = 32;
-        bi.biCompression = BI_RGB;
-
-        screenPixels.assign(static_cast<size_t>(width) * height * 4, 0);
-        GetDIBits(memDC, bitmap, 0, height, screenPixels.data(),
-                  reinterpret_cast<BITMAPINFO*>(&bi), DIB_RGB_COLORS);
-
-        // GDI entrega BGRA; OpenGL espera RGBA.
-        for (size_t i = 0; i < screenPixels.size(); i += 4) {
-            std::swap(screenPixels[i], screenPixels[i + 2]);
-            screenPixels[i + 3] = 255;
-        }
-
-        SelectObject(memDC, oldObj);
-        DeleteObject(bitmap);
-        DeleteDC(memDC);
-        ReleaseDC(srcWnd, srcDC);
-
-        w = width; h = height;
-        screenW = width; screenH = height;
+        screenPixels.assign(w32px, w32px + static_cast<size_t>(w32W) * w32H * 4);
+        w = w32W; h = w32H;
+        screenW = w32W; screenH = w32H;
+        screenStale = false;
+        lastGoodScreenGrab = now;
         return screenPixels.data();
 
 #elif defined(PT_PLATFORM_LINUX)
         if (!xDisplay) return nullptr;
 
-        ::Window srcDrawable = 0;
+        Drawable srcDrawable = 0;
         int x = 0, y = 0, width = 0, height = 0;
+#ifdef PT_HAVE_XCOMPOSITE
+        Pixmap compositePixmap = 0;
+#endif
 
         if (activeScreenType == CaptureSourceType::Window) {
             if (!activeXWindow) return nullptr;
             XWindowAttributes attrs;
             if (!XGetWindowAttributes(xDisplay, activeXWindow, &attrs))
-                return nullptr;
+                return HoldStaleOrNull(w, h);
 
             // Si la ventana esta minimizada u oculta, XGetImage dispararia
-            // un error X11 (BadMatch). En vez de arriesgarnos, devolvemos
-            // nullptr: la previsualizacion mostrara "Sin señal activa"
-            // hasta que la ventana vuelva a estar visible.
+            // un error X11 (BadMatch). En vez de arriesgarnos, sostenemos el
+            // ultimo frame valido (con un margen de gracia — ver
+            // HoldStaleOrNull) hasta que la ventana vuelva a estar visible.
             if (attrs.map_state != IsViewable)
-                return nullptr;
+                return HoldStaleOrNull(w, h);
 
             srcDrawable = activeXWindow;
             width  = attrs.width;
             height = attrs.height;
+
+#ifdef PT_HAVE_XCOMPOSITE
+            // Leemos del pixmap compuesto por el servidor (ver
+            // XCompositeRedirectWindow en OpenScreen) en vez de la ventana
+            // directamente: asi el contenido es correcto aunque otra
+            // ventana la tape. Si por algun motivo no se puede nombrar el
+            // pixmap (p.ej. la ventana se destruyo justo ahora), caemos de
+            // vuelta a leer la ventana como antes.
+            if (xcompositeRedirected) {
+                compositePixmap = XCompositeNameWindowPixmap(xDisplay, activeXWindow);
+                if (compositePixmap) srcDrawable = compositePixmap;
+            }
+#endif
         } else if (activeScreenType == CaptureSourceType::Monitor) {
             int mCount = 0;
             GLFWmonitor** monitors = glfwGetMonitors(&mCount);
-            if (activeMonitorIndex < 0 || activeMonitorIndex >= mCount) return nullptr;
+            if (activeMonitorIndex < 0 || activeMonitorIndex >= mCount) return HoldStaleOrNull(w, h);
             const GLFWvidmode* vm = glfwGetVideoMode(monitors[activeMonitorIndex]);
-            if (!vm) return nullptr;
+            if (!vm) return HoldStaleOrNull(w, h);
             int mx, my;
             glfwGetMonitorPos(monitors[activeMonitorIndex], &mx, &my);
             srcDrawable = RootWindow(xDisplay, DefaultScreen(xDisplay));
@@ -368,11 +414,14 @@ struct CapturePanel::CaptureBackend {
             return nullptr;
         }
 
-        if (width <= 0 || height <= 0) return nullptr;
+        if (width <= 0 || height <= 0) return HoldStaleOrNull(w, h);
 
         XImage* img = XGetImage(xDisplay, srcDrawable, x, y, width, height,
                                 AllPlanes, ZPixmap);
-        if (!img) return nullptr;
+#ifdef PT_HAVE_XCOMPOSITE
+        if (compositePixmap) XFreePixmap(xDisplay, compositePixmap);
+#endif
+        if (!img) return HoldStaleOrNull(w, h);
 
         screenPixels.assign(static_cast<size_t>(width) * height * 4, 0);
 
@@ -397,6 +446,8 @@ struct CapturePanel::CaptureBackend {
 
         w = width; h = height;
         screenW = width; screenH = height;
+        screenStale = false;
+        lastGoodScreenGrab = now;
         return screenPixels.data();
 #else
         (void)w; (void)h;
@@ -436,6 +487,9 @@ namespace {
 // ─────────────────────────────────────────────────────────────────────────────
 CapturePanel::CapturePanel()
     : m_Backend(std::make_unique<CaptureBackend>())
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+    , m_WaylandCapture(std::make_unique<WaylandScreenCapture>())
+#endif
 {
     RefreshSources();
 }
@@ -449,7 +503,19 @@ CapturePanel::~CapturePanel() {
 // ─────────────────────────────────────────────────────────────────────────────
 void CapturePanel::EnumerateCameras() {
 #ifdef PT_USE_OPENCV
+    // Si hay una camara en vivo, no volvemos a abrir su indice: la mayoria
+    // de drivers (V4L2, DirectShow/MSMF) no toleran bien un segundo handle
+    // concurrente al mismo dispositivo, y eso es causa tipica de glitches o
+    // fallos de deteccion durante una captura activa. Reusamos lo que ya
+    // sabemos de la fuente activa en su lugar.
+    bool skipActiveCamera = m_IsCapturing &&
+        m_ActiveSource.type == CaptureSourceType::Camera;
+
     for (int i = 0; i < 8; ++i) {
+        if (skipActiveCamera && i == m_ActiveSource.index) {
+            m_Sources.push_back(m_ActiveSource);
+            continue;
+        }
         cv::VideoCapture probe(i, cv::CAP_ANY);
         if (probe.isOpened()) {
             CaptureSource src;
@@ -569,6 +635,20 @@ void CapturePanel::EnumerateMonitors() {
 void CapturePanel::RefreshSources() {
     m_Sources.clear();
     EnumerateCameras();
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+    if (WaylandScreenCapture::IsWaylandSession()) {
+        // Bajo Wayland, EnumerateWindows()/EnumerateMonitors() (X11 puro)
+        // no sirven: el compositor no vuelca contenido real a la ventana
+        // raiz X11 heredada, asi que esa lista quedaria vacia o mostraria
+        // fuentes que despues capturan en negro. En su lugar, una unica
+        // fuente que dispara el picker nativo del portal de escritorio.
+        CaptureSource src;
+        src.type = CaptureSourceType::Screen;
+        src.name = "Compartir pantalla o ventana…";
+        m_Sources.push_back(src);
+        return;
+    }
+#endif
     EnumerateWindows();
     EnumerateMonitors();
 }
@@ -587,6 +667,15 @@ bool CapturePanel::StartCapture(const CaptureSource& src) {
                src.type == CaptureSourceType::Monitor) {
         opened = m_Backend->OpenScreen(src.type, src.index, src.handle);
     }
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+    else if (src.type == CaptureSourceType::Screen) {
+        // Exito "optimista": la negociacion con el portal (picker + permiso
+        // del sistema) sigue en curso en un hilo aparte. RenderPreview()
+        // refleja el estado real (Requesting/Streaming/Error) mientras tanto.
+        m_WaylandCapture->RequestSession();
+        opened = true;
+    }
+#endif
     if (!opened) return false;
 
     // Crea la textura OpenGL si no existe
@@ -605,6 +694,9 @@ bool CapturePanel::StartCapture(const CaptureSource& src) {
 void CapturePanel::StopCapture() {
     m_Backend->Close();
     m_Backend->CloseScreen();
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+    m_WaylandCapture->Stop();
+#endif
     m_IsCapturing = false;
     m_ProjectOnScreen = false;
 }
@@ -612,13 +704,30 @@ void CapturePanel::StopCapture() {
 void* CapturePanel::GetCurrentTexture() {
     if (!m_IsCapturing) return nullptr;
 
+    // El preview (RenderContent) y el proyector (RenderOnProjector) piden
+    // ambos la textura actual dentro del mismo frame real. Sin este cache,
+    // cada uno dispararia su propio grab — para camara eso es un cap.read()
+    // real por llamada, es decir dos frames de camara distintos consumidos
+    // por tick de UI (preview y proyector desincronizados, posible traba).
+    int frameCount = ImGui::GetFrameCount();
+    if (frameCount == m_LastGrabFrameCount) return m_LastGrabResult;
+    m_LastGrabFrameCount = frameCount;
+    m_LastGrabResult     = nullptr;
+
     int w = 0, h = 0;
     const uint8_t* pixels = nullptr;
 
-    if (m_ActiveSource.type == CaptureSourceType::Camera)
+    if (m_ActiveSource.type == CaptureSourceType::Camera) {
         pixels = m_Backend->GrabFrame(w, h);
-    else
+    }
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+    else if (m_ActiveSource.type == CaptureSourceType::Screen) {
+        pixels = m_WaylandCapture->GrabFrame(w, h);
+    }
+#endif
+    else {
         pixels = m_Backend->GrabScreenFrame(w, h);
+    }
 
     if (!pixels || w == 0 || h == 0) return nullptr;
 
@@ -632,7 +741,8 @@ void* CapturePanel::GetCurrentTexture() {
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    return reinterpret_cast<void*>(static_cast<uintptr_t>(m_PreviewTexID));
+    m_LastGrabResult = reinterpret_cast<void*>(static_cast<uintptr_t>(m_PreviewTexID));
+    return m_LastGrabResult;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -646,6 +756,25 @@ void CapturePanel::RenderOnProjector(ImDrawList* dl,
 
     void* tex = GetCurrentTexture();
     if (!tex) return;
+
+    ImU32 col = IM_COL32(255, 255, 255, (int)(m_Opacity * 255));
+
+    if (m_PlacementMode == PlacementMode::Custom) {
+        // Recuadro libre: el usuario lo ubico/redimensiono a mano en
+        // RenderPlacementEditor(). Bordes redondeados para que se lea como
+        // una capa flotante, a diferencia del modo Pantalla completa
+        // (borde a borde, sin redondear).
+        float destX = px + m_CustomX0 * pw;
+        float destY = py + m_CustomY0 * ph;
+        float destW = (m_CustomX1 - m_CustomX0) * pw;
+        float destH = (m_CustomY1 - m_CustomY0) * ph;
+        float rounding = std::min(20.0f, std::min(destW, destH) * 0.06f);
+        dl->AddImageRounded(tex,
+            ImVec2(destX, destY),
+            ImVec2(destX + destW, destY + destH),
+            ImVec2(0,0), ImVec2(1,1), col, rounding);
+        return;
+    }
 
     float destX = px, destY = py, destW = pw, destH = ph;
 
@@ -661,7 +790,6 @@ void CapturePanel::RenderOnProjector(ImDrawList* dl,
         }
     }
 
-    ImU32 col = IM_COL32(255, 255, 255, (int)(m_Opacity * 255));
     dl->AddImage(tex,
         ImVec2(destX, destY),
         ImVec2(destX + destW, destY + destH),
@@ -765,8 +893,25 @@ void CapturePanel::RenderPreview() {
         ImGui::SetCursorPos(ImVec2(offX, offY));
         ImGui::Image(tex, ImVec2(imgW, imgH));
     } else {
-        ImGui::SetCursorPos(ImVec2(avail * 0.5f - 70.0f, previewH * 0.5f - 10.0f));
-        ImGui::TextColored(ToVec4(DS::TextHint), "Sin señal activa");
+        std::string statusText;
+        ImU32       statusCol = DS::TextHint;
+#ifdef PT_HAVE_WAYLAND_CAPTURE
+        if (m_IsCapturing && m_ActiveSource.type == CaptureSourceType::Screen) {
+            auto state = m_WaylandCapture->GetState();
+            if (state == WaylandScreenCapture::State::Requesting) {
+                statusText = "Esperando permiso del sistema…";
+            } else if (state == WaylandScreenCapture::State::Error) {
+                statusText = m_WaylandCapture->GetErrorMessage();
+                if (statusText.empty()) statusText = "No se pudo iniciar la captura";
+                statusCol = DS::DangerColor;
+            }
+        }
+#endif
+        if (statusText.empty()) statusText = "Sin señal activa";
+
+        ImVec2 textSize = ImGui::CalcTextSize(statusText.c_str());
+        ImGui::SetCursorPos(ImVec2((avail - textSize.x) * 0.5f, (previewH - textSize.y) * 0.5f));
+        ImGui::TextColored(ToVec4(statusCol), "%s", statusText.c_str());
     }
 
     ImGui::EndChild();
@@ -787,6 +932,18 @@ void CapturePanel::RenderPreview() {
         dl->AddText(ImVec2(dotPos.x + 10.0f, dotPos.y - 7.0f),
                     ColA(DS::TextSecondary, 230), "EN VIVO");
     }
+
+    if (m_IsCapturing && m_Backend->screenStale) {
+        // La fuente (ventana/monitor) desaparecio de forma transitoria y
+        // seguimos mostrando el ultimo frame valido (ver HoldStaleOrNull)
+        // en vez de cortar a "Sin señal" de golpe. Lo señalamos para que la
+        // degradacion nunca sea silenciosa — mismo criterio que el resto de
+        // indicadores de estado de la app.
+        float t = static_cast<float>(ImGui::GetTime());
+        float pulse = 0.55f + 0.35f * std::sin(t * 4.0f);
+        ImU32 badgeCol = ColA(DS::TextHint, static_cast<int>(180 + 60 * pulse));
+        dl->AddText(ImVec2(pos.x + 14.0f, end.y - 22.0f), badgeCol, "Reconectando…");
+    }
 }
 
 void CapturePanel::RenderControls() {
@@ -802,8 +959,98 @@ void CapturePanel::RenderControls() {
     ImGui::SliderFloat("##capOp", &m_Opacity, 0.0f, 1.0f, "%.2f");
     ImGui::PopStyleColor(4);
 
-    ImGui::SameLine(0, 20);
-    ImGui::Checkbox("Ajustar al proyector", &m_StretchToFill);
+    ImGui::Spacing();
+    ImGui::TextColored(ToVec4(DS::TextHint), "Ubicación");
+    ImGui::SameLine();
+    bool isFullscreen = (m_PlacementMode == PlacementMode::Fullscreen);
+    if (ImGui::RadioButton("Pantalla completa", isFullscreen))
+        m_PlacementMode = PlacementMode::Fullscreen;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Posición libre", !isFullscreen))
+        m_PlacementMode = PlacementMode::Custom;
+
+    if (isFullscreen) {
+        ImGui::SameLine(0, 20);
+        ImGui::Checkbox("Ajustar al proyector", &m_StretchToFill);
+    } else {
+        RenderPlacementEditor();
+    }
+}
+
+void CapturePanel::RenderPlacementEditor() {
+    ImGui::Spacing();
+    ImGui::TextColored(ToVec4(DS::TextHint),
+        "Arrastrá el recuadro o sus esquinas para ubicarlo y redimensionarlo");
+    ImGui::Spacing();
+
+    float avail = ImGui::GetContentRegionAvail().x;
+    float boxH  = avail * (9.0f / 16.0f);
+    ImVec2 pos  = ImGui::GetCursorScreenPos();
+    ImVec2 end  = ImVec2(pos.x + avail, pos.y + boxH);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    dl->AddRectFilled(pos, end, IM_COL32(10, 10, 13, 255), DS::RadiusMedium);
+    dl->AddRect(pos, end, ColA(DS::TextHint, 110), DS::RadiusMedium);
+
+    ImGui::Dummy(ImVec2(avail, boxH));
+
+    const float kMinSize = 0.08f; // tamano minimo normalizado, evita colapsar a 0
+    const float kHandleR = 8.0f;  // radio del agarre de esquina en pixeles
+
+    ImVec2 rectMin(pos.x + m_CustomX0 * avail, pos.y + m_CustomY0 * boxH);
+    ImVec2 rectMax(pos.x + m_CustomX1 * avail, pos.y + m_CustomY1 * boxH);
+
+    // ── Cuerpo: arrastrar reposiciona sin cambiar el tamaño ──────────────
+    ImGui::SetCursorScreenPos(rectMin);
+    ImGui::InvisibleButton("##capPlaceBody", ImVec2(rectMax.x - rectMin.x, rectMax.y - rectMin.y));
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+        ImVec2 d = ImGui::GetIO().MouseDelta;
+        float w = m_CustomX1 - m_CustomX0, h = m_CustomY1 - m_CustomY0;
+        m_CustomX0 = std::clamp(m_CustomX0 + d.x / avail, 0.0f, 1.0f - w);
+        m_CustomY0 = std::clamp(m_CustomY0 + d.y / boxH,  0.0f, 1.0f - h);
+        m_CustomX1 = m_CustomX0 + w;
+        m_CustomY1 = m_CustomY0 + h;
+    }
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+
+    // ── Esquinas: arrastrar redimensiona anclando la esquina opuesta ─────
+    struct Corner { bool right, bottom; const char* id; ImGuiMouseCursor cursor; };
+    static const Corner kCorners[4] = {
+        { false, false, "##capPlaceTL", ImGuiMouseCursor_ResizeNWSE },
+        { true,  false, "##capPlaceTR", ImGuiMouseCursor_ResizeNESW },
+        { false, true,  "##capPlaceBL", ImGuiMouseCursor_ResizeNESW },
+        { true,  true,  "##capPlaceBR", ImGuiMouseCursor_ResizeNWSE },
+    };
+    for (const Corner& c : kCorners) {
+        float cx = c.right ? rectMax.x : rectMin.x;
+        float cy = c.bottom ? rectMax.y : rectMin.y;
+        ImGui::SetCursorScreenPos(ImVec2(cx - kHandleR, cy - kHandleR));
+        ImGui::InvisibleButton(c.id, ImVec2(kHandleR * 2.0f, kHandleR * 2.0f));
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            ImGui::SetMouseCursor(c.cursor);
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            ImVec2 d = ImGui::GetIO().MouseDelta;
+            float nx = (c.right ? m_CustomX1 : m_CustomX0) + d.x / avail;
+            float ny = (c.bottom ? m_CustomY1 : m_CustomY0) + d.y / boxH;
+            if (c.right) m_CustomX1 = std::clamp(nx, m_CustomX0 + kMinSize, 1.0f);
+            else         m_CustomX0 = std::clamp(nx, 0.0f, m_CustomX1 - kMinSize);
+            if (c.bottom) m_CustomY1 = std::clamp(ny, m_CustomY0 + kMinSize, 1.0f);
+            else          m_CustomY0 = std::clamp(ny, 0.0f, m_CustomY1 - kMinSize);
+        }
+    }
+
+    // ── Dibujo del recuadro (posicion ya puede haber cambiado arriba) ────
+    rectMin = ImVec2(pos.x + m_CustomX0 * avail, pos.y + m_CustomY0 * boxH);
+    rectMax = ImVec2(pos.x + m_CustomX1 * avail, pos.y + m_CustomY1 * boxH);
+    dl->AddRectFilled(rectMin, rectMax, ColA(DS::AccentColor, 50), DS::RadiusMedium);
+    dl->AddRect(rectMin, rectMax, DS::AccentColor, DS::RadiusMedium, 0, 2.0f);
+    for (const Corner& c : kCorners) {
+        ImVec2 hp(c.right ? rectMax.x : rectMin.x, c.bottom ? rectMax.y : rectMin.y);
+        dl->AddCircleFilled(hp, 4.0f, DS::AccentLight);
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(pos.x, end.y));
 }
 
 void CapturePanel::RenderProjectButton() {
