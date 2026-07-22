@@ -5,6 +5,8 @@
 #include <memory>
 #include <functional>
 
+namespace ProyecThor::Settings { struct ThemeSettings; }
+
 namespace ProyecThor::UI {
 
 class TabTypography;
@@ -12,23 +14,33 @@ class TabAlignment;
 class TabMargins;
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Paleta de colores del editor
+//  Paleta de colores del editor — no son const: se recalculan en Sync() a
+//  partir del tema activo (mismo patron que DS::/MonitorTheme::/HubTheme::),
+//  asi este editor deja de quedar fijo en un look violeta-oscuro sin
+//  importar el preset elegido en Preferencias.
 // ─────────────────────────────────────────────────────────────────────────────
 struct CanvaPalette {
-    static const ImVec4 Accent;
-    static const ImVec4 AccentHov;
-    static const ImVec4 AccentActive;
-    static const ImVec4 Green;
-    static const ImVec4 Red;
-    static const ImVec4 Surface0;
-    static const ImVec4 Surface1;
-    static const ImVec4 Surface2;
-    static const ImVec4 Border;
-    static const ImVec4 Text;
-    static const ImVec4 TextMuted;
-    static const ImVec4 Gold;
-    static const ImVec4 Pink;
+    static inline ImVec4 Accent       = ImVec4(0.39f, 0.44f, 0.97f, 1.0f);
+    static inline ImVec4 AccentHov    = ImVec4(0.49f, 0.54f, 1.00f, 1.0f);
+    static inline ImVec4 AccentActive = ImVec4(0.30f, 0.35f, 0.90f, 1.0f);
+    static inline ImVec4 Green        = ImVec4(0.10f, 0.79f, 0.55f, 1.0f);
+    static inline ImVec4 Red          = ImVec4(0.93f, 0.26f, 0.36f, 1.0f);
+    static inline ImVec4 Surface0     = ImVec4(0.09f, 0.09f, 0.11f, 1.0f);
+    static inline ImVec4 Surface1     = ImVec4(0.12f, 0.13f, 0.16f, 1.0f);
+    static inline ImVec4 Surface2     = ImVec4(0.16f, 0.17f, 0.22f, 1.0f);
+    static inline ImVec4 Border       = ImVec4(0.22f, 0.23f, 0.30f, 1.0f);
+    static inline ImVec4 Text         = ImVec4(0.92f, 0.92f, 0.94f, 1.0f);
+    static inline ImVec4 TextMuted    = ImVec4(0.50f, 0.52f, 0.60f, 1.0f);
+    // Gold/Pink quedan fijos a proposito: son acentos de badge ("PREVIEW EN
+    // VIVO", pestanas de tab) sin token equivalente en ThemeSettings, ya
+    // legibles sobre cualquier fondo claro u oscuro.
+    static inline ImVec4 Gold         = ImVec4(0.95f, 0.72f, 0.20f, 1.0f);
+    static inline ImVec4 Pink         = ImVec4(0.93f, 0.40f, 0.70f, 1.0f);
     static ImU32 ToU32(const ImVec4& c);
+
+    // Recalcula Accent/Surface*/Border/Text/TextMuted/Green/Red a partir del
+    // tema activo. Se llama desde SettingsManager::ApplyTheme().
+    static void Sync(const ProyecThor::Settings::ThemeSettings& theme);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@
 #include "frontend/ui/AppIcons.h"
 #include "frontend/panels/home/HomeIcons.h"
 #include "frontend/ui/IconRail.h"
+#include "frontend/ui/LiveContentRenderer.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -366,7 +367,9 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
     // iconos vectoriales ya dibujados a mano en otras partes de la app
     // (AppIcons.h/HomeIcons.h) o se agregan nuevos chicos aca mismo (Disco,
     // Engranaje) — ver DrawIcon_Disc/DrawIcon_Gear arriba.
-    ActionDef actions[10] = {
+    const bool previewingStage = (m_PreviewSource == PreviewSource::Stage);
+
+    ActionDef actions[11] = {
         { "vaClearText", "", AppIcons::DrawIcon_TextAa, "Aa", "Limpiar texto",
           hoverClear, activeContent, showText,  showText  ? tintOnYellow : textPrimary },
         { "vaClearDisc", "", DrawIcon_Disc, "Dsc", "Detener disco en vivo",
@@ -389,6 +392,9 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
           isMuted ? textDanger : textPrimary },
         { "vaPrefs",     "", DrawIcon_Gear, "...", "Ajustes",
           hoverClear, baseFill, false, textPrimary },
+        { "vaPreviewSource", "", AppIcons::DrawIcon_Swap, "S/P",
+          previewingStage ? "Viendo: Stage (click para ver Público)" : "Viendo: Público (click para ver Stage)",
+          hoverClear, activeStretch, previewingStage, textPrimary },
     };
 
     // Celdas de ancho completo, pegadas unas a otras (separadas solo por la
@@ -399,7 +405,7 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
     ImGui::Dummy(ImVec2(railW, 1.0f));
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 11; i++)
     {
         if (i == 7) ImGui::Dummy(ImVec2(railW, 10.0f)); // separa utilidades de los "Limpiar"
 
@@ -417,6 +423,7 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
             else if (i == 7) core.SetStretchToFill(!stretchOn);
             else if (i == 8) core.SetLiveMute(!isMuted);
             else if (i == 9 && m_UIManager) m_UIManager->RequestSettings();
+            else if (i == 10) m_PreviewSource = previewingStage ? PreviewSource::Publico : PreviewSource::Stage;
         }
     }
 
@@ -811,216 +818,22 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     ImVec2 p0 = ImGui::GetCursorScreenPos();
     ImVec2 p1 = ImVec2(p0.x + drawW, p0.y + drawH);
 
-    // ── 3. Fondo de video / Estado Inactivo ───────────────────────────────
-    if (!state.isProjecting)
-    {
-        dl->AddRectFilled(p0, p1, IM_COL32(8, 9, 16, 255));
-
-        const char* msg     = "Sin proyeccion activa";
-        ImVec2      msgSize = ImGui::CalcTextSize(msg);
-        dl->AddText(
-            ImVec2(p0.x + (drawW - msgSize.x) * 0.5f,
-                   p0.y + (drawH - msgSize.y) * 0.5f),
-            IM_COL32(60, 65, 90, 255),
-            msg);
-
-        dl->AddRect(p0, p1, IM_COL32(40, 44, 64, 255), 0.0f, 0, 1.0f);
-
-        // REGISTRAMOS SOLO EL ESPACIO QUE USAMOS
-        ImGui::Dummy(ImVec2(drawW, drawH));
-        return;
-    }
-
-    // Si está proyectando
-    if (state.bgType == Core::PresentationState::BackgroundType::Video)
-    {
-        void* texID = core.GetProcessedBackgroundTexture((int)drawW, (int)drawH);
-        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
-        if (texID)
-        {
-            // Mismo ajuste de aspecto que el output real (ver
-            // BackgroundLayer::Render): antes esto solo estiraba la textura
-            // a TODO el rect del panel, que respeta el aspecto del MONITOR
-            // pero no el del video en si. Si el video no tenia el mismo AR
-            // que el monitor (y stretch-to-fill estaba apagado), el
-            // publico veia letterbox/pillarbox y el preview no — no
-            // coincidian.
-            ImVec2 vp0 = p0, vp1 = p1;
-            int vw = 0, vh = 0;
-            Core::VLCBasePlayer* bgPlayer = core.GetBackgroundPlayer();
-            if (bgPlayer) bgPlayer->GetVideoSize(vw, vh);
-
-            if (vw > 0 && vh > 0 && !core.GetStretchToFill())
-            {
-                float videoRatio  = (float)vw / (float)vh;
-                float screenRatio = drawW / drawH;
-
-                if (videoRatio > screenRatio + 0.001f)
-                {
-                    float fitH = drawW / videoRatio;
-                    float offY = (drawH - fitH) * 0.5f;
-                    vp0 = { p0.x, p0.y + offY };
-                    vp1 = { p1.x, p0.y + offY + fitH };
-                }
-                else if (videoRatio < screenRatio - 0.001f)
-                {
-                    float fitW = drawH * videoRatio;
-                    float offX = (drawW - fitW) * 0.5f;
-                    vp0 = { p0.x + offX, p0.y };
-                    vp1 = { p0.x + offX + fitW, p1.y };
-                }
-            }
-
-            dl->AddImage(texID, vp0, vp1, ImVec2(0, 0), ImVec2(1, 1));
-        }
-    }
-    else {
-         // Fondo base si proyecta algo que no es video (como imágenes o color sólido)
-         dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
-    }
-
-    // Overlay (logos, videos de overlay, etc.) — el output real siempre lo
-    // dibuja encima del fondo (ver PresentationCore::RenderProjectorWindow:
-    // background.Render() + overlay.Render()), pero el preview nunca lo
-    // mostraba: cualquier cosa activa en la pestaña Overlays estaba al aire
-    // pero invisible aca.
-    if (core.IsOverlayActive())
-    {
-        if (void* overlayTex = core.GetOverlayTexture())
-            dl->AddImage(overlayTex, p0, p1, ImVec2(0, 0), ImVec2(1, 1));
-    }
-
-    // ── 4. Texto proyectado ───────────────────────────────────────────────
-    if (state.showText && !state.currentText.empty())
-    {
-        // FIX: los margenes/tamano de texto estan definidos en unidades de
-        // referencia sobre un lienzo de 1920px (ver DrawTextBlock en
-        // UIManager.cpp, que es lo que realmente se dibuja en la pantalla
-        // al publico: usa screenScale = anchoRealDelMonitor / 1920). Este
-        // preview usaba drawW/srcW (ancho del panel / ancho real del
-        // monitor), que NO es lo mismo salvo que el monitor real mida
-        // exactamente 1920px de ancho: con cualquier otra resolucion
-        // (1366, 2560, 3840...) los margenes quedaban mal escalados y el
-        // texto se recortaba en el preview de forma distinta a como se ve
-        // realmente en la pantalla. Como drawW ya representa el ancho
-        // COMPLETO del monitor real dentro del panel, la conversion
-        // correcta de "unidades de 1920" a "pixeles de preview" es
-        // simplemente drawW/1920, sin pasar por el ancho real del monitor.
-        float scale = drawW / 1920.0f;
-
-        float marginL = state.margins[0] * scale;
-        float marginT = state.margins[1] * scale;
-        float marginR = state.margins[2] * scale;
-        float marginB = state.margins[3] * scale;
-
-        float boxW = std::max(10.0f, drawW - marginL - marginR);
-        float boxH = std::max(10.0f, drawH - marginT - marginB);
-        
-        // Usamos p0.x y p0.y en lugar del drawX/drawY antiguo
-        float boxX = p0.x + marginL;
-        float boxY = p0.y + marginT;
-
-        float fontSize = state.textSize * scale;
-
-        std::string fontName = core.GetActiveFontName();
-        ImFont* font = core.GetImGuiFont(fontName, fontSize);
-        if (!font) font = ImGui::GetFont();
-
-        if (state.autoScale)
-        {
-            while (fontSize > 4.0f)
-            {
-                ImVec2 ts = font->CalcTextSizeA(
-                    fontSize, FLT_MAX, boxW, state.currentText.c_str());
-                if (ts.y <= boxH) break;
-                fontSize -= 1.0f;
-            }
-        }
-
-        ImVec2 textBlock = font->CalcTextSizeA(
-            fontSize, FLT_MAX, boxW, state.currentText.c_str());
-
-        float textX = boxX;
-        if (state.textAlignment == 1)
-            textX += (boxW - textBlock.x) * 0.5f;
-        else if (state.textAlignment == 2)
-            textX += (boxW - textBlock.x);
-
-        float textY = boxY;
-        if (state.vAlignment == 1)
-            textY += (boxH - textBlock.y) * 0.5f;
-        else if (state.vAlignment == 2)
-            textY += (boxH - textBlock.y);
-
-        dl->PushClipRect(p0, p1, true);
-
-        ImU32 shadowCol = IM_COL32(0, 0, 0, 180);
-        ImU32 textCol   = ImGui::ColorConvertFloat4ToU32(
-            ImVec4(state.textColor[0], state.textColor[1],
-                   state.textColor[2], state.textColor[3]));
-
-        bool isSong = (core.PeekSelection().type == Core::ItemType::Song);
-        if (isSong && state.textAlignment == 1)
-        {
-            float lineH = font->CalcTextSizeA(fontSize, FLT_MAX, boxW, "A").y;
-
-            float startY = boxY;
-            if (state.vAlignment == 1)
-                startY += (boxH - textBlock.y) * 0.5f;
-            else if (state.vAlignment == 2)
-                startY += (boxH - textBlock.y);
-
-            float  curY     = startY;
-            size_t startPos = 0;
-            size_t endPos   = state.currentText.find('\n');
-
-            while (startPos != std::string::npos)
-            {
-                std::string line =
-                    state.currentText.substr(startPos, endPos - startPos);
-                if (!line.empty() && line.back() == '\r') line.pop_back();
-
-                if (!line.empty())
-                {
-                    ImVec2 lSize =
-                        font->CalcTextSizeA(fontSize, FLT_MAX, boxW, line.c_str());
-                    float lx = boxX + (boxW - lSize.x) * 0.5f;
-
-                    dl->AddText(font, fontSize,
-                        ImVec2(lx + 2.0f * scale, curY + 2.0f * scale),
-                        shadowCol, line.c_str());
-                    dl->AddText(font, fontSize,
-                        ImVec2(lx, curY), textCol, line.c_str());
-                }
-
-                curY += lineH;
-                if (endPos == std::string::npos) break;
-                startPos = endPos + 1;
-                endPos   = state.currentText.find('\n', startPos);
-            }
-        }
-        else
-        {
-            dl->AddText(font, fontSize,
-                ImVec2(textX + 2.0f * scale, textY + 2.0f * scale),
-                shadowCol, state.currentText.c_str(), nullptr, boxW);
-            dl->AddText(font, fontSize,
-                ImVec2(textX, textY), textCol,
-                state.currentText.c_str(), nullptr, boxW);
-        }
-
-        dl->PopClipRect();
-    }
-
-    // ── 5. Borde y UI adicional ───────────────────────────────────────────
-    dl->AddRect(p0, p1, IM_COL32(50, 55, 80, 180), 0.0f, 0, 1.0f);
+    // ── 3+4. Contenido: Público (fondo+overlay+texto) o Stage (grilla/mirror)
+    // Movido a UI::DrawPublicContent/DrawStageContent para poder reusarlo
+    // desde el Monitor de Control (ver LiveContentRenderer.h) — el operador
+    // elige la fuente con el boton "vaPreviewSource" del riel derecho.
+    if (m_PreviewSource == PreviewSource::Publico)
+        UI::DrawPublicContent(dl, p0, p1, drawW, drawH);
+    else
+        UI::DrawStageContent(dl, p0, p1);
 
     // ── 5b. Medidor VU chico, pegado al borde izquierdo del video ─────────
     // Antes vivia en RenderLiveTransport como una barra horizontal fija de
     // 48px de alto x todo el ancho, debajo del video. Se movio aca, chico y
     // vertical, para no robarle alto al transporte y quedar "encima" del
-    // visor como en un mixer, sin estorbar.
-    if (state.isProjecting)
+    // visor como en un mixer, sin estorbar. Solo tiene sentido mientras se
+    // previsualiza Publico (Stage no tiene audio propio).
+    if (m_PreviewSource == PreviewSource::Publico && state.isProjecting)
     {
         Core::VLCBasePlayer* liveBg = core.GetBackgroundPlayer();
         bool liveMuted   = core.GetLiveMute();
@@ -1045,7 +858,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     // para el equivalente que si se ve el publico, con el logo configurado
     // en Ajustes > Proyeccion). Este es solo feedback para el operador de
     // que un fondo/video esta cargando en standby.
-    if (core.IsBackgroundSwapPending())
+    if (m_PreviewSource == PreviewSource::Publico && core.IsBackgroundSwapPending())
     {
         const float spinR = 11.0f;
         ImVec2 spinCenter = { p1.x - spinR - 14.0f, p1.y - spinR - 14.0f };
@@ -1061,7 +874,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     }
 
     // ── 6. Indicador de Red (Solo cuando transmite) ───────────────────────
-    if (state.isProjecting && state.isStreamingNet)
+    if (m_PreviewSource == PreviewSource::Publico && state.isProjecting && state.isStreamingNet)
     {
         // Puedes cambiar "WIFI" por un icono de FontAwesome si tu proyecto lo soporta (ej. u8"\uf1eb")
         const char* wifiStr = "online"; 

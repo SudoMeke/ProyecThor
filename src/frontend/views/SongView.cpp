@@ -12,7 +12,6 @@
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "frontend/ui/SongPlayStats.h"
 #include "frontend/ui/DesignSystem.h"
-#include "frontend/ui/FilePicker.h"
 
 // Windows headers para SHGetKnownFolderPath
 #ifdef _WIN32
@@ -477,9 +476,80 @@ void SongView::RenderSettingsCard(const std::string& songFilename, ImVec2 p_min,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Fondos disponibles para el combo de "Fondo" del popup de ajustes — misma
+//  carpeta que usa el tab "Fondos" (ver LayersBgTab::BgRootDir/ReloadList),
+//  duplicada aca liviana (sin miniaturas ni cache de texturas, solo la lista
+//  de archivos) para no encadenar SongView con esa clase.
+// ─────────────────────────────────────────────────────────────────────────────
+struct SongBgEntry { std::string fullPath; std::string label; bool isImage = false; };
+
+static std::filesystem::path SongBgRootDir()
+{
+    std::filesystem::path dir;
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH] = {};
+    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
+    dir = std::filesystem::path(buf) / "ProyecThor";
+#else
+    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+    std::filesystem::path base;
+    if (xdgConfig && *xdgConfig)
+        base = std::filesystem::path(xdgConfig);
+    else
+        base = std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / ".config";
+    dir = base / "ProyecThor";
+#endif
+    return dir / "assets" / "backgrounds";
+}
+
+static std::vector<SongBgEntry> ListSongBackgrounds()
+{
+    auto isMedia = [](const std::string& ext) {
+        return ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov"
+            || ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+    };
+    auto isImageExt = [](const std::string& ext) {
+        return ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+    };
+    auto addFile = [&](const std::filesystem::directory_entry& f, const std::string& folder,
+                        std::vector<SongBgEntry>& out) {
+        std::string ext = f.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (!isMedia(ext)) return;
+        SongBgEntry entry;
+        entry.fullPath = f.path().string();
+        entry.label    = folder.empty() ? f.path().stem().string() : (folder + "/" + f.path().stem().string());
+        entry.isImage  = isImageExt(ext);
+        out.push_back(std::move(entry));
+    };
+
+    std::vector<SongBgEntry> out;
+    std::error_code ec;
+    std::filesystem::path root = SongBgRootDir();
+    if (!std::filesystem::exists(root, ec)) return out;
+
+    for (const auto& e : std::filesystem::directory_iterator(root, ec))
+    {
+        if (e.is_directory())
+        {
+            std::string folder = e.path().filename().string();
+            std::error_code subEc;
+            for (const auto& sub : std::filesystem::directory_iterator(e.path(), subEc))
+                if (sub.is_regular_file()) addFile(sub, folder, out);
+        }
+        else if (e.is_regular_file())
+        {
+            addFile(e, "", out);
+        }
+    }
+    std::sort(out.begin(), out.end(), [](const SongBgEntry& a, const SongBgEntry& b) { return a.label < b.label; });
+    return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  RenderSongSettingsPopup — contenido del popup que abre la tarjeta de
-//  ajustes: elegir estilo (de los guardados) y fondo (archivo) para ESTA
-//  cancion en particular.
+//  ajustes: elegir estilo (de los guardados) y fondo (de la biblioteca de
+//  Fondos) para ESTA cancion en particular.
 // ─────────────────────────────────────────────────────────────────────────────
 void SongView::RenderSongSettingsPopup(const std::string& songFilename)
 {
@@ -524,24 +594,32 @@ void SongView::RenderSongSettingsPopup(const std::string& songFilename)
         ImGui::Spacing();
 
         // ── Fondo ─────────────────────────────────────────────────────────
+        // Se elige de la misma biblioteca que el tab "Fondos" (assets/backgrounds),
+        // no de un archivo cualquiera del disco — mismo espiritu que el combo
+        // de Estilo de arriba.
         ProyecThor::Library::SongBackground bg = ProyecThor::Library::GetSongBackground(songFilename);
-        ImGui::TextUnformatted("Fondo:");
-        std::string bgLabel = bg.path.empty() ? "(ninguno)" : std::filesystem::path(bg.path).filename().string();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::TextWrapped("%s", bgLabel.c_str());
-        ImGui::PopStyleColor();
+        std::vector<SongBgEntry> bgEntries = ListSongBackgrounds();
 
-        if (DS::GlassButton("Elegir...", { 100.f, DS::ButtonHeight }, DS::AccentColor))
+        ImGui::TextUnformatted("Fondo:");
+        ImGui::SetNextItemWidth(240.0f);
+        std::string bgPreview = bg.path.empty() ? "(ninguno)" : std::filesystem::path(bg.path).filename().string();
+        if (ImGui::BeginCombo("##songBgCombo", bgPreview.c_str()))
         {
-            std::string picked = ProyecThor::UI::PickImageOrVideoFile();
-            if (!picked.empty())
-                ProyecThor::Library::SetSongBackground(songFilename, picked, ProyecThor::UI::LooksLikeVideoPath(picked));
-        }
-        if (!bg.path.empty())
-        {
-            ImGui::SameLine();
-            if (DS::GlassButton("Quitar", { 90.f, DS::ButtonHeight }, DS::DangerColor))
+            if (ImGui::Selectable("(ninguno)", bg.path.empty()))
                 ProyecThor::Library::ClearSongBackground(songFilename);
+            for (const auto& entry : bgEntries)
+            {
+                bool sel = (entry.fullPath == bg.path);
+                if (ImGui::Selectable(entry.label.c_str(), sel))
+                    ProyecThor::Library::SetSongBackground(songFilename, entry.fullPath, !entry.isImage);
+            }
+            if (bgEntries.empty())
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+                ImGui::TextWrapped("Sin fondos en la biblioteca (agregalos desde la pestaña Fondos).");
+                ImGui::PopStyleColor();
+            }
+            ImGui::EndCombo();
         }
 
         ImGui::EndPopup();

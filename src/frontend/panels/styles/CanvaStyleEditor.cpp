@@ -3,6 +3,7 @@
 #include "styles/TabAlignment.h"
 #include "styles/TabMargins.h"
 #include "backend/core/PresentationCore.h"
+#include "SettingsManager.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cstring>
@@ -13,25 +14,29 @@
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  CanvaPalette — definiciones
+//  CanvaPalette — Sync()
 // ─────────────────────────────────────────────────────────────────────────────
-
-const ImVec4 CanvaPalette::Accent       = ImVec4(0.39f, 0.44f, 0.97f, 1.0f);
-const ImVec4 CanvaPalette::AccentHov    = ImVec4(0.49f, 0.54f, 1.00f, 1.0f);
-const ImVec4 CanvaPalette::AccentActive = ImVec4(0.30f, 0.35f, 0.90f, 1.0f);
-const ImVec4 CanvaPalette::Green        = ImVec4(0.10f, 0.79f, 0.55f, 1.0f);
-const ImVec4 CanvaPalette::Red          = ImVec4(0.93f, 0.26f, 0.36f, 1.0f);
-const ImVec4 CanvaPalette::Surface0     = ImVec4(0.09f, 0.09f, 0.11f, 1.0f);
-const ImVec4 CanvaPalette::Surface1     = ImVec4(0.12f, 0.13f, 0.16f, 1.0f);
-const ImVec4 CanvaPalette::Surface2     = ImVec4(0.16f, 0.17f, 0.22f, 1.0f);
-const ImVec4 CanvaPalette::Border       = ImVec4(0.22f, 0.23f, 0.30f, 1.0f);
-const ImVec4 CanvaPalette::Text         = ImVec4(0.92f, 0.92f, 0.94f, 1.0f);
-const ImVec4 CanvaPalette::TextMuted    = ImVec4(0.50f, 0.52f, 0.60f, 1.0f);
-const ImVec4 CanvaPalette::Gold         = ImVec4(0.95f, 0.72f, 0.20f, 1.0f);
-const ImVec4 CanvaPalette::Pink         = ImVec4(0.93f, 0.40f, 0.70f, 1.0f);
 
 ImU32 CanvaPalette::ToU32(const ImVec4& c) {
     return ImGui::ColorConvertFloat4ToU32(c);
+}
+
+static ImVec4 CanvaV(const float* a, float alphaMul = 1.0f) {
+    return ImVec4(a[0], a[1], a[2], a[3] * alphaMul);
+}
+
+void CanvaPalette::Sync(const ProyecThor::Settings::ThemeSettings& t) {
+    Accent       = CanvaV(t.accent);
+    AccentHov    = CanvaV(t.accentLight);
+    AccentActive = CanvaV(t.accentDim);
+    Green        = CanvaV(t.success);
+    Red          = CanvaV(t.danger);
+    Surface0     = CanvaV(t.surface0);
+    Surface1     = CanvaV(t.surface1);
+    Surface2     = CanvaV(t.surface2);
+    Border       = CanvaV(t.border);
+    Text         = CanvaV(t.textPrimary);
+    TextMuted    = CanvaV(t.textDim);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

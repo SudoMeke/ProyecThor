@@ -177,6 +177,11 @@ namespace ProyecThor::Settings {
         int  monitorIndex = -1;    // -1 = sin elegir aun -> default a la pantalla secundaria
         bool useLAN        = false;
         int  lanPort        = 8080;
+
+        // Si esta activo, Stage ignora la grilla de celdas y muestra
+        // exactamente lo mismo que el operador ve en "Vista en Vivo"
+        // (fondo+overlay+texto) — ver UI::DrawStageContent.
+        bool mirrorPublicOutput = false;
     };
 
     // ── Sidebar de Biblioteca (Letra/Video/Imagen/Biblia/Doc/Audio) ──────

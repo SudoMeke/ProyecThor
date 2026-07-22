@@ -179,7 +179,7 @@ void RenderLocalVideoList(LibraryContext& ctx)
             ImGui::SetCursorPos({
                 std::floor(avail.x * 0.5f - 70.f),
                 std::floor(avail.y * 0.5f - 10.f) });
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.55f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
             ImGui::TextUnformatted("Sin archivos de video");
             ImGui::PopStyleColor();
         }
@@ -212,7 +212,7 @@ void RenderLocalVideoList(LibraryContext& ctx)
                 std::string fullPath = GetAssetsPath() + "/videos/" + filtered[n];
                 ImGui::SetDragDropPayload("VIDEO_TO_QUEUE",
                     fullPath.c_str(), fullPath.size() + 1);
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.48f, 0.92f, 0.56f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
                 ImGui::TextUnformatted(disp.c_str());
                 ImGui::PopStyleColor();
                 ImGui::EndDragDropSource();
@@ -243,7 +243,7 @@ void RenderLocalVideoList(LibraryContext& ctx)
                     ctx.showRenameModal = true;
                 }
                 ImGui::Separator();
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
                 if (ImGui::MenuItem("Eliminar")) {
                     ImGui::PopStyleColor();
                     ctx.selectedIndex = origIdx;
@@ -373,7 +373,7 @@ void RenderStreamURLSection(LibraryContext& ctx)
     if (ImGui::BeginChild("##url_list", { 0.f, listH }, true))
     {
         if (ctx.streamURLs.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.55f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
             ImGui::TextUnformatted("  Sin URLs guardadas");
             ImGui::PopStyleColor();
         }
@@ -409,7 +409,7 @@ void RenderStreamURLSection(LibraryContext& ctx)
             {
                 const std::string& url = ctx.streamURLs[i];
                 ImGui::SetDragDropPayload("URL_TO_QUEUE", url.c_str(), url.size() + 1);
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.48f, 0.92f, 0.56f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
                 ImGui::TextUnformatted(TruncURL(url, 38).c_str());
                 ImGui::PopStyleColor();
                 ImGui::EndDragDropSource();
@@ -431,7 +431,7 @@ void RenderStreamURLSection(LibraryContext& ctx)
                     ctx.showRenameModal = true;
                 }
                 ImGui::Separator();
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
                 if (ImGui::MenuItem("Eliminar URL")) {
                     ImGui::PopStyleColor();
                     ctx.streamURLs.erase(ctx.streamURLs.begin() + i);

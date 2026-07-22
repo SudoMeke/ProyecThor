@@ -20,7 +20,7 @@
 #include "qrcodegen.hpp"
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/ProjectionQualityPresets.h"
-#include "backend/settings/StageLayoutTemplates.h"
+#include "LiveContentRenderer.h"
 #include <ctime>
 
 namespace ProyecThor::UI {
@@ -734,86 +734,10 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                 ImGui::Begin("StageLive", nullptr, stageFlags);
                 ImDrawList* stageDrawList = ImGui::GetWindowDrawList();
 
-                stageDrawList->AddRectFilled(
+                DrawStageContent(
+                    stageDrawList,
                     ImVec2((float)smx, (float)smy),
-                    ImVec2((float)(smx + stageMode->width), (float)(smy + stageMode->height)),
-                    IM_COL32(8, 8, 10, 255));
-
-                const auto& stageSettings =
-                    ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
-                int tmplIdx = std::clamp(stageSettings.layoutTemplateIndex, 0,
-                                          ProyecThor::Settings::kStageLayoutTemplateCount - 1);
-                const auto& stageTmpl = ProyecThor::Settings::kStageLayoutTemplates[tmplIdx];
-
-                for (int i = 0; i < stageTmpl.cellCount; i++)
-                {
-                    const float* r = stageTmpl.rect[i];
-                    float cx0 = smx + r[0] * stageMode->width;
-                    float cy0 = smy + r[1] * stageMode->height;
-                    float cw  = r[2] * stageMode->width;
-                    float ch  = r[3] * stageMode->height;
-                    const float pad = 12.0f;
-
-                    stageDrawList->AddRect(
-                        ImVec2(cx0 + pad, cy0 + pad), ImVec2(cx0 + cw - pad, cy0 + ch - pad),
-                        IM_COL32(255, 255, 255, 25), 8.0f);
-
-                    auto widget = static_cast<ProyecThor::Settings::StageWidgetType>(
-                        std::clamp(stageSettings.cellWidget[i], 0, 3));
-
-                    std::string cellText;
-                    ImU32 cellColor = IM_COL32(235, 235, 240, 255);
-                    float fontFrac  = 0.16f;
-                    ImFont* cellFont = ImGui::GetFont();
-
-                    switch (widget) {
-                        case ProyecThor::Settings::StageWidgetType::Clock: {
-                            std::time_t now = std::time(nullptr);
-                            std::tm lt{};
-#ifdef _WIN32
-                            localtime_s(&lt, &now);
-#else
-                            localtime_r(&now, &lt);
-#endif
-                            char buf[16];
-                            std::strftime(buf, sizeof(buf), "%H:%M:%S", &lt);
-                            cellText = buf;
-                            fontFrac = 0.24f;
-                            break;
-                        }
-                        case ProyecThor::Settings::StageWidgetType::LiveText: {
-                            cellText = state.currentText;
-                            ImFont* activeFont = Core::PresentationCore::Get().GetImGuiFont(
-                                Core::PresentationCore::Get().GetActiveFontName(), ch * fontFrac);
-                            if (activeFont) cellFont = activeFont;
-                            break;
-                        }
-                        case ProyecThor::Settings::StageWidgetType::NextLine: {
-                            cellText = state.nextText;
-                            cellColor = IM_COL32(170, 175, 190, 255);
-                            fontFrac  = 0.12f;
-                            ImFont* activeFont = Core::PresentationCore::Get().GetImGuiFont(
-                                Core::PresentationCore::Get().GetActiveFontName(), ch * fontFrac);
-                            if (activeFont) cellFont = activeFont;
-                            break;
-                        }
-                        default:
-                            break;
-                    }
-
-                    if (!cellText.empty()) {
-                        float wrapW    = std::max(10.0f, cw - pad * 4.0f);
-                        float fontSize = std::clamp(ch * fontFrac, 14.0f, 140.0f);
-
-                        ImVec2 ts = cellFont->CalcTextSizeA(fontSize, FLT_MAX, wrapW, cellText.c_str());
-                        ImVec2 pos = ImVec2(cx0 + (cw - ts.x) * 0.5f, cy0 + (ch - ts.y) * 0.5f);
-
-                        stageDrawList->PushClipRect(ImVec2(cx0, cy0), ImVec2(cx0 + cw, cy0 + ch), true);
-                        stageDrawList->AddText(cellFont, fontSize, pos, cellColor,
-                                               cellText.c_str(), nullptr, wrapW);
-                        stageDrawList->PopClipRect();
-                    }
-                }
+                    ImVec2((float)(smx + stageMode->width), (float)(smy + stageMode->height)));
 
                 ImGui::End();
             }

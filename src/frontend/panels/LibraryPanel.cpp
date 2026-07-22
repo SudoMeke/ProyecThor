@@ -403,6 +403,8 @@ void LibraryPanel::Render()
     {
         m_AudioSelectionSet = false;
         m_PrevCategory      = m_CurrentCategory;
+        m_SearchBuffer[0]   = '\0';
+        RefreshList();
     }
     
     ImGuiIO& io = ImGui::GetIO();

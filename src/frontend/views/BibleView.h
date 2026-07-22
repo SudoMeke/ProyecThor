@@ -28,10 +28,15 @@ private:
 
     void RenderTopBar();
     void RenderHistoryPopup();
+    void RenderFavoritesPopup();
     void RenderBookGrid();
     void RenderChapterGrid();
     void RenderVerseList();
     void RenderEditModal();
+
+    // Navega a un versiculo favorito, cargando su Biblia si es distinta a
+    // la actualmente abierta (ver RenderFavoritesPopup).
+    void JumpToFavorite(const std::string& bible, int bookNum, int chapterNum, int verseNum);
 enum class JumpKind { None, Chapter, Verse };
 
 // Salto rapido de capitulo/versiculo (tap de Ctrl / Alt)
@@ -86,6 +91,11 @@ bool   m_AltComboFired  = false;
     bool   m_ShowHistory    = false;
     ImVec2 m_HistoryBtnPos  = {};
     ImVec2 m_HistoryBtnSize = {};
+
+    // Favoritos (ver biblia/BibleFavorites.h)
+    bool   m_ShowFavorites    = false;
+    ImVec2 m_FavoritesBtnPos  = {};
+    ImVec2 m_FavoritesBtnSize = {};
 
     // Buscador rapido tipo "quick nav" (overlay, letra por letra, con
     // previsualizacion en vivo de Libro / Capitulo / Versiculo)

@@ -53,6 +53,14 @@ private:
     void ToggleAudience(bool active);
     void ToggleStageQuick(bool active);
 
+    // Que fuente previsualiza el video de "Vista en Vivo" — no confundir con
+    // los puntos de estado (RenderStatusDots), que prenden/apagan las
+    // salidas reales. Esto solo cambia que ve el OPERADOR aca, para poder
+    // llevar constancia de Publico y Stage sin pararse frente al segundo
+    // monitor (ver boton "vaPreviewSource" en RenderQuickActions).
+    enum class PreviewSource { Publico, Stage };
+    PreviewSource m_PreviewSource = PreviewSource::Publico;
+
     AudioMeters m_AudioMeters;
     bool        m_LivePlaying = false;
     bool        m_LiveMuted   = false;

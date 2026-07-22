@@ -249,9 +249,10 @@ void ViewToolsPanel::Render()
     {
         ImVec2      p  = ImGui::GetCursorScreenPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImU32 colLeft  = IM_COL32(60, 80, 160,  0);
-        ImU32 colMid   = IM_COL32(60, 80, 160, 80);
-        ImU32 colRight = IM_COL32(60, 80, 160,  0);
+        ImU32 accentRGB = DS::AccentColor & 0x00FFFFFFu;
+        ImU32 colLeft  = accentRGB;
+        ImU32 colMid   = accentRGB | (80u << 24);
+        ImU32 colRight = accentRGB;
         float midX     = p.x + totalW * 0.5f;
         dl->AddRectFilledMultiColor(p, { midX, p.y + 1.f }, colLeft, colMid, colMid, colLeft);
         dl->AddRectFilledMultiColor({ midX, p.y }, { p.x + totalW, p.y + 1.f }, colMid, colRight, colRight, colMid);

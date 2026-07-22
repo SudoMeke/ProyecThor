@@ -67,7 +67,6 @@ LayersStyleTab::LayersStyleTab() {
 
     auto onFontImported = [this](const std::string& fontPath) {
         Core::PresentationCore::Get().LoadSingleFontIntoImGui(fontPath);
-        ImGui::GetIO().Fonts->TexID = nullptr;
         LoadFontsList();
     };
     m_StyleEditor = std::make_unique<CanvaStyleEditor>(&m_AvailableFonts, onFontImported);

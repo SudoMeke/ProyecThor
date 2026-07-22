@@ -12,6 +12,8 @@
 #endif
 #include "MonitorTheme.h"
 #include "HubTheme.h"
+#include "LayersTheme.h"
+#include "CanvaStyleEditor.h"
 
 using json = nlohmann::json;
 
@@ -369,7 +371,9 @@ void SettingsManager::ApplyTheme() {
 
     ProyecThor::UI::DS::SyncFromTheme(t);
     ProyecThor::UI::MonitorTheme::Sync(t);
-     ProyecThor::UI::HubTheme::Sync(t);
+    ProyecThor::UI::HubTheme::Sync(t);
+    ProyecThor::UI::LP::Sync(t);
+    ProyecThor::UI::CanvaPalette::Sync(t);
 }
 
 // ── Persistencia ─────────────────────────────────────────────────────────

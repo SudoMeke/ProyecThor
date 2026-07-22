@@ -21,32 +21,10 @@ public:
     int  GetActiveTab()         const { return m_ActiveTab; }
 
 private:
-    void RenderBackground(float w, float h);
-    void RenderLeftPanel (float w, float h);
-    void RenderRightPanel(float startX, float w, float h);
-
-    void RenderTabNovedades(float contentW, float a);
-    void RenderTabRecursos (float contentW, float a);
-    void RenderTabAjustes  (float contentW, float a);
-
-    bool BigButton(const char* label, const char* sublabel,
-                   float w, float h, bool primary = false, bool disabled = false);
-
-    void SectionTitle(const char* title);
-
-    void QuickStatCard(const char* label, const char* value,
-                       float w, unsigned int accentColorU32);
-
     void RenderSidebar(float w, float h);
     void RenderMainContent(float w, float h);
 
-    void GlassCard(float x, float y, float w, float h,
-                   unsigned int borderColor = 0,
-                   float cornerRadius = 12.0f);
-
-    void  UpdateAnimations(float dt);
-    float GetAlpha() const;
-    float GetSlide() const;
+    void UpdateAnimations(float dt);
 
     bool  m_Open                  = true;
     bool  m_Appearing             = true;
@@ -78,8 +56,6 @@ private:
     void InitBgParticles(float w, float h);
     void UpdateBgParticles(float dt, float w, float h);
     void RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h);
-
-    std::array<float, 8> m_NavHover = {};
 
     std::chrono::steady_clock::time_point m_LastFrameTime;
 };

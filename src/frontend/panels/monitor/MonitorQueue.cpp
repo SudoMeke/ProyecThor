@@ -43,14 +43,14 @@ static RowColors GetRowColors(bool isPlaying, bool isSelected, int rowIndex)
     c.accent      = 0;
 
     if (isPlaying) {
-        c.bg          = IM_COL32(12, 80, 38, 85);
+        c.bg          = ImGui::ColorConvertFloat4ToU32(ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.33f));
         c.accent      = ImGui::ColorConvertFloat4ToU32(k_QueueAccent);
         c.text        = ImGui::ColorConvertFloat4ToU32(k_QueueAccent);
         c.drawLeftBar = true;
     } else if (isSelected) {
-        c.bg = IM_COL32(22, 52, 110, 90);
+        c.bg = ImGui::ColorConvertFloat4ToU32(ImVec4(k_PrevAccent.x, k_PrevAccent.y, k_PrevAccent.z, 0.35f));
     } else if (rowIndex % 2 == 0) {
-        c.bg = IM_COL32(255, 255, 255, 5);
+        c.bg = ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextPrimary.x, k_TextPrimary.y, k_TextPrimary.z, 0.02f));
     } else {
         c.bg = 0;
     }
@@ -97,8 +97,8 @@ void MonitorView::RenderQueue(float w)
     const float btnAreaH = apBtnH + btnH * 2.0f + spacing * 3.0f + 10.0f;
     const float listH    = totalH - headerH - btnAreaH - k_PadLg * 2.0f;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg,  ImVec4(0.034f, 0.042f, 0.056f, 1.00f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.22f,  0.70f,  0.44f,  0.20f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg,  k_Bg3);
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.20f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   k_R);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   { k_Pad, k_Pad });
@@ -133,7 +133,7 @@ void MonitorView::RenderQueue(float w)
     }
 
     {
-        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.22f, 0.88f, 0.52f, 0.18f));
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.18f));
         ImGui::Separator();
         ImGui::PopStyleColor();
     }
@@ -208,7 +208,7 @@ void MonitorView::RenderQueue(float w)
             float barY = rowMin.y + k_RowH - 3.0f;
             dl->AddRectFilled({ rowMin.x + 3.0f, barY },
                               { rowMin.x + availW, barY + 3.0f },
-                              IM_COL32(255, 255, 255, 18), 1.5f);
+                              ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextPrimary.x, k_TextPrimary.y, k_TextPrimary.z, 0.07f)), 1.5f);
             dl->AddRectFilled({ rowMin.x + 3.0f, barY },
                               { rowMin.x + 3.0f + (availW - 3.0f) * progress, barY + 3.0f },
                               ImGui::ColorConvertFloat4ToU32(k_QueueAccent), 1.5f);
@@ -222,17 +222,19 @@ void MonitorView::RenderQueue(float w)
             snprintf(num, sizeof(num), "%d", i + 1);
             ImVec2 numSz = ImGui::CalcTextSize(num);
             dl->AddText({ rowMin.x + 22.0f, rowMin.y + (k_RowH - numSz.y) * 0.5f },
-                        isPlaying ? rc.accent : IM_COL32(130, 140, 160, 180), num);
+                        isPlaying ? rc.accent
+                                  : ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextSecondary.x, k_TextSecondary.y, k_TextSecondary.z, 0.7f)),
+                        num);
         }
 
         {
             const char* tag      = (pfx == k_PfxURL) ? "URL" : "VID";
             ImU32       tagColor = (pfx == k_PfxURL)
-                                   ? IM_COL32(100, 160, 255, 200)
-                                   : IM_COL32(100, 220, 130, 200);
+                                   ? ImGui::ColorConvertFloat4ToU32(ImVec4(k_PrevAccent.x, k_PrevAccent.y, k_PrevAccent.z, 0.78f))
+                                   : ImGui::ColorConvertFloat4ToU32(ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.78f));
             ImU32       tagBg    = (pfx == k_PfxURL)
-                                   ? IM_COL32(30, 60, 120, 90)
-                                   : IM_COL32(20, 80, 40,  90);
+                                   ? ImGui::ColorConvertFloat4ToU32(ImVec4(k_PrevAccent.x, k_PrevAccent.y, k_PrevAccent.z, 0.35f))
+                                   : ImGui::ColorConvertFloat4ToU32(ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.35f));
             ImVec2 tagSz = ImGui::CalcTextSize(tag);
             float  tagX  = rowMin.x + 44.0f;
             float  tagY  = rowMin.y + (k_RowH - tagSz.y) * 0.5f;
@@ -256,7 +258,7 @@ void MonitorView::RenderQueue(float w)
                 dl->AddText(
                     { rowMin.x + availW - timeW,
                       rowMin.y + (k_RowH - ImGui::GetTextLineHeight()) * 0.5f },
-                    IM_COL32(180, 200, 180, 180), timeBuf);
+                    ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextSecondary.x, k_TextSecondary.y, k_TextSecondary.z, 0.7f)), timeBuf);
             }
 
             std::string name = disp;
@@ -344,7 +346,7 @@ void MonitorView::RenderQueue(float w)
 
         ImVec2 sepY = ImGui::GetCursorScreenPos();
         dl->AddLine({ rowMin.x, sepY.y }, { rowMin.x + availW, sepY.y },
-                    IM_COL32(255, 255, 255, 6));
+                    ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextPrimary.x, k_TextPrimary.y, k_TextPrimary.z, 0.025f)));
     }
 
     if (removeRequest >= 0)
@@ -357,7 +359,7 @@ void MonitorView::RenderQueue(float w)
     {
         float ey = listH * 0.35f;
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ey);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.45f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, k_TextDim);
         auto center = [&](const char* txt){
             float tw = ImGui::CalcTextSize(txt).x;
             ImGui::SetCursorPosX((availW - tw) * 0.5f);
@@ -398,7 +400,7 @@ void MonitorView::RenderQueue(float w)
     ImGui::EndChild(); // queue_list
 
     {
-        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.22f, 0.88f, 0.52f, 0.12f));
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.12f));
         ImGui::Separator();
         ImGui::PopStyleColor();
     }
@@ -412,12 +414,12 @@ void MonitorView::RenderQueue(float w)
 
         {
             ImVec4 apBase = isActive
-                ? ImVec4(0.10f, 0.46f, 0.22f, 1.0f)
-                : ImVec4(0.07f, 0.32f, 0.16f, 1.0f);
+                ? ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.50f)
+                : ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.34f);
             ImVec4 apHov = isActive
-                ? ImVec4(0.14f, 0.58f, 0.28f, 1.0f)
-                : ImVec4(0.10f, 0.42f, 0.22f, 1.0f);
-            ImVec4 apAct = ImVec4(0.05f, 0.24f, 0.12f, 1.0f);
+                ? ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.64f)
+                : ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.46f);
+            ImVec4 apAct = ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.27f);
             const char* apLabel = isActive
                 ? "        Detener reproduccion"
                 : "        Reproducir cola";

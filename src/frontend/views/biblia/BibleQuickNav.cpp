@@ -2,6 +2,8 @@
 #include "BibleTextUtils.h"
 #include "BibleBookData.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "frontend/ui/DesignSystem.h"
+#include "ControlWidgets.h"
 #include <cctype>
 #include <algorithm> // Requerido para std::clamp
 
@@ -13,7 +15,7 @@ namespace ProyecThor::UI {
 namespace {
 
 void DrawHint(const std::string& text) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.55f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
     ImGui::TextUnformatted(text.c_str());
     ImGui::PopStyleColor();
 }
@@ -24,7 +26,7 @@ void DrawHintIcon(const char* iconName, const std::string& text) {
         float sz = ImGui::GetTextLineHeight();
         ImGui::Image((ImTextureID)it->second.textureID, ImVec2(sz, sz),
                      ImVec2(0, 0), ImVec2(1, 1),
-                     ImVec4(0.45f, 0.48f, 0.55f, 1.0f),   // tint_col
+                     ToVec4(DS::TextHint),                // tint_col
                      ImVec4(0.0f, 0.0f, 0.0f, 0.0f));     // border_col (transparent = no border)
         ImGui::SameLine(0.0f, 6.0f);
     }
@@ -100,8 +102,10 @@ void BibleQuickNav::Render(const BibleData& bible) {
     ImGui::SetNextWindowPos(ImVec2(center.x, center.y + slideOffset), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.11f, 0.98f * eased));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.25f, 0.35f, 0.55f, 0.85f * eased));
+    ImVec4 quickNavBg     = ToVec4(DS::GlassFillTop); quickNavBg.w     *= eased;
+    ImVec4 quickNavBorder = ToVec4(DS::GlassBorder);  quickNavBorder.w *= eased;
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, quickNavBg);
+    ImGui::PushStyleColor(ImGuiCol_Border,   quickNavBorder);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(22.0f, 20.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
@@ -139,7 +143,7 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
         (m_Step == QuickNavStep::Book)    ? "Libro" :
         (m_Step == QuickNavStep::Chapter) ? "Capitulo" : "Versiculo";
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.43f, 0.50f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
     ImGui::TextUnformatted(stepLabel);
     ImGui::PopStyleColor();
 
@@ -147,7 +151,7 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
         (m_Step == QuickNavStep::Book)    ? m_BookBuffer :
         (m_Step == QuickNavStep::Chapter) ? m_ChapterBuffer : m_VerseBuffer;
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.85f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
     ImGui::SetWindowFontScale(1.6f);
     ImGui::TextUnformatted(currentBuffer.empty() ? "_" : currentBuffer.c_str());
     ImGui::SetWindowFontScale(1.0f);
@@ -186,7 +190,7 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
 
     if (!m_StatusMessage.empty()) {
         ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.40f, 0.40f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::DangerColor));
         ImGui::TextUnformatted(m_StatusMessage.c_str());
         ImGui::PopStyleColor();
     }

@@ -23,6 +23,30 @@ static constexpr ImVec4 kGrayText  = { 0.65f, 0.68f, 0.75f, 1.0f };
 
 static ImU32 Col(ImVec4 v) { return ImGui::ColorConvertFloat4ToU32(v); }
 
+// Insignia chica "EXPERIMENTAL" para features nuevas y todavia no probadas a
+// fondo en produccion — mismo lenguaje visual (rect redondeado + borde, ver
+// MonitorUIHelpers::DrawVideoFrame) pero en linea con ImGui::SameLine() en
+// vez de posicionado absoluto sobre un frame de video.
+static void ExperimentalBadge() {
+    static constexpr ImVec4 kWarnAccent = { 0.95f, 0.65f, 0.20f, 1.0f };
+    const char* label = "EXPERIMENTAL";
+
+    ImGui::SameLine();
+    ImVec2 labelSz = ImGui::CalcTextSize(label);
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    const float padX = 6.0f, padY = 2.0f;
+    ImVec2 sz = { labelSz.x + padX * 2.0f, labelSz.y + padY * 2.0f };
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec4 bg = { kWarnAccent.x * 0.18f, kWarnAccent.y * 0.18f, kWarnAccent.z * 0.18f, 0.92f };
+    dl->AddRectFilled(p0, { p0.x + sz.x, p0.y + sz.y }, Col(bg), 4.0f);
+    dl->AddRect(p0, { p0.x + sz.x, p0.y + sz.y },
+        Col({ kWarnAccent.x, kWarnAccent.y, kWarnAccent.z, 0.70f }), 4.0f, 0, 1.0f);
+    dl->AddText({ p0.x + padX, p0.y + padY }, Col(kWarnAccent), label);
+
+    ImGui::Dummy(sz);
+}
+
 // Boton simple de plantilla (mismo espiritu que el selector de calidad de
 // CategoryProjection.cpp, duplicado liviano ya que viven en modulos
 // distintos y el widget es de solo 6 lineas).
@@ -57,6 +81,16 @@ void StageDisplayPanel::RenderContent() {
     ImGui::Separator();
     ImGui::Spacing();
 
+    auto& sd = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+    if (ImGui::Checkbox("Mostrar lo mismo que el operador ve (Público)", &sd.mirrorPublicOutput))
+        ProyecThor::Settings::SettingsManager::Get().Save();
+    ExperimentalBadge();
+    ImGui::TextDisabled("En vez de la grilla de celdas, el Stage replica el fondo/overlay/texto que ve el operador en Vista en Vivo.");
+
+    if (sd.mirrorPublicOutput)
+        return;
+
+    ImGui::Spacing();
     RenderTemplateSelector();
     ImGui::Spacing();
     RenderCellPreview();

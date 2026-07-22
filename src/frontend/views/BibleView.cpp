@@ -5,15 +5,27 @@
 #include "biblia/BibleBookData.h"
 #include "biblia/BibleXmlIO.h"
 #include "biblia/BibleSearch.h"
+#include "biblia/BibleFavorites.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
 #include <cstring>
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "frontend/ui/DesignSystem.h"
+#include "ControlWidgets.h"
 
 namespace ProyecThor::UI {
 
 using TextUtils::Col;
+
+// Insignia "+" chica superpuesta al corazon de una fila, para distinguirlo
+// del corazon "ver favoritos" de la barra superior (pedido explicito: dos
+// iconos distintos, uno abre la lista, el otro agrega el versiculo actual).
+static void DrawPlusBadge(ImDrawList* dl, ImVec2 corner) {
+    dl->AddCircleFilled(corner, 6.0f, ImGui::ColorConvertFloat4ToU32(ToVec4(DS::AccentColor)));
+    dl->AddLine({ corner.x - 3.0f, corner.y }, { corner.x + 3.0f, corner.y }, IM_COL32(10, 10, 12, 255), 1.4f);
+    dl->AddLine({ corner.x, corner.y - 3.0f }, { corner.x, corner.y + 3.0f }, IM_COL32(10, 10, 12, 255), 1.4f);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helper: build the projected text string
@@ -213,12 +225,12 @@ void BibleView::RenderTopBar() {
     const float frameH  = ImGui::GetFrameHeight();
     const float centerY = (barH - frameH) * 0.5f;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.06f, 0.08f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ToVec4(DS::GlassFillTop));
     ImGui::BeginChild("##BibleTopBar", ImVec2(0.0f, barH), false,
                       ImGuiWindowFlags_NoScrollbar);
 
     ImGui::SetCursorPos(ImVec2(10.0f, (barH - ImGui::GetTextLineHeight()) * 0.5f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.75f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
     ImGui::TextUnformatted(m_CurrentBible.name.empty() ? "Sin Biblia" : m_CurrentBible.name.c_str());
     ImGui::PopStyleColor();
 
@@ -285,10 +297,8 @@ void BibleView::RenderTopBar() {
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Button,
-        m_ShowHistory
-            ? ImVec4(0.20f, 0.30f, 0.45f, 1.0f)
-            : ImVec4(0.12f, 0.14f, 0.18f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.26f, 0.38f, 1.0f));
+        m_ShowHistory ? ToVec4(ColA(DS::AccentColor, 90)) : ToVec4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::BtnHoverFill));
 
     bool histClicked = ImGui::Button("##history", ImVec2(iconBtnSize, iconBtnSize));
 
@@ -303,7 +313,7 @@ void BibleView::RenderTopBar() {
                 itHist->second.textureID,
                 iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                 ImVec2(0, 0), ImVec2(1, 1),
-                hasHistory ? Col(0.55f, 0.85f, 1.0f, 1.0f) : Col(0.40f, 0.42f, 0.48f, 1.0f));
+                m_ShowHistory ? DS::AccentColor : (hasHistory ? DS::TextSecondary : DS::TextHint));
         }
     }
     if (ImGui::IsItemHovered()) {
@@ -327,8 +337,8 @@ void BibleView::RenderTopBar() {
     ImGui::SetCursorPosY(centerY);
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.14f, 0.18f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.26f, 0.38f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        ToVec4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::BtnHoverFill));
 
     bool searchClicked = ImGui::Button("##quicknav", ImVec2(iconBtnSize, iconBtnSize));
 
@@ -343,7 +353,7 @@ void BibleView::RenderTopBar() {
                 itSearch->second.textureID,
                 iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                 ImVec2(0, 0), ImVec2(1, 1),
-                Col(0.55f, 0.85f, 1.0f, 1.0f));
+                DS::TextSecondary);
         }
     }
 
@@ -360,11 +370,51 @@ void BibleView::RenderTopBar() {
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
 
+    // ── Boton de favoritos (abre la lista de versiculos marcados) ─────
+    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::SetCursorPosY(centerY);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,
+        m_ShowFavorites ? ToVec4(ColA(DS::AccentColor, 90)) : ToVec4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::BtnHoverFill));
+
+    bool favClicked = ImGui::Button("##favorites", ImVec2(iconBtnSize, iconBtnSize));
+
+    {
+        ImVec2 fMin = ImGui::GetItemRectMin();
+        auto itFav = StyleGeneralApp::Icons.find("favorite");
+        if (itFav != StyleGeneralApp::Icons.end() && itFav->second.textureID) {
+            float iconSize = ImGui::GetFontSize() * 0.9f;
+            ImVec2 iconPos = ImVec2(fMin.x + (iconBtnSize - iconSize) * 0.5f,
+                                     fMin.y + (iconBtnSize - iconSize) * 0.5f);
+            ImGui::GetWindowDrawList()->AddImage(
+                itFav->second.textureID,
+                iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                ImVec2(0, 0), ImVec2(1, 1),
+                m_ShowFavorites ? DS::AccentColor : DS::TextSecondary);
+        }
+    }
+
+    if (favClicked)
+        m_ShowFavorites = !m_ShowFavorites;
+
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Versiculos favoritos");
+
+    m_FavoritesBtnPos  = ImGui::GetItemRectMin();
+    m_FavoritesBtnSize = ImGui::GetItemRectSize();
+
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+
     ImGui::EndChild();
     ImGui::PopStyleColor(); // ChildBg
 
     if (m_ShowHistory)
         RenderHistoryPopup();
+    if (m_ShowFavorites)
+        RenderFavoritesPopup();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -382,8 +432,8 @@ void BibleView::RenderHistoryPopup() {
     ImGui::SetNextWindowSizeConstraints(ImVec2(260.0f, 60.0f), ImVec2(400.0f, 420.0f));
     ImGui::SetNextWindowBgAlpha(0.97f);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.09f, 0.12f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.20f, 0.30f, 0.45f, 0.70f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ToVec4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ToVec4(DS::GlassBorder));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(6.0f, 6.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,    ImVec2(6.0f, 3.0f));
@@ -401,14 +451,14 @@ void BibleView::RenderHistoryPopup() {
 
     if (ImGui::Begin("##BibleHistoryWin", &windowOpen, kHistFlags)) {
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.65f, 0.90f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
         ImGui::TextUnformatted("  Historial de versiculos");
         ImGui::PopStyleColor();
 
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 50.0f);
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.25f, 0.10f, 0.10f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.40f, 0.15f, 0.15f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.90f, 0.40f, 0.40f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text,          ToVec4(DS::DangerColor));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
         if (ImGui::SmallButton("Limpiar")) {
             m_History.clear();
@@ -428,13 +478,10 @@ void BibleView::RenderHistoryPopup() {
                           && entry.verseIdx == m_ProjectedVerseIdx);
 
             ImGui::PushStyleColor(ImGuiCol_Header,
-                ImVec4(0.15f, 0.25f, 0.40f, isActive ? 1.0f : 0.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
-                ImVec4(0.18f, 0.28f, 0.45f, 1.0f));
+                ToVec4(ColA(DS::AccentColor, isActive ? 90 : 0)));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ToVec4(DS::BtnHoverFill));
             ImGui::PushStyleColor(ImGuiCol_Text,
-                isActive
-                    ? ImVec4(0.55f, 0.85f, 1.0f, 1.0f)
-                    : ImVec4(0.85f, 0.87f, 0.90f, 1.0f));
+                isActive ? ToVec4(DS::AccentColor) : ToVec4(DS::TextPrimary));
 
             bool selected = ImGui::Selectable(entry.ref.c_str(), isActive,
                                               ImGuiSelectableFlags_None, ImVec2(0.0f, 0.0f));
@@ -473,23 +520,160 @@ void BibleView::RenderHistoryPopup() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  RenderFavoritesPopup — lista de versiculos marcados (ver
+//  biblia/BibleFavorites.h). Mismo lenguaje visual que RenderHistoryPopup,
+//  anclado debajo del boton de corazon de la barra superior.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void BibleView::RenderFavoritesPopup() {
+    if (!m_ShowFavorites) return;
+
+    ImVec2 winPos = ImVec2(m_FavoritesBtnPos.x,
+                           m_FavoritesBtnPos.y + m_FavoritesBtnSize.y + 4.0f);
+
+    ImGui::SetNextWindowPos(winPos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(340.0f, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(280.0f, 60.0f), ImVec2(420.0f, 460.0f));
+    ImGui::SetNextWindowBgAlpha(0.97f);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ToVec4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ToVec4(DS::GlassBorder));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(8.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,    ImVec2(6.0f, 4.0f));
+
+    constexpr ImGuiWindowFlags kFavFlags =
+        ImGuiWindowFlags_NoTitleBar        |
+        ImGuiWindowFlags_NoResize          |
+        ImGuiWindowFlags_NoMove            |
+        ImGuiWindowFlags_NoSavedSettings   |
+        ImGuiWindowFlags_NoFocusOnAppearing|
+        ImGuiWindowFlags_NoNav;
+
+    bool windowOpen = true;
+    bool earlyExit  = false;
+
+    if (ImGui::Begin("##BibleFavoritesWin", &windowOpen, kFavFlags)) {
+
+        auto favorites = Favorites::GetAll();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
+        ImGui::Text("  Versiculos favoritos (%d)", (int)favorites.size());
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+
+        if (favorites.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
+            ImGui::TextWrapped("Todavia no marcaste ningun versiculo. Usa el corazon junto a un versiculo, o click derecho sobre el, para agregarlo aca.");
+            ImGui::PopStyleColor();
+        }
+
+        for (int i = 0; i < (int)favorites.size(); i++) {
+            auto& fv = favorites[i];
+            ImGui::PushID(i);
+
+            const char* bookName = BibleBooks::GetCanonicalBookName(fv.bookNum);
+            std::string ref = (bookName ? bookName : ("Libro " + std::to_string(fv.bookNum)))
+                             + " " + std::to_string(fv.chapterNum) + ":" + std::to_string(fv.verseNum)
+                             + " (" + fv.bible + ")";
+
+            float removeW = 22.0f;
+            float rowW    = ImGui::GetContentRegionAvail().x - removeW - 4.0f;
+
+            ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ToVec4(DS::BtnHoverFill));
+            ImGui::PushStyleColor(ImGuiCol_Text,          ToVec4(DS::TextPrimary));
+
+            bool selected = ImGui::Selectable(("##fav" + std::to_string(i)).c_str(), false,
+                                              ImGuiSelectableFlags_None, ImVec2(rowW, 0.0f));
+            ImGui::PopStyleColor(3);
+
+            // Dibujamos la referencia y un fragmento del texto encima del
+            // Selectable (que solo reserva el layout/hit-test).
+            ImVec2 rMin = ImGui::GetItemRectMin();
+            ImVec2 rMax = ImGui::GetItemRectMax();
+            ImDrawList* fdl = ImGui::GetWindowDrawList();
+            fdl->AddText({ rMin.x + 4.0f, rMin.y + 2.0f }, DS::TextPrimary, ref.c_str());
+            std::string snippet = fv.text.size() > 60 ? fv.text.substr(0, 57) + "..." : fv.text;
+            fdl->AddText({ rMin.x + 4.0f, rMin.y + 2.0f + ImGui::GetTextLineHeight() },
+                         DS::TextSecondary, snippet.c_str());
+            (void)rMax;
+
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.10f, 0.10f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text,          ToVec4(DS::DangerColor));
+            if (ImGui::SmallButton("x")) {
+                Favorites::ToggleFavorite(fv.bible, fv.bookNum, fv.chapterNum, fv.verseNum, fv.text);
+            }
+            ImGui::PopStyleColor(3);
+
+            ImGui::PopID();
+
+            if (selected) {
+                JumpToFavorite(fv.bible, fv.bookNum, fv.chapterNum, fv.verseNum);
+                m_ShowFavorites = false;
+                earlyExit = true;
+                break;
+            }
+        }
+
+        if (!earlyExit
+            && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
+            && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            m_ShowFavorites = false;
+        }
+    }
+
+    ImGui::End();
+
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+
+    if (!windowOpen) m_ShowFavorites = false;
+}
+
+void BibleView::JumpToFavorite(const std::string& bible, int bookNum, int chapterNum, int verseNum) {
+    if (bible != m_CurrentBible.name)
+        LoadXMLBible(BiblesPath() + bible + ".xml");
+
+    for (int bi = 0; bi < (int)m_CurrentBible.books.size(); bi++) {
+        if (m_CurrentBible.books[bi].canonicalNumber != bookNum) continue;
+        auto& book = m_CurrentBible.books[bi];
+        for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
+            if (book.chapters[ci].number != chapterNum) continue;
+            auto& chap = book.chapters[ci];
+            for (int vi = 0; vi < (int)chap.verses.size(); vi++) {
+                if (chap.verses[vi].number != verseNum) continue;
+                m_SelectedBook    = bi;
+                m_SelectedChapter = ci;
+                m_SelectedVerse   = vi;
+                m_ScrollToVerse   = vi;
+                return;
+            }
+        }
+        break;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  RenderBookGrid
 // ─────────────────────────────────────────────────────────────────────────────
 
 void BibleView::RenderBookGrid() {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.45f, 1.0f));
-    ImGui::TextUnformatted("  LIBROS");
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
+    ImGui::TextUnformatted("LIBROS");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
     ImGui::BeginChild("##BookGrid",
         ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.60f), false);
 
-    const float cellW = 58.0f, cellH = 34.0f, spacing = 3.0f;
+    const float cellW = 58.0f, cellH = 32.0f, spacing = 6.0f;
     int cols = std::max(1, (int)((ImGui::GetContentRegionAvail().x + spacing) / (cellW + spacing)));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(spacing, spacing));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
 
     const QuickNavResolution& quickRes = m_QuickNav.GetResolution();
 
@@ -506,12 +690,15 @@ void BibleView::RenderBookGrid() {
 
         ImGui::PushStyleColor(ImGuiCol_Button,
             selected ? ImVec4(r*0.38f, g*0.38f, bv*0.38f, 1.0f)
-                     : ImVec4(r*0.08f, g*0.08f, bv*0.08f, alpha));
+                     : ImVec4(r*0.10f, g*0.10f, bv*0.10f, alpha));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
             ImVec4(r*0.25f, g*0.25f, bv*0.25f, alpha));
         ImGui::PushStyleColor(ImGuiCol_Text,
             selected ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f)
                      : ImVec4(r, g, bv, alpha));
+        ImGui::PushStyleColor(ImGuiCol_Border,
+            selected ? ImVec4(r, g, bv, 0.90f) : ImVec4(r, g, bv, 0.35f * alpha));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, selected ? 1.5f : 1.0f);
 
         ImGui::PushID(i);
         if (ImGui::Button(b.name.substr(0, 4).c_str(), ImVec2(cellW, cellH))) {
@@ -531,7 +718,8 @@ void BibleView::RenderBookGrid() {
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", b.name.c_str());
         ImGui::PopID();
-        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(4);
 
         if ((i + 1) % cols != 0) ImGui::SameLine();
     }
@@ -548,17 +736,19 @@ void BibleView::RenderChapterGrid() {
     if (m_SelectedBook < 0 || m_SelectedBook >= (int)m_CurrentBible.books.size()) return;
     auto& book = m_CurrentBible.books[m_SelectedBook];
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.45f, 1.0f));
-    ImGui::Text("  CAPITULOS  -  %s", book.name.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
+    ImGui::Text("CAPITULOS - %s", book.name.c_str());
     ImGui::PopStyleColor();
+    ImGui::Spacing();
 
     ImGui::BeginChild("##ChapterGrid", ImVec2(0.0f, 0.0f), false);
 
-    const float cellW = 36.0f, cellH = 28.0f, spacing = 3.0f;
+    const float cellW = 34.0f, cellH = 28.0f, spacing = 6.0f;
     int cols = std::max(1, (int)((ImGui::GetContentRegionAvail().x + spacing) / (cellW + spacing)));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(spacing, spacing));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
     float r, g, bv;
     BibleBooks::GetSectionColor(BibleBooks::GetBookSection(book.canonicalNumber), r, g, bv);
@@ -567,10 +757,12 @@ void BibleView::RenderChapterGrid() {
         bool selected = (m_SelectedChapter == i);
         ImGui::PushStyleColor(ImGuiCol_Button,
             selected ? ImVec4(r*0.35f, g*0.35f, bv*0.35f, 1.0f)
-                     : ImVec4(0.10f, 0.11f, 0.14f, 1.0f));
+                     : ToVec4(DS::BtnDefaultFill));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(r*0.20f, g*0.20f, bv*0.20f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_Text,
-            selected ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.65f, 0.68f, 0.74f, 1.0f));
+            selected ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ToVec4(DS::TextSecondary));
+        ImGui::PushStyleColor(ImGuiCol_Border,
+            selected ? ImVec4(r, g, bv, 0.90f) : ToVec4(DS::GlassBorder));
 
         ImGui::PushID(1000 + i);
         if (ImGui::Button(std::to_string(book.chapters[i].number).c_str(), ImVec2(cellW, cellH))) {
@@ -578,12 +770,12 @@ void BibleView::RenderChapterGrid() {
             m_SelectedVerse   = 0;
         }
         ImGui::PopID();
-        ImGui::PopStyleColor(3);
+        ImGui::PopStyleColor(4);
 
         if ((i + 1) % cols != 0) ImGui::SameLine();
     }
 
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     ImGui::EndChild();
 }
 
@@ -602,17 +794,27 @@ void BibleView::RenderVerseList() {
     BibleBooks::GetSectionColor(BibleBooks::GetBookSection(book.canonicalNumber), r, g, bv);
 
     const float marginH     = 28.0f;
-    const float numColW     = 32.0f;
-    const float gap         = 8.0f;
-    const float rowPadV     = 7.0f;
+    const float numColW     = 36.0f;
+    const float gap         = 10.0f;
+    const float rowPadV     = 8.0f;
     const float availW      = ImGui::GetContentRegionAvail().x;
     const float verseTextW  = availW - marginH * 2.0f - numColW - gap - 28.0f;
     const float textAbsX    = ImGui::GetCursorScreenPos().x + marginH + numColW + gap;
 
     ImGui::SetCursorPosX(marginH);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(r, g, bv, 1.0f));
-    ImGui::Text("%s  %d", book.name.c_str(), chap.number);
+    ImGui::SetWindowFontScale(1.15f);
+    ImGui::Text("%s %d", book.name.c_str(), chap.number);
+    ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
+    ImGui::Spacing();
+    {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(
+            ImVec2(p.x + marginH, p.y), ImVec2(p.x + ImGui::GetContentRegionAvail().x - marginH, p.y),
+            DS::GlassBorder);
+    }
+    ImGui::Spacing();
     ImGui::Spacing();
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -628,10 +830,22 @@ void BibleView::RenderVerseList() {
 
         if (m_ScrollToVerse == i) { ImGui::SetScrollHereY(0.3f); m_ScrollToVerse = -1; }
 
+        // Sin esto, el InvisibleButton de la fila se queda con g.HoveredId y
+        // ningun boton dibujado encima (lapiz, corazon) puede volverse
+        // hovered/clickeable — ver comentario en el plan de este cambio.
+        ImGui::SetNextItemAllowOverlap();
         ImGui::InvisibleButton("##vRow", ImVec2(availW, rowH));
         bool clicked   = ImGui::IsItemClicked();
         bool dblClick  = ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered();
         bool hovered   = ImGui::IsItemHovered();
+
+        bool isFavorite = Favorites::IsFavorite(m_CurrentBible.name, book.canonicalNumber, chap.number, verse.number);
+
+        if (ImGui::BeginPopupContextItem("verse_ctx")) {
+            if (ImGui::MenuItem(isFavorite ? "Quitar de favoritos" : "Agregar a favoritos", nullptr, isFavorite))
+                Favorites::ToggleFavorite(m_CurrentBible.name, book.canonicalNumber, chap.number, verse.number, verse.text);
+            ImGui::EndPopup();
+        }
 
         bool isProjected = (i == m_ProjectedVerseIdx
                          && m_SelectedBook    == m_ProjectedBookIdx
@@ -643,7 +857,7 @@ void BibleView::RenderVerseList() {
         else if (isProjected)
             dl->AddRectFilled(rowMin, rowMax, ImGui::ColorConvertFloat4ToU32(ImVec4(r*0.20f, g*0.20f, bv*0.20f, 0.50f)), 4.0f);
         else if (isSelected)
-            dl->AddRectFilled(rowMin, rowMax, Col(0.22f, 0.32f, 0.48f, 0.40f), 4.0f);
+            dl->AddRectFilled(rowMin, rowMax, ColA(DS::AccentColor, 100), 4.0f);
         else if (hovered)
             dl->AddRectFilled(rowMin, rowMax, Col(1.0f, 1.0f, 1.0f, 0.04f), 4.0f);
 
@@ -667,25 +881,72 @@ void BibleView::RenderVerseList() {
             dl->AddCircleFilled(ImVec2(rowMin.x + marginH - 4.0f, rowMin.y + rowPadV + 4.0f),
                 3.0f, Col(0.95f, 0.72f, 0.20f, 0.90f));
 
-        dl->AddText(ImVec2(rowMin.x + marginH, rowMin.y + rowPadV),
-            Col(r, g, bv, isProjected ? 1.0f : 0.45f),
-            std::to_string(verse.number).c_str());
+        // Numero de versiculo dentro de un cuadro (chip), mismo lenguaje
+        // visual que las celdas de la grilla de capitulos — separa mejor
+        // cada versiculo del siguiente en vez de un numero flotando suelto.
+        {
+            std::string numStr = std::to_string(verse.number);
+            float boxH = 20.0f;
+            float boxW = std::max(22.0f, ImGui::CalcTextSize(numStr.c_str()).x + 10.0f);
+            ImVec2 boxMin(rowMin.x + marginH, rowMin.y + (rowH - boxH) * 0.5f);
+            ImVec2 boxMax(boxMin.x + boxW, boxMin.y + boxH);
+
+            ImU32 boxFill = isProjected
+                ? ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, bv, 0.30f))
+                : DS::BtnDefaultFill;
+            ImU32 boxBord = isProjected
+                ? ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, bv, 0.80f))
+                : DS::GlassBorder;
+
+            dl->AddRectFilled(boxMin, boxMax, boxFill, DS::RadiusMedium);
+            dl->AddRect(boxMin, boxMax, boxBord, DS::RadiusMedium, 0, 1.0f);
+
+            ImVec2 numSz = ImGui::CalcTextSize(numStr.c_str());
+            dl->AddText(ImVec2(boxMin.x + (boxW - numSz.x) * 0.5f, boxMin.y + (boxH - numSz.y) * 0.5f),
+                isProjected ? Col(r, g, bv, 1.0f) : DS::TextSecondary,
+                numStr.c_str());
+        }
 
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
             ImVec2(textAbsX, rowMin.y + rowPadV),
-            Col(0.90f, 0.90f, 0.92f, (isSelected || isProjected) ? 1.0f : 0.86f),
+            ColA(DS::TextPrimary, (isSelected || isProjected) ? 255 : 219),
             verse.text.c_str(), nullptr, verseTextW);
 
         if (hovered || isSelected) {
-            float btnX = rowMax.x - 26.0f;
-            float btnY = rowMin.y + (rowH - 20.0f) * 0.5f;
-            ImGui::SetCursorScreenPos(ImVec2(btnX, btnY));
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.20f, 0.30f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.35f, 0.55f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.60f, 0.80f, 1.00f, 1.00f));
+            float editBtnX = rowMax.x - 26.0f;
+            float favBtnX  = editBtnX - 24.0f;
+            float btnY     = rowMin.y + (rowH - 20.0f) * 0.5f;
+
+            ImGui::PushStyleColor(ImGuiCol_Button,        ToVec4(DS::BtnDefaultFill));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::BtnHoverFill));
+            ImGui::PushStyleColor(ImGuiCol_Text,          ToVec4(DS::AccentColor));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(3.0f, 2.0f));
 
+            // ── Corazon: agrega/quita este versiculo de favoritos ──────────
+            ImGui::SetCursorScreenPos(ImVec2(favBtnX, btnY));
+            bool btnFavClicked = ImGui::Button("  ##fav", ImVec2(20.0f, 20.0f));
+            ImVec2 favMin = ImGui::GetItemRectMin();
+            auto itFavRow = StyleGeneralApp::Icons.find("favorite");
+            if (itFavRow != StyleGeneralApp::Icons.end() && itFavRow->second.textureID) {
+                float iconSize = 13.0f;
+                ImVec2 iconPos = ImVec2(favMin.x + (20.0f - iconSize) * 0.5f, favMin.y + (20.0f - iconSize) * 0.5f);
+                ImGui::GetWindowDrawList()->AddImage(
+                    itFavRow->second.textureID,
+                    iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                    ImVec2(0, 0), ImVec2(1, 1),
+                    isFavorite ? DS::AccentColor : DS::TextHint
+                );
+                if (!isFavorite)
+                    DrawPlusBadge(ImGui::GetWindowDrawList(), ImVec2(favMin.x + 17.0f, favMin.y + 3.0f));
+            }
+            if (btnFavClicked)
+                Favorites::ToggleFavorite(m_CurrentBible.name, book.canonicalNumber, chap.number, verse.number, verse.text);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(isFavorite ? "Quitar de favoritos" : "Agregar a favoritos");
+
+            // ── Lapiz: editar el texto de este versiculo ────────────────────
+            ImGui::SetCursorScreenPos(ImVec2(editBtnX, btnY));
             bool btnEditClicked = ImGui::Button("  ##edit", ImVec2(20.0f, 20.0f));
 
             ImVec2 btnMin = ImGui::GetItemRectMin();
@@ -698,12 +959,12 @@ void BibleView::RenderVerseList() {
                     itEdit->second.textureID,
                     iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                     ImVec2(0, 0), ImVec2(1, 1),
-                    Col(0.70f, 0.85f, 1.0f, 1.0f)
+                    DS::TextSecondary
                 );
             } else {
                 ImGui::GetWindowDrawList()->AddText(
                     ImVec2(btnMin.x + 6.0f, btnMin.y + 2.0f),
-                    Col(1.0f, 1.0f, 1.0f, 1.0f), "E"
+                    DS::TextPrimary, "E"
                 );
             }
 
@@ -745,8 +1006,8 @@ void BibleView::RenderEditModal() {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.07f, 0.10f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.22f, 0.32f, 0.50f, 0.80f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ToVec4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ToVec4(DS::GlassBorder));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(16.0f, 14.0f));
 
@@ -766,7 +1027,7 @@ void BibleView::RenderEditModal() {
             auto& c = b.chapters[m_EditChapIdx];
             auto& v = c.verses[m_EditVerseIdx];
 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.70f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
             ImGui::Text("%s %d:%d", b.name.c_str(), c.number, v.number);
             ImGui::PopStyleColor();
         }
@@ -774,8 +1035,8 @@ void BibleView::RenderEditModal() {
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.09f, 0.11f, 0.15f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.13f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ToVec4(DS::BtnDefaultFill));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ToVec4(DS::BtnHoverFill));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputTextMultiline("##editVerse", m_EditBuffer, sizeof(m_EditBuffer),
@@ -788,8 +1049,7 @@ void BibleView::RenderEditModal() {
         if (!m_EditStatus.empty()) {
             bool ok = (m_EditStatus.find("Error") == std::string::npos);
             ImGui::PushStyleColor(ImGuiCol_Text,
-                ok ? ImVec4(0.20f, 0.85f, 0.45f, 1.0f)
-                   : ImVec4(0.90f, 0.35f, 0.35f, 1.0f));
+                ok ? ToVec4(DS::SuccessColor) : ToVec4(DS::DangerColor));
             ImGui::TextUnformatted(m_EditStatus.c_str());
             ImGui::PopStyleColor();
             ImGui::SameLine();
@@ -798,8 +1058,8 @@ void BibleView::RenderEditModal() {
         float btnW = 110.0f;
         ImGui::SetCursorPosX(ImGui::GetContentRegionAvail().x - btnW * 2.0f - 8.0f);
 
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.22f, 0.30f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        ToVec4(DS::BtnDefaultFill));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::BtnHoverFill));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         if (ImGui::Button("Cancelar", ImVec2(btnW, 32.0f))) {
             m_ShowEditModal = false;
@@ -809,8 +1069,8 @@ void BibleView::RenderEditModal() {
 
         ImGui::SameLine(0.0f, 8.0f);
 
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.30f, 0.55f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.40f, 0.70f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        ToVec4(ColA(DS::AccentColor, 217)));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::AccentColorHov));
         ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         if (ImGui::Button("Guardar", ImVec2(btnW, 32.0f))) {
             SaveVerseToXML(m_EditBookIdx, m_EditChapIdx, m_EditVerseIdx);
@@ -894,34 +1154,45 @@ void BibleView::Render() {
 
     RenderTopBar();
 
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
     if (ImGui::BeginTable("##BibleLayout", 2, ImGuiTableFlags_Resizable)) {
-        ImGui::TableSetupColumn("Nav",    ImGuiTableColumnFlags_WidthFixed, 210.0f);
+        ImGui::TableSetupColumn("Nav",    ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("Verses", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
 
+        ImGui::PushStyleColor(ImGuiCol_Border, ToVec4(DS::GlassBorder));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   DS::RadiusLarge);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+
         ImGui::TableSetColumnIndex(0);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.06f, 0.08f, 1.0f));
-        ImGui::BeginChild("##NavChild", ImVec2(0.0f, 0.0f), false);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ToVec4(DS::GlassFillTop));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+        ImGui::BeginChild("##NavChild", ImVec2(0.0f, 0.0f), true);
         if (m_BibleLoaded) {
             RenderBookGrid();
             RenderChapterGrid();
         } else {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.45f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
             ImGui::TextWrapped("Selecciona una Biblia en la biblioteca para comenzar.");
             ImGui::PopStyleColor();
         }
         ImGui::EndChild();
+        ImGui::PopStyleVar();
         ImGui::PopStyleColor();
 
         ImGui::TableSetColumnIndex(1);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.04f, 0.05f, 0.07f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 6.0f));
-        ImGui::BeginChild("##VersesChild", ImVec2(0.0f, 0.0f), false,
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ToVec4(ColA(DS::GlassFillTop, 235)));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 10.0f));
+        ImGui::BeginChild("##VersesChild", ImVec2(0.0f, 0.0f), true,
                           ImGuiWindowFlags_AlwaysVerticalScrollbar);
         if (m_BibleLoaded)
             RenderVerseList();
         ImGui::EndChild();
         ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
 
         ImGui::EndTable();
@@ -1085,8 +1356,8 @@ void BibleView::RenderJumpOverlay() {
     ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.11f, 0.98f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.25f, 0.35f, 0.55f, 0.85f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ToVec4(ColA(DS::GlassFillTop, 250)));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ToVec4(DS::GlassBorder));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(20.0f, 18.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
@@ -1103,13 +1374,13 @@ void BibleView::RenderJumpOverlay() {
     m_JumpCardMax = ImVec2(m_JumpCardMin.x + winSize.x, m_JumpCardMin.y + winSize.y);
 
     const char* label = (m_JumpMode == JumpKind::Chapter) ? "Ir a capitulo" : "Ir a versiculo";
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.43f, 0.50f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.85f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
     ImGui::SetWindowFontScale(1.6f);
     ImGui::TextUnformatted(m_JumpBuffer.empty() ? "_" : m_JumpBuffer.c_str());
     ImGui::SetWindowFontScale(1.0f);
@@ -1126,7 +1397,7 @@ void BibleView::RenderJumpOverlay() {
     ImGui::Separator();
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.55f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
     ImGui::TextUnformatted(m_JumpMode == JumpKind::Chapter
         ? "Enter: confirmar    Ctrl de nuevo / clic afuera: cerrar"
         : "Enter: confirmar    Alt de nuevo / clic afuera: cerrar");

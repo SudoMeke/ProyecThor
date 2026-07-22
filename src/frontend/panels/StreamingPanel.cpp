@@ -1,5 +1,6 @@
 #include "StreamingPanel.h"
 #include "backend/core/PresentationCore.h"
+#include "SettingsManager.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -19,19 +20,40 @@
 namespace ProyecThor::UI {
 
 // ── Paleta Mejorada (Estilo Cinemático/Premium) ───────────────────────────────
+// kAccent/kGreen/kRed quedan fijos a proposito: identidad visual de esta
+// seccion (azul), igual criterio que ViewToolsSettings::categoryColor.
+// kSurface*/kGray* si se recalculan en SyncPalette() a partir del tema
+// activo: eran fondos/texto fijos que quedaban negros sobre cualquier tema.
 static constexpr ImVec4 kGreen      = { 0.15f, 0.85f, 0.45f, 1.0f };
 static constexpr ImVec4 kRed        = { 0.90f, 0.25f, 0.30f, 1.0f };
-static constexpr ImVec4 kGrayDim    = { 0.45f, 0.47f, 0.55f, 1.0f };
-static constexpr ImVec4 kGrayText   = { 0.65f, 0.68f, 0.75f, 1.0f };
+static ImVec4 kGrayDim    = { 0.45f, 0.47f, 0.55f, 1.0f };
+static ImVec4 kGrayText   = { 0.65f, 0.68f, 0.75f, 1.0f };
 static constexpr ImVec4 kAccent     = { 0.25f, 0.55f, 1.00f, 1.0f };
 static constexpr ImVec4 kAccentLow  = { 0.25f, 0.55f, 1.00f, 0.15f };
-static constexpr ImVec4 kSurface    = { 0.05f, 0.06f, 0.08f, 1.0f };
-static constexpr ImVec4 kSurface2   = { 0.10f, 0.11f, 0.15f, 1.0f };
-static constexpr ImVec4 kSurface3   = { 0.13f, 0.15f, 0.20f, 1.0f };
+static ImVec4 kSurface    = { 0.05f, 0.06f, 0.08f, 1.0f };
+static ImVec4 kSurface2   = { 0.10f, 0.11f, 0.15f, 1.0f };
+static ImVec4 kSurface3   = { 0.13f, 0.15f, 0.20f, 1.0f };
 
 static ImU32 Col(ImVec4 v)  { return ImGui::ColorConvertFloat4ToU32(v); }
 static ImU32 ColA(ImVec4 v, float a) {
     v.w = a; return ImGui::ColorConvertFloat4ToU32(v);
+}
+
+static ImVec4 BlendOver(const float* tint, float alpha, const float* base) {
+    return ImVec4(
+        tint[0] * alpha + base[0] * (1.0f - alpha),
+        tint[1] * alpha + base[1] * (1.0f - alpha),
+        tint[2] * alpha + base[2] * (1.0f - alpha),
+        1.0f);
+}
+
+static void SyncPalette() {
+    const auto& t = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
+    kSurface  = ImVec4(t.surface0[0], t.surface0[1], t.surface0[2], t.surface0[3]);
+    kSurface2 = ImVec4(t.surface1[0], t.surface1[1], t.surface1[2], t.surface1[3]);
+    kSurface3 = ImVec4(t.surface2[0], t.surface2[1], t.surface2[2], t.surface2[3]);
+    kGrayText = ImVec4(t.textDim[0], t.textDim[1], t.textDim[2], t.textDim[3]);
+    kGrayDim  = BlendOver(t.textPrimary, 0.35f, t.base);
 }
 
 // ── Efectos Visuales (Sombras y Gradientes) ───────────────────────────────────
@@ -128,7 +150,7 @@ void StreamingPanel::DrawQR(ImDrawList* dl, ImVec2 origin, float size)
             float y0 = origin.y + pad + row * cell + 0.5f;
             float x1 = x0 + cell - 1.0f;
             float y1 = y0 + cell - 1.0f;
-            dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), IM_COL32(15, 18, 26, 255), 1.5f);
+            dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), Col(kSurface2), 1.5f);
         }
     }
 }
@@ -199,6 +221,7 @@ void StreamingPanel::Update()
 
 void StreamingPanel::RenderContent()
 {
+    SyncPalette();
     auto& core  = Core::PresentationCore::Get();
     auto  state = core.GetState();
 
@@ -244,8 +267,8 @@ void StreamingPanel::RenderServerControl()
 
     DrawSoftShadow(dl, p0, p1, 10.0f);
 
-    ImU32 bg  = on ? Col(ImVec4(0.12f, 0.22f, 0.16f, 1.0f)) : Col(kSurface2);
-    ImU32 bdr = on ? IM_COL32(60, 200, 100, 80) : IM_COL32(255, 255, 255, 12);
+    ImU32 bg  = on ? ColA(kGreen, 0.16f) : Col(kSurface2);
+    ImU32 bdr = on ? ColA(kGreen, 0.31f) : ColA(kGrayText, 0.15f);
     dl->AddRectFilled(p0, p1, bg, 10.0f);
     dl->AddRect(p0, p1, bdr, 10.0f, 0, 1.5f);
 
@@ -279,7 +302,7 @@ void StreamingPanel::RenderServerControl()
     ImGui::SetNextItemWidth(portW);
     
     ImGui::BeginDisabled(on);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.02f, 0.03f, 0.05f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, kSurface);
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));

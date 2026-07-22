@@ -397,7 +397,7 @@ void SetStanzaColor(const std::string& filename, int stanzaIndex, unsigned int c
 // =============================================================================
 static void RenderPaneHeader(const char* label, int count)
 {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.52f, 0.56f, 0.78f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
     if (count >= 0) ImGui::Text("%s   ·   %d", label, count);
     else            ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
@@ -538,7 +538,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
             if (playlists.empty()) {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
                 ImGui::SetCursorPos({ std::floor(avail.x * 0.5f - 80.f), std::floor(avail.y * 0.5f - 10.f) });
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.55f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
                 ImGui::TextUnformatted("Sin playlists todavia");
                 ImGui::PopStyleColor();
             }
@@ -560,7 +560,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                         showRenameModal = true;
                     }
                     ImGui::Separator();
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
                     if (ImGui::MenuItem("Eliminar")) {
                         ctx.deletePlaylist(name);
                         if (ctx.activePlaylistName == name) ctx.activePlaylistName.clear();
@@ -596,14 +596,14 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                         title.pop_back();
                     title += "...";
                 }
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.92f, 1.00f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::TextPrimary);
                 ImGui::TextUnformatted(title.c_str());
                 ImGui::PopStyleColor();
             }
 
             auto songs = ctx.loadPlaylistSongs(openPlaylist);
             std::string countLabel = std::to_string(songs.size()) + " canciones";
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.62f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
             ImGui::TextUnformatted(countLabel.c_str());
             ImGui::PopStyleColor();
 
@@ -701,7 +701,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
             if (songs.empty()) {
                 ImGui::Spacing();
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.42f, 0.58f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
                 ImGui::TextUnformatted("Esta playlist no tiene canciones todavia");
                 ImGui::PopStyleColor();
             }
@@ -841,7 +841,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
             }
 
             if (shown == 0) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.48f, 0.62f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
                 ImGui::TextUnformatted("Sin resultados");
                 ImGui::PopStyleColor();
             }
@@ -930,7 +930,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
             ImGui::SetCursorPos({
                 ImGui::GetCursorPosX() + std::floor(avail.x * 0.5f - 55.f),
                 ImGui::GetCursorPosY() + std::floor(avail.y * 0.5f - 10.f) });
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.38f, 0.55f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
             ImGui::TextUnformatted("Sin resultados");
             ImGui::PopStyleColor();
         }
@@ -1003,7 +1003,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
                 if (ctx.currentCategoryInt == kCat_Songs) {
                     if (ImGui::BeginMenu("Asignar etiqueta")) {
                         if (tagGroups.empty()) {
-                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.58f, 0.72f, 1.0f));
+                            ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
                             ImGui::TextUnformatted("Crea etiquetas en");
                             ImGui::TextUnformatted("Ajustes > Canciones");
                             ImGui::PopStyleColor();
@@ -1039,7 +1039,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
                     ctx.showRenameModal = true;
                 }
                 ImGui::Separator();
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.40f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
                 if (ImGui::MenuItem("Eliminar")) {
                     ImGui::PopStyleColor();
                     ctx.selectedIndex = origIdx;
@@ -1364,7 +1364,7 @@ void RenderSongEditor(LibraryContext& ctx)
             DS::GlassHighlight, 1.0f);
 
         // ── Título de la ventana ──────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.90f, 1.00f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, DS::TextPrimary);
         ImGui::TextUnformatted(str.newLabel);
         ImGui::PopStyleColor();
 

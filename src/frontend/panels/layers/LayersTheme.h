@@ -5,9 +5,16 @@
 #include <cmath>
 #include "DesignSystem.h"
 
+namespace ProyecThor::Settings { struct ThemeSettings; }
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersTheme — paleta de colores y widgets compartidos por todos los tabs
 //  del panel de capas.  Incluir en cada .cpp que necesite dibujar UI.
+//
+//  Los campos no son constexpr: se recalculan en LP::Sync() a partir del
+//  tema activo (ver ProyecThor::UI::DS::SyncFromTheme / MonitorTheme::Sync /
+//  HubTheme::Sync, mismo patron), asi este panel deja de quedar fijo en un
+//  look violeta-oscuro sin importar el preset elegido en Preferencias.
 // ─────────────────────────────────────────────────────────────────────────────
 
 namespace ProyecThor::UI {
@@ -15,39 +22,45 @@ namespace ProyecThor::UI {
 // ── Paleta ────────────────────────────────────────────────────────────────────
 struct LP {  // "Layers Palette"
     // Surfaces
-    static constexpr ImVec4 Base        = {0.07f, 0.08f, 0.10f, 1.0f};
-    static constexpr ImVec4 Surface0    = {0.09f, 0.10f, 0.13f, 1.0f};
-    static constexpr ImVec4 Surface1    = {0.12f, 0.13f, 0.17f, 1.0f};
-    static constexpr ImVec4 Surface2    = {0.16f, 0.17f, 0.22f, 1.0f};
-    static constexpr ImVec4 Surface3    = {0.20f, 0.21f, 0.28f, 1.0f};
+    static inline ImVec4 Base        = {0.07f, 0.08f, 0.10f, 1.0f};
+    static inline ImVec4 Surface0    = {0.09f, 0.10f, 0.13f, 1.0f};
+    static inline ImVec4 Surface1    = {0.12f, 0.13f, 0.17f, 1.0f};
+    static inline ImVec4 Surface2    = {0.16f, 0.17f, 0.22f, 1.0f};
+    static inline ImVec4 Surface3    = {0.20f, 0.21f, 0.28f, 1.0f};
 
     // Borders
-    static constexpr ImVec4 Border      = {0.22f, 0.24f, 0.32f, 0.6f};
-    static constexpr ImVec4 BorderHov   = {0.35f, 0.38f, 0.55f, 0.8f};
+    static inline ImVec4 Border      = {0.22f, 0.24f, 0.32f, 0.6f};
+    static inline ImVec4 BorderHov   = {0.35f, 0.38f, 0.55f, 0.8f};
 
-    // Accent — electric violet-blue
-    static constexpr ImVec4 Accent      = {0.42f, 0.48f, 1.00f, 1.0f};
-    static constexpr ImVec4 AccentHov   = {0.52f, 0.58f, 1.00f, 1.0f};
-    static constexpr ImVec4 AccentDim   = {0.42f, 0.48f, 1.00f, 0.18f};
-    static constexpr ImVec4 AccentActive= {0.32f, 0.38f, 0.90f, 1.0f};
+    // Accent — sigue el acento del tema activo (antes fijo violeta-azul)
+    static inline ImVec4 Accent      = {0.42f, 0.48f, 1.00f, 1.0f};
+    static inline ImVec4 AccentHov   = {0.52f, 0.58f, 1.00f, 1.0f};
+    static inline ImVec4 AccentDim   = {0.42f, 0.48f, 1.00f, 0.18f};
+    static inline ImVec4 AccentActive= {0.32f, 0.38f, 0.90f, 1.0f};
 
-    // Semantic
-    static constexpr ImVec4 Gold        = {0.95f, 0.75f, 0.20f, 1.0f};
-    static constexpr ImVec4 GoldDim     = {0.95f, 0.75f, 0.20f, 0.15f};
-    static constexpr ImVec4 Green       = {0.30f, 0.85f, 0.55f, 1.0f};
-    static constexpr ImVec4 GreenDim    = {0.30f, 0.85f, 0.55f, 0.15f};
-    static constexpr ImVec4 Red         = {0.95f, 0.35f, 0.35f, 1.0f};
-    static constexpr ImVec4 RedDim      = {0.95f, 0.35f, 0.35f, 0.15f};
+    // Semantic — Green/Red siguen success/danger del tema; Gold no tiene
+    // token equivalente en ThemeSettings y queda fijo a proposito (badge de
+    // highlight, ya legible sobre cualquier fondo claro u oscuro).
+    static inline ImVec4 Gold        = {0.95f, 0.75f, 0.20f, 1.0f};
+    static inline ImVec4 GoldDim     = {0.95f, 0.75f, 0.20f, 0.15f};
+    static inline ImVec4 Green       = {0.30f, 0.85f, 0.55f, 1.0f};
+    static inline ImVec4 GreenDim    = {0.30f, 0.85f, 0.55f, 0.15f};
+    static inline ImVec4 Red         = {0.95f, 0.35f, 0.35f, 1.0f};
+    static inline ImVec4 RedDim      = {0.95f, 0.35f, 0.35f, 0.15f};
 
     // Text
-    static constexpr ImVec4 Text        = {0.92f, 0.93f, 0.96f, 1.0f};
-    static constexpr ImVec4 TextSub     = {0.65f, 0.67f, 0.75f, 1.0f};
-    static constexpr ImVec4 TextMuted   = {0.42f, 0.44f, 0.52f, 1.0f};
+    static inline ImVec4 Text        = {0.92f, 0.93f, 0.96f, 1.0f};
+    static inline ImVec4 TextSub     = {0.65f, 0.67f, 0.75f, 1.0f};
+    static inline ImVec4 TextMuted   = {0.42f, 0.44f, 0.52f, 1.0f};
 
     // Tab bar sticky
-    static constexpr ImVec4 TabBar      = {0.08f, 0.09f, 0.12f, 1.0f};
-    static constexpr ImVec4 TabActive   = {0.12f, 0.13f, 0.17f, 1.0f};
-    static constexpr ImVec4 TabInactive = {0.09f, 0.10f, 0.13f, 1.0f};
+    static inline ImVec4 TabBar      = {0.08f, 0.09f, 0.12f, 1.0f};
+    static inline ImVec4 TabActive   = {0.12f, 0.13f, 0.17f, 1.0f};
+    static inline ImVec4 TabInactive = {0.09f, 0.10f, 0.13f, 1.0f};
+
+    // Recalcula toda la paleta de arriba a partir del tema activo. Se llama
+    // desde SettingsManager::ApplyTheme(), junto a DS::SyncFromTheme().
+    static void Sync(const ProyecThor::Settings::ThemeSettings& theme);
 };
 
 // ── Conversion helpers ─────────────────────────────────────────────────────

@@ -9,6 +9,19 @@ namespace fs = std::filesystem;
 
 namespace ProyecThor::UI::XmlIO {
 
+// Extrae el valor de un atributo attr="..." dentro de [searchStart, searchEnd)
+// (mismo estilo de scanning por substrings que ya usa el resto del parser).
+static std::string ExtractAttr(const std::string& xml, size_t searchStart, size_t searchEnd,
+                                const std::string& attr) {
+    std::string needle = attr + "=\"";
+    size_t pos = xml.find(needle, searchStart);
+    if (pos == std::string::npos || pos >= searchEnd) return "";
+    pos += needle.size();
+    size_t end = xml.find("\"", pos);
+    if (end == std::string::npos || end > searchEnd) return "";
+    return xml.substr(pos, end - pos);
+}
+
 bool LoadBible(const std::string& path, BibleData& outBible) {
     outBible = BibleData();
 
@@ -18,6 +31,16 @@ bool LoadBible(const std::string& path, BibleData& outBible) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string xml = buffer.str();
+
+    // Atributos de <bible ...> — se preservan para no perderlos al guardar.
+    size_t biblePos = xml.find("<bible");
+    if (biblePos != std::string::npos) {
+        size_t bibleTagEnd = xml.find(">", biblePos);
+        if (bibleTagEnd == std::string::npos) bibleTagEnd = xml.size();
+        outBible.translation = ExtractAttr(xml, biblePos, bibleTagEnd, "translation");
+        outBible.info        = ExtractAttr(xml, biblePos, bibleTagEnd, "info");
+        outBible.link        = ExtractAttr(xml, biblePos, bibleTagEnd, "link");
+    }
 
     size_t bookPos = 0;
     while ((bookPos = xml.find("<book", bookPos)) != std::string::npos) {
@@ -86,20 +109,40 @@ bool SaveBible(const std::string& path, const BibleData& bible) {
     std::ofstream out(path, std::ios::trunc);
     if (!out.is_open()) return false;
 
-    out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bible>\n";
+    out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bible";
+    if (!bible.translation.empty()) out << " translation=\"" << bible.translation << "\"";
+    if (!bible.info.empty())        out << " info=\""        << bible.info        << "\"";
+    if (!bible.link.empty())        out << " link=\""        << bible.link        << "\"";
+    out << ">\n";
+
+    // Envuelve los libros en <testament name="Old|New"> segun su numero
+    // canonico (1-39 Antiguo, 40-66 Nuevo, canon de 66 libros) — no se
+    // guarda por separado porque es 100% derivable del numero de libro.
+    bool inTestament   = false;
+    bool testamentIsNew = false;
     for (const auto& b : bible.books) {
-        out << "  <book number=\"" << b.canonicalNumber << "\" name=\"" << b.name << "\">\n";
+        bool isNew = b.canonicalNumber >= 40;
+        if (!inTestament || isNew != testamentIsNew) {
+            if (inTestament) out << "  </testament>\n";
+            out << "  <testament name=\"" << (isNew ? "New" : "Old") << "\">\n";
+            inTestament    = true;
+            testamentIsNew = isNew;
+        }
+
+        out << "    <book number=\"" << b.canonicalNumber << "\" name=\"" << b.name << "\">\n";
         for (const auto& c : b.chapters) {
-            out << "    <chapter number=\"" << c.number << "\">\n";
+            out << "      <chapter number=\"" << c.number << "\">\n";
             for (const auto& v : c.verses) {
-                out << "      <verse number=\"" << v.number << "\">"
+                out << "        <verse number=\"" << v.number << "\">"
                     << v.text
                     << "</verse>\n";
             }
-            out << "    </chapter>\n";
+            out << "      </chapter>\n";
         }
-        out << "  </book>\n";
+        out << "    </book>\n";
     }
+    if (inTestament) out << "  </testament>\n";
+
     out << "</bible>\n";
     out.close();
 
