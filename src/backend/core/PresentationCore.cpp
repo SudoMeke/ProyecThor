@@ -1,6 +1,7 @@
 #include "PresentationCore.h"
 #include "BackgroundLayer.h"
 #include "OverlayLayer.h"
+#include "backend/shaders/CompositePostChain.h"
 #include "frontend/panels/stb_image.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -44,6 +45,12 @@ namespace ProyecThor::Core {
         // hilo principal, para que una carga lenta ahi nunca le robe
         // tiempo al hilo que actualiza/dibuja el video en vivo al publico.
         PreviewLoadWorker previewLoader;
+
+        // Post-proceso del composite completo de "ProjectorLive" (CRT/
+        // Grano/FXAA) — ver CompositePostChain.h. Vive aca (no dentro de
+        // background/overlay) porque corre en un punto distinto del pipeline
+        // (sobre el ImDrawData ya compuesto, no sobre una textura de fondo).
+        Shaders::CompositePostChain compositeFX;
     };
 
     PresentationCore::PresentationCore()
@@ -174,6 +181,59 @@ bool PresentationCore::GetGlobalMute() const {
 
     float PresentationCore::GetFSRSharpness() const {
         return m_Impl ? m_Impl->background.GetFSRSharpness() : 0.2f;
+    }
+
+    void PresentationCore::SetVideoRenderEngine(int engine) {
+        if (m_Impl) m_Impl->background.SetUseNativeEngine(engine != 0);
+    }
+    int PresentationCore::GetVideoRenderEngine() const {
+        return (m_Impl && m_Impl->background.GetUseNativeEngine()) ? 1 : 0;
+    }
+
+    void PresentationCore::SetCRTEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetCRTEnabled(enabled);
+    }
+    bool PresentationCore::GetCRTEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetCRTEnabled() : false;
+    }
+    void PresentationCore::SetCRTScanlineIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetCRTScanlineIntensity(intensity);
+    }
+    float PresentationCore::GetCRTScanlineIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetCRTScanlineIntensity() : 0.5f;
+    }
+
+    void PresentationCore::SetGrainEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetGrainEnabled(enabled);
+    }
+    bool PresentationCore::GetGrainEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetGrainEnabled() : false;
+    }
+    void PresentationCore::SetGrainIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetGrainIntensity(intensity);
+    }
+    float PresentationCore::GetGrainIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetGrainIntensity() : 0.15f;
+    }
+
+    void PresentationCore::SetFXAAEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetFXAAEnabled(enabled);
+    }
+    bool PresentationCore::GetFXAAEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetFXAAEnabled() : false;
+    }
+
+    void PresentationCore::SetProjectorPostFXViewportID(ImGuiID id) {
+        m_ProjectorPostFXViewportID = id;
+    }
+    bool PresentationCore::IsProjectorPostFXViewport(ImGuiID id) const {
+        return id != 0 && id == m_ProjectorPostFXViewportID;
+    }
+    void PresentationCore::RenderProjectorViewportPostFX(ImGuiViewport* viewport,
+                                                         void (*defaultRenderFn)(ImGuiViewport*, void*))
+    {
+        if (m_Impl) m_Impl->compositeFX.RenderViewport(viewport, defaultRenderFn);
+        else if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
     }
 
     void PresentationCore::SetStretchToFill(bool s) {
@@ -599,17 +659,22 @@ void PresentationCore::SetNextText(const std::string& text) {
 }
 
     void PresentationCore::SetProjecting(bool projecting) {
+        int monitorIndex;
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
             m_State.isProjecting = projecting;
             ++m_StreamVersion;
+            monitorIndex = m_State.targetMonitorIndex;
         }
 
-        // Unico punto que habilita/corta el audio real hacia el publico.
-        // Fuera del lock: BackgroundLayer solo toca atomicos de los
-        // players, no hace falta serializarlo con m_State.
+        // Unico punto que habilita/corta el audio real hacia el publico
+        // (y, con el motor "VLC ventana nativa", tambien la ventana de
+        // video en si — ver BackgroundLayer::SetPubliclyLive). Fuera del
+        // lock: BackgroundLayer solo toca atomicos de los players (mas la
+        // ventana nativa, que vive en el hilo principal igual que esto),
+        // no hace falta serializarlo con m_State.
         if (m_Impl)
-            m_Impl->background.SetPubliclyLive(projecting);
+            m_Impl->background.SetPubliclyLive(projecting, monitorIndex);
     }
 
     bool PresentationCore::IsProjecting() const {

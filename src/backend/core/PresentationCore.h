@@ -163,6 +163,42 @@ void SetGlobalMute(bool mute);
         void  SetFSRSharpness(float sharpness);
         float GetFSRSharpness() const;
 
+        // Motor de renderizado del fondo de video (Ajustes > Proyeccion):
+        // 0 = OpenGL compuesto (default, con overlays/texto encima), 1 =
+        // VLC en ventana nativa (sin overlays/texto, ver BackgroundLayer::
+        // SetUseNativeEngine para el detalle completo de las limitaciones
+        // de este modo).
+        void SetVideoRenderEngine(int engine);
+        int  GetVideoRenderEngine() const;
+
+        // ── Post-proceso del composite completo de "ProjectorLive" (fondo +
+        //    overlays + texto + anuncios + captura) — ver CompositePostChain.h
+        //    para la arquitectura. A diferencia de FSR (arriba), estos no
+        //    hacen upscale: son filtros a resolucion de salida.
+        void  SetCRTEnabled(bool enabled);
+        bool  GetCRTEnabled() const;
+        void  SetCRTScanlineIntensity(float intensity);
+        float GetCRTScanlineIntensity() const;
+
+        void  SetGrainEnabled(bool enabled);
+        bool  GetGrainEnabled() const;
+        void  SetGrainIntensity(float intensity);
+        float GetGrainIntensity() const;
+
+        void  SetFXAAEnabled(bool enabled);
+        bool  GetFXAAEnabled() const;
+
+        // Usado por UIManager (justo tras ImGui::Begin("ProjectorLive",...))
+        // para informar, cada frame, cual ImGuiID es esa viewport, y por el
+        // override de Renderer_RenderWindow en main.cpp para preguntar si el
+        // viewport que esta por dibujarse es esa (y no "StageLive" ni un
+        // panel flotante cualquiera) antes de desviar su render hacia
+        // RenderProjectorViewportPostFX.
+        void   SetProjectorPostFXViewportID(ImGuiID id);
+        bool   IsProjectorPostFXViewport(ImGuiID id) const;
+        void   RenderProjectorViewportPostFX(ImGuiViewport* viewport,
+                                              void (*defaultRenderFn)(ImGuiViewport*, void*));
+
         // fromQueue=true: la seleccion viene de MonitorQueueEngine::PlayIndex
         // (solo para mostrar el titulo del item actual de la cola), NO de un
         // click manual del operador en la Biblioteca. MonitorView/MediaView
@@ -431,6 +467,7 @@ bool m_GlobalMuted = false;
         int          m_PBOIndex = 0;
 
         bool m_stretchToFill = false;
+        ImGuiID m_ProjectorPostFXViewportID = 0;
         std::unique_ptr<PresentationCoreImpl> m_Impl;
         mutable std::mutex m_Mutex;
 

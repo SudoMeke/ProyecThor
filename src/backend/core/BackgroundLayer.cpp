@@ -145,6 +145,7 @@ void main() {
     BackgroundLayer::BackgroundLayer(bool forceSilentAudio)
         : m_PlayerA(2, false, forceSilentAudio)
         , m_PlayerB(2, false, forceSilentAudio)
+        , m_NativePlayer(2, false, forceSilentAudio, /*nativeWindowOutput=*/true)
     {
     }
 
@@ -153,6 +154,14 @@ void main() {
 
     void BackgroundLayer::Update()
     {
+        // Contenido activo por motor nativo: no hay textura/crossfade que
+        // actualizar para ESTE contenido — VLC dibuja directo en
+        // m_NativeWindow por su cuenta (ver SetVideo/SyncNativeWindowVisibility).
+        // Active()/Standby() pueden tener un Fondo residual cargado (ver
+        // SetVideo()), pero no hace falta seguir subiendole textura
+        // mientras no sea lo que se este mostrando.
+        if (m_ActiveIsNative) return;
+
         Active().UpdateTexture();
         Active().EnforceSilenceIfNeeded();
         Standby().EnforceSilenceIfNeeded();
@@ -305,6 +314,10 @@ void main() {
 
     void BackgroundLayer::Render(int outputW, int outputH)
     {
+        // Contenido activo por motor nativo: la ventana de VLC se muestra
+        // por su cuenta, fuera de este compositor GL — nada que blitear.
+        if (m_ActiveIsNative) return;
+
         GLuint rawTex = static_cast<GLuint>(
             reinterpret_cast<uintptr_t>(Active().GetTextureID()));
 
@@ -468,11 +481,90 @@ void main() {
 
     VLCBasePlayer* BackgroundLayer::GetPlayer()
     {
-        return &Active();
+        // Punto unico usado por la cola del Monitor (MonitorQueueEngine::
+        // Update -> ConsumeEndReached/ConsumeHadError, sin lo cual la cola
+        // nunca avanza) y por los controles de transporte/preview (play,
+        // pausa, seek, VU meter) para llegar al reproductor que
+        // REALMENTE tiene el contenido activo — con el motor libvlc
+        // (m_ActiveIsNative), eso es m_NativePlayer, no Active().
+        return m_ActiveIsNative ? &m_NativePlayer : &Active();
     }
 
     void BackgroundLayer::SetVideo(const std::string& path, bool allowAudio)
     {
+        // El motor nativo aplica SOLO a video real (allowAudio=true —
+        // Videos/cola del Monitor): Fondos/imagenes (allowAudio=false)
+        // siempre necesitan overlays/texto encima, asi que siempre van
+        // por OpenGL sin importar este ajuste (ver comentario del
+        // miembro m_UseNativeEngine en el .h).
+        if (m_UseNativeEngine && allowAudio)
+        {
+            // Sin crossfade/standby en este motor: corte directo, igual
+            // que un reproductor simple. m_TargetMuted/m_TargetVolume son
+            // los mismos que ya usa el motor OpenGL (ver SetLiveVolume/
+            // SetLiveMute), asi que respetar el volumen ya configurado.
+            // Active()/Standby() (el Fondo que hubiera, si alguno) se
+            // dejan tal cual estan: no hace falta pararlos, Update()/
+            // Render() ya los ignoran mientras m_ActiveIsNative sea true,
+            // y vuelven a mostrarse solos si el operador carga otro Fondo.
+            m_IsVideo             = true;
+            m_ContentAllowsAudio  = allowAudio;
+            m_ActiveIsNative      = true;
+
+            // Mostrar la ventana es una llamada GLFW: tiene que correr aca,
+            // en el hilo principal (el que llama a SetVideo()).
+            void* handle = m_IsLiveToPublic ? m_NativeWindow.Show(m_LastKnownMonitorIndex) : nullptr;
+
+            bool wantActive = m_IsLiveToPublic && allowAudio;
+            bool wantMute   = m_TargetMuted || !wantActive;
+            int  wantVolume = (wantActive && !m_TargetMuted) ? m_TargetVolume : 0;
+
+            // FIX (colgaba/"No responde" desde el 2do clip en adelante,
+            // confirmado con Wine: dos hilos bloqueados entre si en una
+            // critical section de Windows): TODO lo que toca
+            // m_NativePlayer — adjuntar la ventana, Play(), y el gate de
+            // audio real — va combinado en UNA sola accion despachada a
+            // m_NativeLoader, nunca repartido entre el hilo principal y el
+            // worker. Repartirlo (attach aca, Play() alla) fue justamente
+            // lo que causaba la carrera: dos hilos tocando el mismo
+            // libvlc_media_player_t a la vez. Ademas, adjuntar la ventana
+            // tiene que pasar ANTES de Play() (la doc de libVLC dice que
+            // set_hwnd/set_xwindow "toma efecto cuando arranca la
+            // reproduccion"), y el gate de audio real tiene que ir DESPUES
+            // de Play(): Play(startMuted=true) siempre arranca mudo por
+            // diseño (evita un "pop"), asi que hay que reaplicar el mute/
+            // volumen real una vez que Play() ya corrio, no antes.
+            m_NativeLoader.Request([this, path, handle, wantActive, wantMute, wantVolume]() {
+                if (handle) m_NativePlayer.AttachNativeWindow(handle);
+                m_NativePlayer.Play(path, /*loop=*/false, /*startMuted=*/true);
+                m_NativePlayer.SetAudioActive(wantActive);
+                m_NativePlayer.SetMute(wantMute);
+                m_NativePlayer.SetVolume(wantVolume);
+            });
+            return;
+        }
+
+        // Esto va por OpenGL: si el contenido activo ANTERIOR era nativo,
+        // hay que apagarlo primero — la ventana nativa no debe seguir
+        // tapando "ProjectorLive" con un video viejo mientras esto nuevo
+        // carga.
+        if (m_ActiveIsNative)
+        {
+            m_ActiveIsNative = false;
+            // FIX (deadlock confirmado con Wine: dos hilos bloqueados
+            // entre si en una critical section de Windows): Stop() +
+            // Detach + mute van combinados en UNA sola accion en el
+            // worker -- nunca repartidos entre el hilo principal y el
+            // worker (ver el comentario largo en PreviewLoadWorker.h).
+            // Ocultar la ventana (GLFW) si corre aca, en el hilo principal.
+            m_NativeWindow.Hide();
+            m_NativeLoader.Request([this]() {
+                m_NativePlayer.SetAudioActive(false);
+                m_NativePlayer.Stop();
+                m_NativePlayer.DetachNativeWindow();
+            });
+        }
+
         // FIX (freeze/flash en clicks repetidos): si esto es EXACTAMENTE lo
         // que ya se esta mostrando (nada en swap, misma ruta ya activa), es
         // un pedido redundante — ignorarlo evita reiniciar innecesariamente
@@ -557,6 +649,11 @@ void main() {
 
     void BackgroundLayer::Prefetch(const std::string& path, bool allowAudio)
     {
+        // Sin crossfade en el motor nativo, no hay nada util que precargar
+        // (ver CommitPrefetch(), que en este modo cae directo a SetVideo()).
+        // Igual que en SetVideo(): solo aplica a video real (allowAudio).
+        if (m_UseNativeEngine && allowAudio) return;
+
         // Si ya hay un swap en curso, Standby() es justo el player que esta
         // por pasar a Active — pisarlo aca corromperia ese swap en vuelo.
         // Se descarta este prefetch; quien llama puede reintentar en un
@@ -581,6 +678,29 @@ void main() {
 
     void BackgroundLayer::CommitPrefetch(const std::string& path, bool allowAudio)
     {
+        // Sin prefetch en el motor nativo (ver Prefetch()): cae directo a
+        // un corte simple, igual que si nunca se hubiera precargado nada.
+        if (m_UseNativeEngine && allowAudio) { SetVideo(path, allowAudio); return; }
+
+        // Esto va por OpenGL: mismo apagado del nativo que en SetVideo(),
+        // por si el contenido activo anterior venia de ahi.
+        if (m_ActiveIsNative)
+        {
+            m_ActiveIsNative = false;
+            // FIX (deadlock confirmado con Wine: dos hilos bloqueados
+            // entre si en una critical section de Windows): Stop() +
+            // Detach + mute van combinados en UNA sola accion en el
+            // worker -- nunca repartidos entre el hilo principal y el
+            // worker (ver el comentario largo en PreviewLoadWorker.h).
+            // Ocultar la ventana (GLFW) si corre aca, en el hilo principal.
+            m_NativeWindow.Hide();
+            m_NativeLoader.Request([this]() {
+                m_NativePlayer.SetAudioActive(false);
+                m_NativePlayer.Stop();
+                m_NativePlayer.DetachNativeWindow();
+            });
+        }
+
         if (m_PrefetchArmed && m_PrefetchedPath == path)
         {
             // Ya esta listo (Update() lo pauso apenas decodifico su primer
@@ -649,6 +769,25 @@ void main() {
         m_PrefetchedPath.clear();
         m_PlayerA.Stop();
         m_PlayerB.Stop();
+
+        // Un color solido nunca es "video nativo" — si lo activo hasta
+        // ahora era eso, apagarlo y revelar "ProjectorLive" de nuevo.
+        if (m_ActiveIsNative)
+        {
+            m_ActiveIsNative = false;
+            // FIX (deadlock confirmado con Wine: dos hilos bloqueados
+            // entre si en una critical section de Windows): Stop() +
+            // Detach + mute van combinados en UNA sola accion en el
+            // worker -- nunca repartidos entre el hilo principal y el
+            // worker (ver el comentario largo en PreviewLoadWorker.h).
+            // Ocultar la ventana (GLFW) si corre aca, en el hilo principal.
+            m_NativeWindow.Hide();
+            m_NativeLoader.Request([this]() {
+                m_NativePlayer.SetAudioActive(false);
+                m_NativePlayer.Stop();
+                m_NativePlayer.DetachNativeWindow();
+            });
+        }
     }
 
     void* BackgroundLayer::GetProcessedTexture(int targetW, int targetH) {
@@ -683,9 +822,58 @@ void main() {
         return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
     }
 
-    void BackgroundLayer::SetPubliclyLive(bool live)
+    // Muestra/adjunta o esconde/desvincula m_NativeWindow segun
+    // m_IsLiveToPublic && m_ActiveIsNative — llamar despues de cambiar
+    // cualquiera de esos dos (SetPubliclyLive, SetVideo/Prefetch/
+    // CommitPrefetch/SetSolidColor). Idempotente: llamarla de mas no
+    // rompe nada (Show()/Hide()/Attach()/Detach() ya lo son).
+    void BackgroundLayer::SyncNativeWindowVisibility()
+    {
+        // Mostrar/ocultar la ventana (GLFW) se hace aca mismo, en el hilo
+        // que llama (siempre el principal) — son llamadas GLFW, tienen que
+        // correr ahi. Adjuntar/desvincular la ventana en libVLC (Attach/
+        // DetachNativeWindow) y el gate de audio, en cambio, SIEMPRE van
+        // combinados en UNA sola accion despachada a m_NativeLoader: nunca
+        // deben correr en el hilo principal directo, ni repartidos entre
+        // dos pedidos separados al worker (ver el comentario largo en
+        // PreviewLoadWorker.h — asi se corrigio un deadlock real).
+        if (m_IsLiveToPublic && m_ActiveIsNative)
+        {
+            void* handle = m_NativeWindow.Show(m_LastKnownMonitorIndex);
+
+            bool wantActive = m_ContentAllowsAudio;
+            bool wantMute   = m_TargetMuted || !wantActive;
+            int  wantVolume = (wantActive && !m_TargetMuted) ? m_TargetVolume : 0;
+
+            m_NativeLoader.Request([this, handle, wantActive, wantMute, wantVolume]() {
+                if (handle) m_NativePlayer.AttachNativeWindow(handle);
+                m_NativePlayer.SetAudioActive(wantActive);
+                m_NativePlayer.SetMute(wantMute);
+                m_NativePlayer.SetVolume(wantVolume);
+            });
+        }
+        else
+        {
+            m_NativeWindow.Hide();
+
+            m_NativeLoader.Request([this]() {
+                m_NativePlayer.SetAudioActive(false);
+                m_NativePlayer.DetachNativeWindow();
+            });
+        }
+    }
+
+    void BackgroundLayer::SetPubliclyLive(bool live, int monitorIndex)
     {
         m_IsLiveToPublic = live;
+        if (monitorIndex >= 0) m_LastKnownMonitorIndex = monitorIndex;
+
+        // Independiente de si lo activo AHORA es nativo o no: sincroniza
+        // la ventana nativa (la esconde si live paso a false, o si lo
+        // activo no es nativo) y, mas abajo, el audio del path OpenGL de
+        // siempre (inofensivo aunque Active()/Standby() no tengan nada
+        // relevante cargado en este momento).
+        SyncNativeWindowVisibility();
 
         if (live)
         {
@@ -711,18 +899,20 @@ void main() {
     void BackgroundLayer::SetLiveVolume(int volume0to200)
     {
         m_TargetVolume = volume0to200;
-        if (m_IsLiveToPublic)
-            Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        if (!m_IsLiveToPublic) return;
+
+        if (m_ActiveIsNative) m_NativePlayer.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        else                  Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
     }
 
     void BackgroundLayer::SetLiveMute(bool mute)
     {
         m_TargetMuted = mute;
-        if (m_IsLiveToPublic)
-        {
-            Active().SetMute(mute);
-            Active().SetVolume(mute ? 0 : m_TargetVolume);
-        }
+        if (!m_IsLiveToPublic) return;
+
+        VLCBasePlayer& target = m_ActiveIsNative ? m_NativePlayer : Active();
+        target.SetMute(mute);
+        target.SetVolume(mute ? 0 : m_TargetVolume);
     }
 
     // ── Dispositivo de salida de audio ──────────────────────────────────
@@ -738,23 +928,28 @@ void main() {
     {
         m_AudioDeviceId = deviceId;
 
-        // Se aplica a AMBOS players (no solo al activo): el standby puede
-        // pasar a ser el activo en cualquier momento via PerformSwap(), y
-        // para entonces ya debe estar apuntando al dispositivo correcto.
+        // Se aplica a TODOS los players (no solo al activo): el standby
+        // puede pasar a ser el activo en cualquier momento via
+        // PerformSwap(), y el nativo puede pasar a estarlo en el proximo
+        // SetVideo() con el motor libvlc activo — para entonces ya deben
+        // estar apuntando al dispositivo correcto.
         m_PlayerA.SetAudioDevice(deviceId);
         m_PlayerB.SetAudioDevice(deviceId);
+        m_NativePlayer.SetAudioDevice(deviceId);
     }
 
     void BackgroundLayer::BlockPath(const std::string& path)
     {
         m_PlayerA.BlockPath(path);
         m_PlayerB.BlockPath(path);
+        m_NativePlayer.BlockPath(path);
     }
 
     void BackgroundLayer::UnblockPath()
     {
         m_PlayerA.UnblockPath();
         m_PlayerB.UnblockPath();
+        m_NativePlayer.UnblockPath();
     }
 
 } // namespace ProyecThor::Core

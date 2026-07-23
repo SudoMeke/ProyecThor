@@ -344,24 +344,55 @@ static void* vlc_lock(void* opaque, void** planes)
     return nullptr;
 }
 
+// FIX (desincronizacion audio/video en hardware lento): antes, esta
+// funcion marcaba dirty=true apenas terminaba de DECODIFICAR un frame —
+// segun la doc de libVLC (libvlc_media_player.h: libvlc_video_unlock_cb),
+// unlock() se invoca "despues de decodificar, pero ANTES de mostrarse",
+// sin ninguna relacion con el reloj de reproduccion. En hardware rapido el
+// decode alcanza el ritmo real y "de casualidad" se veia bien, pero en
+// hardware lento (Pentium dual-core ~2GHz reportado por usuarios) el
+// decode se atrasa y, como no habia ningun mecanismo de correccion, el
+// video quedaba cada vez mas atras del audio (que sigue su propio reloj
+// real) sin recuperarse nunca. El swap de buffers sigue haciendose aca
+// (necesario: deja backBuf libre para el proximo decode sin pisar el
+// frame recien terminado) y everHadFrame tambien (lo sigue necesitando
+// HasVideoFrame()/GetLoadState() para detectar "ya se decodifico algo",
+// sin depender de cuando el reloj decida mostrarlo) — lo unico que se
+// saca de aca es el flag "dirty", que ahora se marca en vlc_display().
 static void vlc_unlock(void* opaque, void* /*picture*/, void* const* /*planes*/)
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     std::swap(ctx->frontBuf, ctx->backBuf);
-    ctx->dirty        = true;
     ctx->everHadFrame = true;
     ctx->mutex.unlock();
 }
 
-static void vlc_display(void* /*opaque*/, void* /*picture*/) {}
+// display() SI esta atado al reloj de reproduccion de libVLC (doc:
+// libvlc_video_display_cb — "se invoca cuando el frame necesita
+// mostrarse, segun lo determine el reloj de reproduccion del medio", que
+// usa el audio como maestro cuando hay audio presente). Marcar dirty aca
+// en vez de en unlock() es lo que deja que el auto-corrector de drift de
+// libVLC (ver --file-caching en InitVLC(), clock-jitter/clock-synchro
+// deliberadamente NO forzados a 0) realmente actue: si el decode se
+// atrasa, es libVLC quien salta frames internamente para alcanzar de
+// nuevo al audio, en vez de que este reproductor muestre "lo ultimo
+// decodificado" sin ninguna relacion con el tiempo real.
+static void vlc_display(void* opaque, void* /*picture*/)
+{
+    auto* ctx = static_cast<VLCVideoCtx*>(opaque);
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    ctx->dirty = true;
+}
 
 } // anonymous namespace
 
 namespace ProyecThor::Core {
 
-VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool forceSilent)
+VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool forceSilent,
+                             bool nativeWindowOutput)
     : m_DecodeThreads(decodeThreads)
     , m_UseHardwareDecode(useHardwareDecode)
+    , m_NativeWindowOutput(nativeWindowOutput)
 {
     m_InstanceId = g_NextVlcInstanceId.fetch_add(1, std::memory_order_relaxed);
     m_ForceSilent.store(forceSilent, std::memory_order_relaxed);
@@ -443,10 +474,19 @@ void VLCBasePlayer::CreatePersistentPlayer()
         return;
     }
 
-    auto* vCtx = new VLCVideoCtx();
-    m_VideoCtx = vCtx;
-    libvlc_video_set_format_callbacks(m_MediaPlayer, vlc_format, vlc_cleanup);
-    libvlc_video_set_callbacks(m_MediaPlayer, vlc_lock, vlc_unlock, vlc_display, vCtx);
+    // nativeWindowOutput: NO se registran los callbacks vmem — este
+    // player se adjunta a una ventana nativa via AttachNativeWindow() y
+    // deja que libVLC dibuje ahi con su propio renderer acelerado. Los
+    // callbacks vmem y la salida por ventana nativa son mutuamente
+    // excluyentes; m_VideoCtx queda nullptr (GetVideoSize/HasVideoFrame/
+    // UpdateTexture ya toleran eso, ver sus chequeos existentes).
+    if (!m_NativeWindowOutput)
+    {
+        auto* vCtx = new VLCVideoCtx();
+        m_VideoCtx = vCtx;
+        libvlc_video_set_format_callbacks(m_MediaPlayer, vlc_format, vlc_cleanup);
+        libvlc_video_set_callbacks(m_MediaPlayer, vlc_lock, vlc_unlock, vlc_display, vCtx);
+    }
 
     auto* aCtx = new VLCAudioCtx();
     aCtx->volumeMultiplier = &m_VolumeMultiplier;
@@ -873,7 +913,16 @@ VLCBasePlayer::LoadState VLCBasePlayer::GetLoadState() const
 {
     if (!m_HasEverPlayed.load(std::memory_order_relaxed)) return LoadState::Idle;
     if (m_LoadHasError.load(std::memory_order_relaxed))   return LoadState::Error;
-    if (HasVideoFrame())                                   return LoadState::Ready;
+
+    // Un player nativeWindowOutput no tiene VLCVideoCtx (sin callbacks
+    // vmem, ver CreatePersistentPlayer), asi que HasVideoFrame() siempre
+    // seria false — el evento libvlc_MediaPlayerPlaying es la unica señal
+    // de "listo" disponible en este modo.
+    bool ready = m_NativeWindowOutput
+        ? m_VlcIsPlaying.load(std::memory_order_relaxed)
+        : HasVideoFrame();
+    if (ready) return LoadState::Ready;
+
     if (!m_VlcIsPlaying.load(std::memory_order_relaxed))  return LoadState::Opening;
     return LoadState::Buffering;
 }
@@ -1009,6 +1058,27 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
     // nativa), asi que no hay picos reales que reportar. Se devuelve 0.0f
     // para no romper a quien consuma el VU meter.
     left = right = 0.0f;
+#endif
+}
+
+void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
+{
+    if (!m_MediaPlayer) return;
+#ifdef _WIN32
+    libvlc_media_player_set_hwnd(m_MediaPlayer, nativeHandle);
+#else
+    libvlc_media_player_set_xwindow(m_MediaPlayer,
+        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(nativeHandle)));
+#endif
+}
+
+void VLCBasePlayer::DetachNativeWindow()
+{
+    if (!m_MediaPlayer) return;
+#ifdef _WIN32
+    libvlc_media_player_set_hwnd(m_MediaPlayer, nullptr);
+#else
+    libvlc_media_player_set_xwindow(m_MediaPlayer, 0);
 #endif
 }
 

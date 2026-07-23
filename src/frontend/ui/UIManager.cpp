@@ -352,6 +352,14 @@ projectorClass.ViewportFlagsOverrideSet =
 ImGui::SetNextWindowClass(&projectorClass);
 
 ImGui::Begin("ProjectorLive", nullptr, flags);
+                // Le informa a PresentationCore cual ImGuiID es esta viewport
+                // en este frame, para que el override de Renderer_RenderWindow
+                // en main.cpp sepa cuando desviar el render hacia
+                // CompositePostChain (CRT/Grano/FXAA) y cuando no (StageLive,
+                // paneles flotantes) — ver PresentationCore::
+                // RenderProjectorViewportPostFX.
+                Core::PresentationCore::Get().SetProjectorPostFXViewportID(
+                    ImGui::GetWindowViewport()->ID);
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
 
 // Pantalla de carga (ver Ajustes > Proyeccion > Logo): mientras un fondo o

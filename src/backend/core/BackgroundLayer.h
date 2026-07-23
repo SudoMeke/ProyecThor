@@ -2,6 +2,8 @@
 #include <GL/glew.h>
 #include "backend/media/VLCBasePlayer.h"
 #include "backend/shaders/PostProcessorFSR.h"
+#include "backend/core/PreviewLoadWorker.h"
+#include "frontend/windowing/NativeVideoOutputWindow.h"
 #include <string>
 #include <vector>
 #include <deque>
@@ -112,6 +114,47 @@ namespace ProyecThor::Core {
 
         bool  m_StretchToFill = true;
 
+        // ── Motor de renderizado alternativo: "libvlc (ventana nativa)" ──
+        // Aplica SOLO a contenido de VIDEO real (allowAudio=true — Videos/
+        // cola del Monitor), nunca a Fondos/imagenes/color solido: esos
+        // siempre necesitan overlays/texto encima y por lo tanto siempre
+        // van por el compositor OpenGL de siempre (Active()/Standby()),
+        // sin importar este ajuste. m_UseNativeEngine es la preferencia
+        // configurada (Ajustes > Proyeccion); m_ActiveIsNative es el
+        // estado real de "lo que esta reproduciendose AHORA vino por el
+        // camino nativo" (ver SetVideo/Prefetch/CommitPrefetch/
+        // SyncNativeWindowVisibility), que es lo que deciden Update()/
+        // Render() y el resto de los getters de audio.
+        //
+        // Cuando m_ActiveIsNative es true, m_NativePlayer (construido con
+        // nativeWindowOutput=true, ver VLCBasePlayer.h) reproduce el video
+        // adjuntado a m_NativeWindow — una ventana nativa fullscreen sobre
+        // el monitor de Audiencia donde VLC dibuja con su propio renderer
+        // acelerado. Esa ventana queda por ENCIMA de "ProjectorLive" (que
+        // sigue existiendo y renderizando fondo/overlays/texto con
+        // total normalidad, sin enterarse de nada de esto) mientras el
+        // video este visible, y se oculta apenas termina/cambia a otra
+        // cosa, revelando "ProjectorLive" de nuevo debajo.
+        bool                    m_UseNativeEngine = false;
+        bool                    m_ActiveIsNative  = false;
+        int                     m_LastKnownMonitorIndex = -1;
+        VLCBasePlayer           m_NativePlayer;
+        NativeVideoOutputWindow m_NativeWindow;
+
+        // Despacha Play()/Stop() de m_NativePlayer en un hilo aparte —
+        // NUNCA llamarlos directo desde el hilo principal para este
+        // player: es el mismo hilo que bombea los mensajes de
+        // m_NativeWindow, y un Play()/Stop() sincronico ahi podia colgar
+        // toda la app (visto en la practica: andaba el primer clip, se
+        // colgaba en el segundo). Ver PreviewLoadWorker.h para el
+        // detalle completo — pese al nombre, es generico.
+        PreviewLoadWorker       m_NativeLoader;
+
+        // Muestra/adjunta o esconde/desvincula m_NativeWindow segun
+        // m_IsLiveToPublic && m_ActiveIsNative (llamar despues de cambiar
+        // cualquiera de esos dos). Idempotente.
+        void SyncNativeWindowVisibility();
+
         VLCBasePlayer& Active();
         VLCBasePlayer& Standby();
         void PerformSwap();
@@ -145,6 +188,17 @@ namespace ProyecThor::Core {
 
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
+
+        // Preferencia de motor para VIDEOS reales (allowAudio=true): false
+        // (default) = compuesto OpenGL de siempre; true = libvlc en
+        // ventana nativa (ver comentario del miembro m_UseNativeEngine).
+        // Fondos/imagenes/color solido SIEMPRE van por OpenGL, ignoran
+        // esto por completo. Cambiarlo mientras un video ya esta
+        // reproduciendose no tiene efecto instantaneo (asi lo documenta
+        // libVLC) — recien se aplica en el proximo SetVideo()/
+        // CommitPrefetch() real.
+        void SetUseNativeEngine(bool useNative) { m_UseNativeEngine = useNative; }
+        bool GetUseNativeEngine() const { return m_UseNativeEngine; }
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();
 
@@ -157,6 +211,11 @@ namespace ProyecThor::Core {
         float  GetTransitionProgress() const { return m_TransitionProgress; }
         bool   StandbyHasFrame();
 
+        // Reproductor con el contenido REALMENTE activo ahora mismo — el
+        // par OpenGL de siempre, o m_NativePlayer si el video actual esta
+        // usando el motor libvlc (ver m_ActiveIsNative). Este es el punto
+        // que usan la cola del Monitor y los controles de transporte para
+        // llegar al reproductor correcto sin importar el motor.
         VLCBasePlayer* GetPlayer();
 
         void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
@@ -188,7 +247,12 @@ namespace ProyecThor::Core {
         // PresentationCore::SetProjecting(). Al pasar a false, el audio
         // se corta de inmediato en ambos players (activo y standby), sin
         // importar el volumen/mute configurado.
-        void SetPubliclyLive(bool live);
+        //
+        // monitorIndex solo se usa cuando GetUseNativeEngine() es true:
+        // es el monitor donde mostrar/ocultar la ventana nativa de video
+        // (ver m_NativeWindow). -1 = no tocar la ventana (compatibilidad
+        // con el motor OpenGL, que lo ignora de todos modos).
+        void SetPubliclyLive(bool live, int monitorIndex = -1);
         bool IsPubliclyLive() const { return m_IsLiveToPublic; }
 
         void SetLiveVolume(int volume0to200);

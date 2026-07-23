@@ -269,6 +269,15 @@ void SettingsManager::ApplyProjection() {
                           margins, p.autoScale, p.selectedFont);
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
     core.SetLoadingLogoPath(p.loadingLogoPath);
+
+    core.SetFSREnabled(p.fsrEnabled);
+    core.SetFSRSharpness(p.fsrSharpness);
+    core.SetCRTEnabled(p.crtEnabled);
+    core.SetCRTScanlineIntensity(p.crtScanlineIntensity);
+    core.SetGrainEnabled(p.grainEnabled);
+    core.SetGrainIntensity(p.grainIntensity);
+    core.SetFXAAEnabled(p.fxaaEnabled);
+    core.SetVideoRenderEngine(p.videoRenderEngine);
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────
@@ -405,6 +414,14 @@ void SettingsManager::SaveSettings() {
     j["projection"]["outputQualityMode"]  = p.outputQualityMode;
     j["projection"]["outputPresetIndex"]  = p.outputPresetIndex;
     j["projection"]["loadingLogoPath"]    = p.loadingLogoPath;
+    j["projection"]["fsrEnabled"]           = p.fsrEnabled;
+    j["projection"]["fsrSharpness"]         = p.fsrSharpness;
+    j["projection"]["crtEnabled"]           = p.crtEnabled;
+    j["projection"]["crtScanlineIntensity"] = p.crtScanlineIntensity;
+    j["projection"]["grainEnabled"]         = p.grainEnabled;
+    j["projection"]["grainIntensity"]       = p.grainIntensity;
+    j["projection"]["fxaaEnabled"]          = p.fxaaEnabled;
+    j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
 
     const auto& sd = m_Settings.stageDisplay;
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
@@ -427,7 +444,7 @@ void SettingsManager::SaveSettings() {
             j["controlHub"]["categoryColor"][i][c] = chs.categoryColor[i][c];
 
     const auto& shs = m_Settings.stylesHub;
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 7; i++)
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
@@ -529,6 +546,14 @@ void SettingsManager::LoadSettings() {
             p.outputQualityMode  = jp.value("outputQualityMode",  0);
             p.outputPresetIndex  = jp.value("outputPresetIndex",  3);
             p.loadingLogoPath    = jp.value("loadingLogoPath",    "");
+            p.fsrEnabled            = jp.value("fsrEnabled",            true);
+            p.fsrSharpness          = jp.value("fsrSharpness",          0.2f);
+            p.crtEnabled            = jp.value("crtEnabled",            false);
+            p.crtScanlineIntensity  = jp.value("crtScanlineIntensity",  0.5f);
+            p.grainEnabled          = jp.value("grainEnabled",          false);
+            p.grainIntensity        = jp.value("grainIntensity",        0.15f);
+            p.fxaaEnabled           = jp.value("fxaaEnabled",           false);
+            p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
         }
 
         if (j.contains("stageDisplay")) {
@@ -580,7 +605,7 @@ void SettingsManager::LoadSettings() {
             const auto& jshs = j["stylesHub"];
             if (jshs.contains("categoryColor") && jshs["categoryColor"].is_array()) {
                 const auto& arr = jshs["categoryColor"];
-                for (int i = 0; i < 6 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 7 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         shs.categoryColor[i][c] = arr[i][c].get<float>();
             }

@@ -4,6 +4,8 @@
 #include "LibraryHelpers.h"
 #include "ui/DesignSystem.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "frontend/panels/layers/LayersTheme.h"
+#include "backend/core/ThumbnailWorker.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -12,9 +14,14 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
+#include <functional>
+#include <system_error>
+#include <GL/gl.h>
+#include "stb_image.h"
 
 namespace DS = ProyecThor::UI::DS;
 
@@ -78,6 +85,281 @@ static bool GlassIconButton(const char* id,
 }
 
 // =============================================================================
+//  Miniaturas de video (grid/lista) — mismo patron que LayersBgTab (Fondos,
+//  ver LayersBgTab.cpp): el primer frame real se decodifica en 2do plano via
+//  ThumbnailWorker (libVLC en modo callback puro, nunca abre ventana propia)
+//  y se cachea en disco, asi que solo se paga el costo de decodificar una vez
+//  por video en la vida de la instalacion. Cache privado de este tab, igual
+//  criterio que Overlays/Fondos (cada uno con el suyo, no compartido).
+// =============================================================================
+static fs::path ThumbCacheDir() {
+    fs::path dir = fs::path(GetAssetsPath()) / "thumbnails";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    return dir;
+}
+
+// Hash de path+tamaño: si el archivo se reemplaza por otro con el mismo
+// nombre pero distinto contenido, se regenera en vez de mostrar para
+// siempre la miniatura vieja.
+static std::string ThumbCachePathFor(const std::string& absVideoPath) {
+    std::error_code ec;
+    auto sz = fs::file_size(absVideoPath, ec);
+    size_t h = std::hash<std::string>{}(absVideoPath + "|" + std::to_string(ec ? 0 : sz));
+    return (ThumbCacheDir() / (std::to_string(h) + ".png")).string();
+}
+
+static ImTextureID LoadImageThumb(const char* path) {
+    int w, h, n;
+    unsigned char* d = stbi_load(path, &w, &h, &n, 4);
+    if (!d) return 0;
+    GLuint tex; glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d);
+    stbi_image_free(d);
+    return (ImTextureID)(intptr_t)tex;
+}
+
+static std::unordered_map<std::string, ImTextureID> s_ThumbnailCache;
+static ProyecThor::Core::ThumbnailWorker            s_ThumbWorker;
+static bool  s_GridMode  = true;
+static float s_ThumbZoom = 1.0f;
+
+static ImTextureID GetVideoThumbnail(const std::string& path) {
+    auto it = s_ThumbnailCache.find(path);
+    if (it != s_ThumbnailCache.end()) return it->second;
+
+    std::string abs = fs::absolute(fs::path(path)).string();
+
+    // Ya generada en una sesion anterior: cargarla del cache de disco es
+    // instantaneo (una imagen mas, via LoadImageThumb) y no toca el worker.
+    std::string cachePath = ThumbCachePathFor(abs);
+    std::error_code ec;
+    if (fs::exists(cachePath, ec)) {
+        ImTextureID t = LoadImageThumb(cachePath.c_str());
+        if (t) { s_ThumbnailCache[path] = t; return t; }
+    }
+
+    // Todavia no existe: se pide en 2do plano y por ahora se deja SIN
+    // entrar en cache — el proximo frame vuelve a preguntar, y cuando el
+    // worker termine, DrainVideoThumbnails() ya habra puesto el resultado
+    // real. Mientras tanto la tarjeta/fila cae en el icono generico "VID".
+    s_ThumbWorker.Request(path, abs, cachePath);
+    return 0;
+}
+
+// Llamar una vez por frame: sube a textura GL los frames que el worker haya
+// terminado de decodificar desde el ultimo frame.
+static void DrainVideoThumbnails() {
+    std::vector<ProyecThor::Core::ThumbnailWorker::Result> results;
+    s_ThumbWorker.DrainResults(results);
+    for (auto& r : results) {
+        ImTextureID t = 0;
+        if (!r.pixels.empty() && r.width > 0 && r.height > 0) {
+            GLuint tex; glGenTextures(1, &tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)r.width, (GLsizei)r.height,
+                         0, GL_RGBA, GL_UNSIGNED_BYTE, r.pixels.data());
+            t = (ImTextureID)(intptr_t)tex;
+        }
+        // Si fallo (t == 0) igual entra en cache: evita reintentar sin fin
+        // un archivo que no se puede decodificar.
+        s_ThumbnailCache[r.key] = t;
+    }
+}
+
+static std::string VideoFullPath(const std::string& filename) {
+    return GetAssetsPath() + "/videos/" + filename;
+}
+
+// =============================================================================
+//  Menu contextual compartido entre fila (lista) y tarjeta (grid) — mismas 3
+//  opciones que ya existian en el loop original.
+//  Devuelve true si se elimino el item: en ese caso YA se llamo EndPopup()
+//  (antes de deleteSelectedItem(), que refresca ctx.items) y el caller debe
+//  cortar el loop sobre `filtered` sin llamar EndPopup() de nuevo.
+// =============================================================================
+static bool RenderVideoContextMenu(LibraryContext& ctx, const std::string& filename, int origIdx)
+{
+    if (ImGui::MenuItem("Enviar al monitor")) {
+        std::string fp = VideoFullPath(filename);
+        // FIX: no forzar un Stop() (corte a negro) antes de
+        // SetBackgroundMedia() — SetVideo() ya maneja tanto la carga en
+        // frio como el crossfade sobre lo que esta al aire.
+        Core::PresentationCore::Get().SetBackgroundMedia(fp, true, /*allowAudio=*/true);
+        Core::PresentationCore::Get().SetProjecting(true);
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Renombrar")) {
+        ctx.renameOldName  = filename;
+        ctx.renameIsURL    = false;
+        ctx.renameURLIndex = -1;
+        ctx.selectedIndex  = origIdx;
+        std::string stem = SplitExtension(filename, ctx.renameExtension);
+        memset(ctx.renameBuffer, 0, 512);
+        strncpy(ctx.renameBuffer, stem.c_str(), 511);
+        ctx.showRenameModal = true;
+    }
+    ImGui::Separator();
+    ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
+    if (ImGui::MenuItem("Eliminar")) {
+        ImGui::PopStyleColor();
+        ctx.selectedIndex = origIdx;
+        ImGui::EndPopup();
+        ctx.deleteSelectedItem();
+        ForceListUpdate() = true;
+        return true;
+    }
+    ImGui::PopStyleColor();
+    ImGui::EndPopup();
+    return false;
+}
+
+// =============================================================================
+//  RenderVideoRow — fila de lista (mismo look que antes, DS::GlassListRow)
+//  con una miniatura chica agregada a la izquierda.
+// =============================================================================
+static void RenderVideoRow(LibraryContext& ctx, const std::string& filename, int origIdx,
+                           bool& deletedInLoop, int rowIdx)
+{
+    ImGui::PushID(rowIdx);
+
+    const float thumbSz = 22.0f;
+    const float indent  = thumbSz + 16.0f;
+
+    ImTextureID thumb = GetVideoThumbnail(VideoFullPath(filename));
+    ImVec2      rowPos = ImGui::GetCursorScreenPos();
+    bool        sel    = (ctx.selectedIndex == origIdx);
+    std::string disp   = StripExtension(filename);
+
+    bool clicked = DS::GlassListRow(disp.c_str(), sel, indent);
+
+    ImDrawList* dl     = ImGui::GetWindowDrawList();
+    float       thumbY = rowPos.y + (DS::RowHeight - thumbSz) * 0.5f;
+    if (thumb) {
+        dl->AddImageRounded(thumb, {rowPos.x + 8.0f, thumbY},
+                            {rowPos.x + 8.0f + thumbSz, thumbY + thumbSz},
+                            {0,0}, {1,1}, IM_COL32_WHITE, DS::RadiusSmall);
+    } else {
+        dl->AddRectFilled({rowPos.x + 8.0f, thumbY},
+                          {rowPos.x + 8.0f + thumbSz, thumbY + thumbSz},
+                          DS::BtnDefaultFill, DS::RadiusSmall);
+        ImVec2 ts = ImGui::CalcTextSize("V");
+        dl->AddText({rowPos.x + 8.0f + (thumbSz-ts.x)*0.5f, thumbY + (thumbSz-ts.y)*0.5f},
+                    DS::TextSecondary, "V");
+    }
+
+    if (clicked && origIdx >= 0) {
+        ctx.selectedIndex = origIdx;
+        Core::LibrarySelection s;
+        s.title = filename;
+        s.type  = Core::ItemType::Video;
+        Core::PresentationCore::Get().SetSelection(s);
+    }
+
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+        std::string fullPath = VideoFullPath(filename);
+        ImGui::SetDragDropPayload("VIDEO_TO_QUEUE", fullPath.c_str(), fullPath.size() + 1);
+        ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
+        ImGui::TextUnformatted(disp.c_str());
+        ImGui::PopStyleColor();
+        ImGui::EndDragDropSource();
+    }
+
+    if (ImGui::BeginPopupContextItem(("##ctx_lv" + std::to_string(rowIdx)).c_str())) {
+        if (RenderVideoContextMenu(ctx, filename, origIdx))
+            deletedInLoop = true;
+    }
+
+    ImGui::PopID();
+}
+
+// =============================================================================
+//  RenderVideoCard — tarjeta de grid con miniatura grande (mismo lenguaje
+//  visual que LayersBgTab::RenderBgCard / LayersOverlayTab::RenderCard,
+//  adaptado a los tokens DS:: que usa el resto de Biblioteca).
+// =============================================================================
+static void RenderVideoCard(LibraryContext& ctx, const std::string& filename, int origIdx,
+                            float W, float H, int col, int cols, bool& deletedInLoop, int cardIdx)
+{
+    ImGui::PushID(cardIdx);
+
+    ImTextureID thumb  = GetVideoThumbnail(VideoFullPath(filename));
+    ImVec2      pos    = ImGui::GetCursorScreenPos();
+    bool        hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x+W, pos.y+H});
+    float       t       = UI::LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
+    ImDrawList* dl      = ImGui::GetWindowDrawList();
+    bool        sel     = (ctx.selectedIndex == origIdx);
+
+    float  inset = 2.0f * t;
+    ImVec2 p0    = { pos.x - inset, pos.y - inset };
+    ImVec2 p1    = { pos.x + W + inset, pos.y + H + inset };
+
+    dl->AddRectFilled(p0, p1, DS::BtnDefaultFill, DS::RadiusMedium);
+    if (thumb)
+        dl->AddImageRounded(thumb, p0, p1, {0,0}, {1,1}, IM_COL32_WHITE, DS::RadiusMedium);
+
+    ImVec4 borderA = ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultBord);
+    ImVec4 borderB = ImGui::ColorConvertU32ToFloat4(sel ? DS::AccentColor : DS::AccentColorHov);
+    float  bt      = sel ? 1.0f : t;
+    ImVec4 borderCol(
+        borderA.x + (borderB.x - borderA.x) * bt,
+        borderA.y + (borderB.y - borderA.y) * bt,
+        borderA.z + (borderB.z - borderA.z) * bt,
+        borderA.w + (borderB.w - borderA.w) * bt);
+    dl->AddRect(p0, p1, ImGui::ColorConvertFloat4ToU32(borderCol), DS::RadiusMedium, 0, 1.0f + 0.8f*bt);
+
+    // Chip "VID"
+    {
+        ImVec2 ts = ImGui::CalcTextSize("VID");
+        float  bx = p0.x + 7.0f, by = p0.y + 7.0f;
+        dl->AddRectFilled({bx, by}, {bx+ts.x+8.0f, by+ts.y+4.0f}, DS::AccentColorDim, DS::RadiusSmall);
+        dl->AddText({bx+4.0f, by+2.0f}, DS::AccentLight, "VID");
+    }
+
+    std::string disp = StripExtension(filename);
+    std::string dn   = disp.length() > 18 ? disp.substr(0,15) + "..." : disp;
+    dl->AddRectFilled({p0.x, p1.y-26.0f}, {p1.x, p1.y}, IM_COL32(0,0,0,200), DS::RadiusMedium, ImDrawFlags_RoundCornersBottom);
+    ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
+    dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, DS::TextPrimary, dn.c_str());
+
+    ImGui::InvisibleButton(("##vidcard" + std::to_string(cardIdx)).c_str(), {W, H});
+
+    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && origIdx >= 0) {
+        ctx.selectedIndex = origIdx;
+        Core::LibrarySelection s;
+        s.title = filename;
+        s.type  = Core::ItemType::Video;
+        Core::PresentationCore::Get().SetSelection(s);
+    }
+
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+        std::string fullPath = VideoFullPath(filename);
+        ImGui::SetDragDropPayload("VIDEO_TO_QUEUE", fullPath.c_str(), fullPath.size() + 1);
+        ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
+        ImGui::TextUnformatted(dn.c_str());
+        ImGui::PopStyleColor();
+        ImGui::EndDragDropSource();
+    }
+
+    if (ImGui::BeginPopupContextItem(("##ctx_vc" + std::to_string(cardIdx)).c_str())) {
+        if (RenderVideoContextMenu(ctx, filename, origIdx))
+            deletedInLoop = true;
+    }
+
+    if (col < cols-1) ImGui::SameLine();
+    ImGui::PopID();
+}
+
+// =============================================================================
 //  RenderVideoSection — tabs Archivos / Stream
 // =============================================================================
 void RenderVideoSection(LibraryContext& ctx)
@@ -127,6 +409,10 @@ void RenderVideoSection(LibraryContext& ctx)
 // =============================================================================
 void RenderLocalVideoList(LibraryContext& ctx)
 {
+    // Sube a textura GL las miniaturas que el worker en 2do plano haya
+    // terminado de decodificar desde el frame anterior (ver GetVideoThumbnail).
+    DrainVideoThumbnails();
+
     // ── Barra de búsqueda ──────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
@@ -141,6 +427,45 @@ void RenderLocalVideoList(LibraryContext& ctx)
         ForceListUpdate() = true;
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(4);
+
+    ImGui::Spacing();
+
+    // ── Barra de vista: zoom (solo en grid) + alternar grid/lista ───────────
+    {
+        const float btnSz = 26.0f;
+        const float zoomW = 76.0f;
+        const float gap   = 4.0f;
+        const float rowW  = zoomW + gap + btnSz*2.0f + gap*2.0f;
+        const float avail = ImGui::GetWindowContentRegionMax().x;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
+
+        if (s_GridMode) {
+            UI::LPZoomSlider("##vidzoom", &s_ThumbZoom, 0.65f, 1.8f, zoomW);
+            ImGui::SameLine(0, gap);
+        } else {
+            ImGui::Dummy(ImVec2(zoomW, btnSz));
+            ImGui::SameLine(0, gap);
+        }
+
+        ImGui::PushID("vidview");
+        if (UI::LPCornerIconBtn("##gridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+                float cs = r*0.42f, g = r*0.18f;
+                for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
+                    ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
+                    dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
+                }
+            }, "Vista en cuadricula", {btnSz,btnSz}, s_GridMode))
+            s_GridMode = true;
+        ImGui::SameLine(0, gap);
+        if (UI::LPCornerIconBtn("##listm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+                for (int i=0;i<3;i++) {
+                    float y = c.y - r*0.5f + i*r*0.5f;
+                    dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
+                }
+            }, "Vista en lista", {btnSz,btnSz}, !s_GridMode))
+            s_GridMode = false;
+        ImGui::PopID();
+    }
 
     ImGui::Spacing();
 
@@ -184,83 +509,49 @@ void RenderLocalVideoList(LibraryContext& ctx)
             ImGui::PopStyleColor();
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 1.f));
         bool deletedInLoop = false;
 
-        for (int n = 0; n < (int)filtered.size(); n++)
-        {
-            auto it2 = std::find(ctx.items.begin(), ctx.items.end(), filtered[n]);
-            int origIdx = (it2 != ctx.items.end())
-                ? (int)std::distance(ctx.items.begin(), it2) : -1;
+        if (s_GridMode) {
+            const float cW = 150.0f * s_ThumbZoom;
+            const float cH = 92.0f  * s_ThumbZoom;
+            const float minGap = 10.0f;
 
-            const bool  sel  = (ctx.selectedIndex == origIdx);
-            std::string disp = StripExtension(filtered[n]);
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            int   cols       = std::max(1, static_cast<int>((availWidth + minGap) / (cW + minGap)));
+            int   currentCol = 0;
 
-            bool clicked = DS::GlassListRow(disp.c_str(), sel);
-
-            if (clicked && origIdx >= 0)
+            for (int n = 0; n < (int)filtered.size(); n++)
             {
-                ctx.selectedIndex = origIdx;
-                Core::LibrarySelection s;
-                s.title = filtered[n];
-                s.type  = Core::ItemType::Video;
-                Core::PresentationCore::Get().SetSelection(s);
+                auto it2 = std::find(ctx.items.begin(), ctx.items.end(), filtered[n]);
+                int origIdx = (it2 != ctx.items.end())
+                    ? (int)std::distance(ctx.items.begin(), it2) : -1;
+
+                RenderVideoCard(ctx, filtered[n], origIdx, cW, cH, currentCol, cols, deletedInLoop, n);
+                if (deletedInLoop) break;
+
+                currentCol++;
+                if (currentCol < cols) {
+                    ImGui::SameLine(0.0f, minGap);
+                } else {
+                    currentCol = 0;
+                    ImGui::Dummy({0.0f, minGap});
+                }
+            }
+        } else {
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 1.f));
+
+            for (int n = 0; n < (int)filtered.size(); n++)
+            {
+                auto it2 = std::find(ctx.items.begin(), ctx.items.end(), filtered[n]);
+                int origIdx = (it2 != ctx.items.end())
+                    ? (int)std::distance(ctx.items.begin(), it2) : -1;
+
+                RenderVideoRow(ctx, filtered[n], origIdx, deletedInLoop, n);
+                if (deletedInLoop) break;
             }
 
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
-            {
-                std::string fullPath = GetAssetsPath() + "/videos/" + filtered[n];
-                ImGui::SetDragDropPayload("VIDEO_TO_QUEUE",
-                    fullPath.c_str(), fullPath.size() + 1);
-                ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
-                ImGui::TextUnformatted(disp.c_str());
-                ImGui::PopStyleColor();
-                ImGui::EndDragDropSource();
-            }
-
-            if (ImGui::BeginPopupContextItem(("##ctx_lv" + std::to_string(n)).c_str()))
-            {
-                if (ImGui::MenuItem("Enviar al monitor")) {
-                    std::string fp = GetAssetsPath() + "/videos/" + filtered[n];
-                    // FIX: no forzar un Stop() (corte a negro) antes de
-                    // SetBackgroundMedia() — SetVideo() ya maneja tanto la
-                    // carga en frio como el crossfade sobre lo que esta al
-                    // aire. El Stop() previo ademas rompia el guard de
-                    // reentrancia de VLCBasePlayer::Play() en clicks
-                    // repetidos sobre el mismo video.
-                    Core::PresentationCore::Get().SetBackgroundMedia(fp, true, /*allowAudio=*/true);
-                    Core::PresentationCore::Get().SetProjecting(true);
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Renombrar")) {
-                    ctx.renameOldName  = filtered[n];
-                    ctx.renameIsURL    = false;
-                    ctx.renameURLIndex = -1;
-                    ctx.selectedIndex  = origIdx;
-                    std::string stem = SplitExtension(filtered[n], ctx.renameExtension);
-                    memset(ctx.renameBuffer, 0, 512);
-                    strncpy(ctx.renameBuffer, stem.c_str(), 511);
-                    ctx.showRenameModal = true;
-                }
-                ImGui::Separator();
-                ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
-                if (ImGui::MenuItem("Eliminar")) {
-                    ImGui::PopStyleColor();
-                    ctx.selectedIndex = origIdx;
-                    ImGui::EndPopup();
-                    ctx.deleteSelectedItem();
-                    ForceListUpdate() = true; // evita que 'filtered' quede con un item ya borrado
-                    deletedInLoop = true;
-                    break;
-                }
-                ImGui::PopStyleColor();
-                ImGui::EndPopup();
-            }
-
-            if (deletedInLoop) break;
+            ImGui::PopStyleVar(); // ItemSpacing
         }
-
-        ImGui::PopStyleVar(); // ItemSpacing
     }
     ImGui::EndChild();
     ImGui::PopStyleVar(2);

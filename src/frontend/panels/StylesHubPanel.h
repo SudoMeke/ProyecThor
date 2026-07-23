@@ -3,6 +3,7 @@
 #include "BackgroundsPanel.h"
 #include "CanvasStylesPanel.h"
 #include "OverlaysPanel.h"
+#include "ShadersPanel.h"
 #include "frontend/views/Announcements.h"
 #include "capture/CapturePanel.h"
 #include <string>
@@ -17,8 +18,8 @@ class TransitionPanel;
 // Biblioteca/Home). Anuncios y Captura se movieron aca desde Home, junto
 // con el resto de las herramientas de "preparar/vestir" la salida en vivo.
 enum class StylesSection {
-    Backgrounds = 0, Styles = 1, Overlays = 2, Transitions = 3,
-    Announcements = 4, Capture = 5,
+    Backgrounds = 0, Styles = 1, Overlays = 2, Shaders = 3, Transitions = 4,
+    Announcements = 5, Capture = 6,
 };
 
 class StylesHubPanel : public IPanel {
@@ -53,6 +54,7 @@ private:
     BackgroundsPanel   m_Backgrounds;
     CanvasStylesPanel  m_Styles;
     OverlaysPanel      m_Overlays;
+    ShadersPanel       m_Shaders;
     TransitionPanel*   m_TransitionsRef = nullptr;
     Announcements      m_Announcements;
     CapturePanel       m_Capture;

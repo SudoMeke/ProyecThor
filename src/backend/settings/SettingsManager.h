@@ -64,6 +64,28 @@ namespace ProyecThor::Settings {
         // ShouldShowLoadingScreen) en vez de dejar ver un frame
         // entrecortado/viejo. Vacio = sin logo, comportamiento sin cambios.
         std::string loadingLogoPath;
+
+        // ── Efectos de post-proceso (salida en vivo, panel "Shaders") ────
+        // fsrEnabled/fsrSharpness: ya corren hoy en BackgroundLayer (solo
+        // sobre el fondo, para upscale); antes no se persistian ni tenian
+        // UI. crt/grain/fxaa corren sobre el COMPOSITE completo de
+        // "ProjectorLive" (ver CompositePostChain.h) — filtros 1:1, sin
+        // upscale.
+        bool  fsrEnabled            = true;
+        float fsrSharpness          = 0.2f;
+        bool  crtEnabled            = false;
+        float crtScanlineIntensity  = 0.5f;
+        bool  grainEnabled          = false;
+        float grainIntensity        = 0.15f;
+        bool  fxaaEnabled           = false;
+
+        // ── Motor de renderizado del fondo de video ──────────────────────
+        // 0 = OpenGL compuesto (default: fondo + overlays + texto en vivo
+        // juntos, como siempre). 1 = VLC en ventana nativa (el fondo se
+        // muestra en una ventana propia con el renderer acelerado de VLC;
+        // sin overlays/texto encima ni transicion animada entre clips —
+        // ver BackgroundLayer::SetUseNativeEngine).
+        int videoRenderEngine = 0;
     };
 
     // ── Audio ────────────────────────────────────────────────────────────
@@ -223,13 +245,14 @@ namespace ProyecThor::Settings {
         };
     };
 
-    // ── Sidebar del hub de Diseño (Fondos/Estilos/Overlays/Transiciones/
-    //    Anuncios/Captura) ──────────────────────────────────────────────
+    // ── Sidebar del hub de Diseño (Fondos/Estilos/Overlays/Shaders/
+    //    Transiciones/Anuncios/Captura) ─────────────────────────────────
     struct StylesHubSettings {
-        float categoryColor[6][4] = {
+        float categoryColor[7][4] = {
             { 0.35f, 0.80f, 0.55f, 1.0f }, // Fondos
             { 0.65f, 0.31f, 0.94f, 1.0f }, // Estilos
             { 0.95f, 0.60f, 0.20f, 1.0f }, // Overlays
+            { 0.40f, 0.75f, 0.85f, 1.0f }, // Shaders
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Transiciones
             { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura

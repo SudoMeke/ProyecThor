@@ -177,6 +177,43 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
 
         ImGui::Spacing();
 
+        // ── Motor de renderizado (Videos) ─────────────────────────────────────
+        SectionTitle("Motor de Renderizado (Videos)");
+        {
+            int engine = Core::PresentationCore::Get().GetVideoRenderEngine();
+            float w2    = ImGui::GetContentRegionAvail().x;
+            float btnW2 = (w2 - 6.0f) * 0.5f;
+
+            if (QualityModeButton("engOpenGL", "OpenGL", engine == 0, btnW2)) {
+                p.videoRenderEngine = 0;
+                Core::PresentationCore::Get().SetVideoRenderEngine(0);
+                changed = true;
+            }
+            ImGui::SameLine(0.0f, 6.0f);
+            if (QualityModeButton("engLibvlc", "libvlc", engine == 1, btnW2)) {
+                p.videoRenderEngine = 1;
+                Core::PresentationCore::Get().SetVideoRenderEngine(1);
+                changed = true;
+            }
+            HelpTooltip("Solo afecta a VIDEOS reales (Biblioteca > Videos / cola del Monitor "
+                        "con audio) -- los Fondos (loops decorativos, imagenes, color solido) "
+                        "siempre se muestran por OpenGL, con overlays y texto en vivo encima, "
+                        "sin importar esta opcion.\n\n"
+                        "OpenGL (default): el video se compone junto con overlays/texto/"
+                        "anuncios en la misma salida.\n"
+                        "libvlc: el video se muestra en una ventana nativa aparte, con el "
+                        "renderer acelerado propio de VLC. Cambiar este ajuste requiere "
+                        "reiniciar Audiencia para que tenga efecto.");
+
+            if (engine == 1) {
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+                    "Con libvlc: mientras un video este activo, sin overlays/texto encima "
+                    "y sin transicion animada entre clips (corte seco).");
+            }
+        }
+
+        ImGui::Spacing();
+
         // ── FSR Upscaling ─────────────────────────────────────────────────────
         // FIX: Sección FSR colocada correctamente fuera del bloque del Combo,
         //      con todas las llaves balanceadas.

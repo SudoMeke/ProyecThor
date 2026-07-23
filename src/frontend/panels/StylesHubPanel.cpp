@@ -103,12 +103,13 @@ void StylesHubPanel::Render()
             { (int)StylesSection::Backgrounds,   AppIcons::DrawIcon_Layers,    "Fondos"   },
             { (int)StylesSection::Styles,        AppIcons::DrawIcon_TextAa,    "Estilos"  },
             { (int)StylesSection::Overlays,      AppIcons::DrawIcon_Overlay,   "Overlays" },
+            { (int)StylesSection::Shaders,       AppIcons::DrawIcon_Shader,    "Shaders"  },
             { (int)StylesSection::Announcements, HomeIcons::DrawIcon_Megaphone,"Anuncios" },
             { (int)StylesSection::Capture,       HomeIcons::DrawIcon_Camera,   "Captura"  },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (StylesSection)currentIndex;
     }
 
@@ -144,6 +145,7 @@ void StylesHubPanel::Render()
             m_Styles.RenderContent();
             break;
         case StylesSection::Overlays:    m_Overlays.RenderContent();   break;
+        case StylesSection::Shaders:     m_Shaders.RenderContent();    break;
         case StylesSection::Transitions:
             if (m_TransitionsRef) m_TransitionsRef->RenderContent();
             break;

@@ -33,7 +33,16 @@ namespace ProyecThor::Core {
         // cableado, swap de doble buffer, etc.). Se usa para el player de
         // preview (biblioteca), que por requisito de producto jamas debe
         // sonar: solo el monitor a publico puede tener audio real.
-        VLCBasePlayer(int decodeThreads = 0, bool useHardwareDecode = true, bool forceSilent = false);
+        //
+        // nativeWindowOutput: cuando es true, este player NUNCA registra
+        // los callbacks vmem (lock/unlock/display) ni crea el buffer de
+        // textura — esta pensado para adjuntarse a una ventana nativa via
+        // AttachNativeWindow() y dejar que libVLC dibuje el video con su
+        // propio renderer acelerado (Direct3D/XVideo), en vez de la copia
+        // CPU→textura→GL que usa el modo normal. Ver motor de renderizado
+        // "VLC (ventana nativa)" en Ajustes > Proyeccion.
+        VLCBasePlayer(int decodeThreads = 0, bool useHardwareDecode = true,
+                     bool forceSilent = false, bool nativeWindowOutput = false);
         ~VLCBasePlayer();
 
         VLCBasePlayer(const VLCBasePlayer&)            = delete;
@@ -92,6 +101,16 @@ namespace ProyecThor::Core {
         // true si ya se decodifico al menos un frame de video real.
         bool HasVideoFrame() const;
 
+        // Solo tiene efecto en un player construido con nativeWindowOutput
+        // = true (ver constructor). Adjunta/desvincula la salida de video
+        // de este reproductor a una ventana nativa (HWND en Windows, X11
+        // Window en Linux) para que libVLC dibuje ahi directo con su
+        // propio renderer. Segun la doc de libVLC, el cambio toma efecto
+        // recien cuando arranca la reproduccion — no tiene efecto
+        // instantaneo sobre un clip que ya esta reproduciendose.
+        void AttachNativeWindow(void* nativeHandle);
+        void DetachNativeWindow();
+
         // Enumera los dispositivos de salida de audio disponibles.
         // - Windows: enumera dispositivos WinMM reales via
         //   waveOutGetNumDevs()/waveOutGetDevCaps(), incluyendo siempre
@@ -148,6 +167,7 @@ namespace ProyecThor::Core {
 
         int  m_DecodeThreads    = 0;
         bool m_UseHardwareDecode = true;
+        bool m_NativeWindowOutput = false;
 
         libvlc_instance_t*       m_Instance    = nullptr;
         libvlc_media_player_t*   m_MediaPlayer = nullptr;

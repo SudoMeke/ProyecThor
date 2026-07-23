@@ -99,4 +99,19 @@ inline void DrawIcon_Swap(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         IcPt(o, sz, 0.30f, 0.50f), IcPt(o, sz, 0.30f, 0.78f), IcPt(o, sz, 0.12f, 0.64f), col);
 }
 
+// Shaders — varita con destello (sparkle), efecto visual/post-proceso
+inline void DrawIcon_Shader(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+    // Varita: linea diagonal con "punta" cuadrada
+    dl->AddLine(IcPt(o, sz, 0.24f, 0.80f), IcPt(o, sz, 0.62f, 0.42f), col, thick);
+    dl->AddRectFilled(IcPt(o, sz, 0.58f, 0.30f), IcPt(o, sz, 0.70f, 0.42f), col, sz * 0.02f);
+    // Destello grande (rombo) + dos chicos
+    dl->AddQuadFilled(
+        IcPt(o, sz, 0.74f, 0.14f), IcPt(o, sz, 0.80f, 0.26f),
+        IcPt(o, sz, 0.74f, 0.38f), IcPt(o, sz, 0.68f, 0.26f), col);
+    dl->AddCircleFilled(IcPt(o, sz, 0.20f, 0.30f), sz * 0.04f, col, 8);
+    dl->AddCircleFilled(IcPt(o, sz, 0.86f, 0.62f), sz * 0.035f, col, 8);
+}
+
 } // namespace ProyecThor::UI::AppIcons

@@ -670,6 +670,27 @@ ImGui::StyleColorsDark();
             glfwMakeContextCurrent(backup);
         }
     };
+
+    // Post-proceso (FSR ya vive aparte en BackgroundLayer; esto es CRT/
+    // Grano/FXAA sobre el composite completo, ver CompositePostChain.h):
+    // se intercepta el renderer de UNICAMENTE la viewport "ProjectorLive"
+    // (la salida real a audiencia — ver UIManager::RenderAll, que informa
+    // su ImGuiID cada frame via SetProjectorPostFXViewportID). "StageLive"
+    // y cualquier panel flotante siguen el renderer default de ImGui, sin
+    // cambios. Para cuando esto corre, Platform_RenderWindow (arriba en la
+    // secuencia de ImGui::RenderPlatformWindowsDefault) ya hizo el
+    // glfwMakeContextCurrent de ESA viewport, asi que el contexto GL
+    // correcto ya esta activo sin necesidad de cambiarlo aca.
+    static void (*s_OrigRenderWindow)(ImGuiViewport*, void*) = platform_io.Renderer_RenderWindow;
+
+    platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void* renderArg)
+    {
+        auto& core = ProyecThor::Core::PresentationCore::Get();
+        if (core.IsProjectorPostFXViewport(viewport->ID))
+            core.RenderProjectorViewportPostFX(viewport, s_OrigRenderWindow);
+        else if (s_OrigRenderWindow)
+            s_OrigRenderWindow(viewport, renderArg);
+    };
 }
 
     ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
@@ -702,6 +723,16 @@ ImGui::StyleColorsDark();
         return -1;
     }
     std::cerr << "[DIAG] uiManager.Initialize() OK\n";
+
+    // Sin este llamado, ApplyProjection() solo corria cuando el operador
+    // abria Ajustes > Proyeccion — los toggles de FSR/CRT/Grano/FXAA (y el
+    // resto de ProjectionSettings) quedaban sin "enganchar" a
+    // PresentationCore hasta esa primera visita. Fix minimo empaquetado
+    // junto con el panel de Shaders (no exclusivo de esta feature). Tiene
+    // que ir DESPUES de que el contexto GL de mainWindow este activo y GLEW
+    // inicializado (ApplyProjection -> SetLoadingLogoPath puede subir una
+    // textura), nunca antes.
+    ProyecThor::Settings::SettingsManager::Get().ApplyProjection();
 
     auto homePanel    = std::make_shared<ProyecThor::UI::HomePanel>();
     auto libraryPanel = std::make_shared<ProyecThor::UI::LibraryPanel>();
