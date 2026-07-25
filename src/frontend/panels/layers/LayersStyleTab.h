@@ -30,15 +30,19 @@ private:
     std::vector<std::string> m_AvailableThemes;
     std::vector<std::string> m_AvailableFonts;
 
-    bool m_GridMode = true;
+    bool  m_GridMode  = true;
+    float m_ThumbZoom = 1.0f; // 0.65 .. 1.8 — tamano de las tarjetas de tema
 
     std::unique_ptr<CanvaStyleEditor> m_StyleEditor;
 
     // ── Render helpers ────────────────────────────────────────────────────────
+    void RenderTopBar();     // toolbar compacta (icon-only): nuevo / recargar fuentes / zoom / grid-lista
     void RenderThemeGrid();
     void RenderQuickAdjust();
+    // Ajustes rapidos ya no vive fijo debajo de la galeria: ahora es un
+    // icono en la toolbar que abre esto como popup flotante (ver RenderTopBar).
+    void RenderQuickAdjustPopup();
     void RenderStyleEditorModal();
-    void RenderViewToggleBar(bool& gridMode);
 
     void RenderThemeCard(const std::string& name, float cardW, float cardH,
                          int idx, int col, int cols);

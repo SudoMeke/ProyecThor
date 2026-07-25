@@ -1,4 +1,3 @@
-#include "StreamingPanel.h"
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #endif
@@ -30,15 +29,15 @@
 #include "Version.h"
 #include "SettingsManager.h"
 #include "PresentationCore.h"
+#include "PerformanceGovernor.h"
+#include "SystemStats.h"
 #include "ui/UIManager.h"
 #include "frontend/panels/LibraryPanel.h"
-#include "frontend/panels/PreviewPanel.h"
-#include "frontend/panels/ControlPanel.h"
-#include "frontend/panels/capture/CapturePanel.h"
+#include "frontend/panels/HomePanel.h"
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
-#include "frontend/panels/BackgroundsPanel.h"
-#include "frontend/panels/CanvasStylesPanel.h"
+#include "frontend/panels/ViewToolsPanel.h"
+#include "frontend/panels/StylesHubPanel.h"
 
 #ifdef _WIN32
     #pragma comment(lib, "dwmapi.lib")
@@ -236,7 +235,7 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     if (smallFont) ImGui::PushFont(smallFont);
     ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", status.c_str());
 
-    const std::string versionLine = "Version " PROYECTHOR_VERSION_STRING "  |  Build 2026";
+    const std::string versionLine = "Version " PROYECTHOR_VERSION_STRING "  |  Build " PROYECTHOR_BUILD_NUMBER;
     const std::string copyLine    = "\xC2\xA9 2026 ProyecThor Team";
     const float vW = ImGui::CalcTextSize(versionLine.c_str()).x;
     const float cW = ImGui::CalcTextSize(copyLine.c_str()).x;
@@ -465,10 +464,31 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
     ImGuiIO& splashIO   = ImGui::GetIO();
     splashIO.IniFilename = nullptr;
 
-    const char* fontPath  = "bin/assets/fonts/OpenSans-Regular.ttf";
-    ImFont* titleFont   = splashIO.Fonts->AddFontFromFileTTF(fontPath, 46.0f);
-    ImFont* regularFont = splashIO.Fonts->AddFontFromFileTTF(fontPath, 20.0f);
-    ImFont* smallFont   = splashIO.Fonts->AddFontFromFileTTF(fontPath, 16.0f);
+    // Misma fuente elegida en Ajustes > Apariencia (si hay una y sigue
+    // siendo válida), para que la pantalla de carga no "desentone" con el
+    // resto de la app apenas termine de cargar -- ver la carga equivalente
+    // de la fuente de la UI principal mas abajo, cerca de
+    // ImGui_ImplGlfw_InitForOpenGL. Se valida ANTES de llamar
+    // AddFontFromFileTTF (no despues): esa función usa IM_ASSERT ante un
+    // archivo invalido/corrupto, que en build Debug aborta el proceso
+    // entero -- no alcanza con revisar el ImFont* devuelto.
+    std::string fontPath;
+    {
+        const std::string& customFontPath =
+            ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.customFontPath;
+        const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
+
+        if (!customFontPath.empty() && ProyecThor::Settings::IsValidFontFile(customFontPath))
+            fontPath = customFontPath;
+        else if (ProyecThor::Settings::IsValidFontFile(defaultFontPath))
+            fontPath = defaultFontPath;
+        // si ninguna valida, fontPath queda vacio -- se omite el
+        // AddFontFromFileTTF de abajo y ImGui usa su fuente embebida.
+    }
+
+    ImFont* titleFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 46.0f);
+    ImFont* regularFont = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 20.0f);
+    ImFont* smallFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f);
 
     if (!titleFont || !regularFont || !smallFont)
         std::cerr << "[DIAG] ADVERTENCIA: no se pudo cargar la fuente en '"
@@ -564,6 +584,7 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
             }
 
             glfwMakeContextCurrent(mainWindow);
+            ProyecThor::Core::PresentationCore::Get().SetMainWindow(mainWindow);
             glfwSwapInterval(1);
             glewExperimental = GL_TRUE;
             GLenum status = glewInit();
@@ -604,6 +625,7 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
     StyleGeneralApp::LoadAppIcon("original_screen",   "bin/assets/icons/ui/original_screen.png");
     StyleGeneralApp::LoadAppIcon("add_photo",   "bin/assets/icons/ui/add_photo.png");
 StyleGeneralApp::LoadAppIcon("upload_file", "bin/assets/icons/ui/upload_file.png");
+StyleGeneralApp::LoadAppIcon("history",    "bin/assets/icons/ui/history.png");
 StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png");
         }},
 
@@ -645,7 +667,28 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.IniFilename  = "proyecthor_ui.ini";
 
-    io.Fonts->AddFontFromFileTTF("bin/assets/fonts/OpenSans-Regular.ttf", 16.0f);
+    // Fuente de la interfaz: si el usuario eligio una propia en Ajustes >
+    // Apariencia, se intenta esa primero -- validada con IsValidFontFile
+    // (misma libreria stb_truetype que usa AddFontFromFileTTF por debajo,
+    // pero sin el IM_ASSERT fatal ante un archivo invalido). Si no hay
+    // ninguna elegida, o la elegida ya no sirve (se movio/borro/corrompio),
+    // se cae a la fuente por defecto del repo; y si esa TAMBIEN fallara,
+    // simplemente no se agrega ninguna -- ImGui usa su fuente embebida
+    // (ProggyClean) en vez de abortar el proceso.
+    {
+        using namespace ProyecThor::Settings;
+        const std::string& customFontPath = SettingsManager::Get().GetSettings().theme.customFontPath;
+        const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
+
+        std::string fontToLoad;
+        if (!customFontPath.empty() && IsValidFontFile(customFontPath))
+            fontToLoad = customFontPath;
+        else if (IsValidFontFile(defaultFontPath))
+            fontToLoad = defaultFontPath;
+
+        if (!fontToLoad.empty())
+            io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f);
+    }
     ProyecThor::Core::PresentationCore::Get().LoadFontsIntoImGui();
 
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
@@ -668,6 +711,27 @@ ImGui::StyleColorsDark();
             glfwSwapInterval(0);
             glfwMakeContextCurrent(backup);
         }
+    };
+
+    // Post-proceso (FSR ya vive aparte en BackgroundLayer; esto es CRT/
+    // Grano/FXAA sobre el composite completo, ver CompositePostChain.h):
+    // se intercepta el renderer de UNICAMENTE la viewport "ProjectorLive"
+    // (la salida real a audiencia — ver UIManager::RenderAll, que informa
+    // su ImGuiID cada frame via SetProjectorPostFXViewportID). "StageLive"
+    // y cualquier panel flotante siguen el renderer default de ImGui, sin
+    // cambios. Para cuando esto corre, Platform_RenderWindow (arriba en la
+    // secuencia de ImGui::RenderPlatformWindowsDefault) ya hizo el
+    // glfwMakeContextCurrent de ESA viewport, asi que el contexto GL
+    // correcto ya esta activo sin necesidad de cambiarlo aca.
+    static void (*s_OrigRenderWindow)(ImGuiViewport*, void*) = platform_io.Renderer_RenderWindow;
+
+    platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void* renderArg)
+    {
+        auto& core = ProyecThor::Core::PresentationCore::Get();
+        if (core.IsProjectorPostFXViewport(viewport->ID))
+            core.RenderProjectorViewportPostFX(viewport, s_OrigRenderWindow);
+        else if (s_OrigRenderWindow)
+            s_OrigRenderWindow(viewport, renderArg);
     };
 }
 
@@ -702,21 +766,39 @@ ImGui::StyleColorsDark();
     }
     std::cerr << "[DIAG] uiManager.Initialize() OK\n";
 
-    auto previewPanel = std::make_shared<ProyecThor::UI::PreviewPanel>();
+    // Sin este llamado, ApplyProjection() solo corria cuando el operador
+    // abria Ajustes > Proyeccion — los toggles de FSR/CRT/Grano/FXAA (y el
+    // resto de ProjectionSettings) quedaban sin "enganchar" a
+    // PresentationCore hasta esa primera visita. Fix minimo empaquetado
+    // junto con el panel de Shaders (no exclusivo de esta feature). Tiene
+    // que ir DESPUES de que el contexto GL de mainWindow este activo y GLEW
+    // inicializado (ApplyProjection -> SetLoadingLogoPath puede subir una
+    // textura), nunca antes.
+    ProyecThor::Settings::SettingsManager::Get().ApplyProjection();
+
+    auto homePanel    = std::make_shared<ProyecThor::UI::HomePanel>();
     auto libraryPanel = std::make_shared<ProyecThor::UI::LibraryPanel>();
-previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
-    previewPanel->m_UIManagerRef = &uiManager;
+homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
+    ProyecThor::Core::PresentationCore::Get().SetAudioPanelRef(libraryPanel->GetAudioPanel());
+    homePanel->m_UIManagerRef = &uiManager;
     libraryPanel->SetUIManager(&uiManager);
 
     uiManager.AddPanel(libraryPanel);
-    uiManager.AddPanel(previewPanel);
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::CapturePanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ControlPanel>(&uiManager));
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::BackgroundsPanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::CanvasStylesPanel>());
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::StreamingPanel>());
-    uiManager.AddPanel(uiManager.GetTransitionPanelOwned());
+    uiManager.AddPanel(homePanel);
+    // ControlPanel se elimino: su config (enrutamiento/calidad, Stage) vive
+    // en Ajustes (ver SettingsPanel > Proyeccion/Stage), y arrancar/detener
+    // la proyeccion ahora se hace desde los puntos "Audience"/"Stage" de
+    // ViewPanel (ver ViewPanel::RenderLiveTransport / los dos toggles).
+    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>(&uiManager));
+
+    // "Herramientas" — Control Overlays (antes dentro de ViewPanel) + Red/
+    // Notas/Reloj (antes secciones de Home), agrupados en un hub propio
+    // debajo de "Vista en Vivo" (ver UIManager::BeginDockspace/dock_right_*).
+    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewToolsPanel>(&uiManager));
+
+    auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
+    stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
+    uiManager.AddPanel(stylesHub);
     std::cerr << "[DIAG] Todos los paneles agregados OK\n";
 
     {
@@ -776,9 +858,17 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
             core.ClearLayer2();
         }
 
+        // Ajustes > Apariencia pidio reiniciar (p.ej. tras elegir una fuente
+        // nueva). Se cierra la ventana de la forma normal para que el
+        // shutdown de mas abajo (VLC/GL/ImGui) corra completo antes de
+        // relanzar el proceso -- ver RestartApplication().
+        if (ProyecThor::Settings::SettingsManager::Get().IsRestartRequested())
+            glfwSetWindowShouldClose(mainWindow, GLFW_TRUE);
+
         auto t1 = Clock::now();
         core.Update();
         FrameProfiler::Add(FrameProfiler::s_CoreUpdate, FrameProfiler::ElapsedMs(t1));
+core.RenderAllSecondaryWindows(); 
 
         int fw, fh;
         glfwGetFramebufferSize(mainWindow, &fw, &fh);
@@ -808,6 +898,22 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         FrameProfiler::Add(FrameProfiler::s_ImGuiRender, FrameProfiler::ElapsedMs(t3));
 
+        // ── Captura + blur del contenido REAL de la app ──────────────────────
+        // Antes esto solo se hacia UNA vez, antes de entrar al loop, en el
+        // instante exacto en que RenderAll() todavia dibujaba el Hub -- por
+        // eso el efecto glass quedaba "congelado" mostrando el Hub para
+        // siempre, sin importar a que panel se navegara despues.
+        //
+        // Ahora se recaptura cada frame: se toma el contenido que la propia
+        // app acaba de dibujar (paneles, dockspace, lo que sea que este
+        // detras del panel de vidrio) y se difumina. Los BeginGlassPanel()
+        // del PROXIMO frame usan este resultado como fondo. Esto genera un
+        // desfase de un unico frame (imperceptible a 60fps) pero evita la
+        // referencia circular de que el vidrio intente mostrarse a si mismo
+        // difuminado en el mismo frame en que se esta dibujando.
+        uiManager.GetGlassRenderer().CaptureCurrentFrame();
+        uiManager.GetGlassRenderer().Blur(1.0f, 1);
+
         auto t4 = Clock::now();
         {
             GLFWwindow* ctxBackup = glfwGetCurrentContext();
@@ -821,8 +927,12 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
         glfwSwapBuffers(mainWindow);
         FrameProfiler::Add(FrameProfiler::s_SwapBuffers, FrameProfiler::ElapsedMs(t5));
 
-        FrameProfiler::Add(FrameProfiler::s_FrameTotal, FrameProfiler::ElapsedMs(frameStart));
+        double frameTotalMs = FrameProfiler::ElapsedMs(frameStart);
+        FrameProfiler::Add(FrameProfiler::s_FrameTotal, frameTotalMs);
         FrameProfiler::ReportIfReady();
+
+        ProyecThor::Core::PerformanceGovernor::Get().ReportFrame(frameTotalMs);
+        ProyecThor::Core::SystemStats::Get().Update();
     }
 
     std::cerr << "[DIAG] Saliendo del loop principal, cerrando limpio\n";
@@ -835,6 +945,11 @@ previewPanel->SetAudioPanel(libraryPanel->GetAudioPanel());
 
     glfwDestroyWindow(mainWindow);
     glfwTerminate();
+
+    // Recien aca, con todo ya destruido (VLC/GL/ImGui/GLFW), es seguro
+    // relanzar el proceso si Ajustes > Apariencia lo pidio.
+    if (ProyecThor::Settings::SettingsManager::Get().IsRestartRequested())
+        ProyecThor::Settings::RestartApplication();
 
     return 0;
 }

@@ -14,22 +14,143 @@ namespace ProyecThor::UI::Settings {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Definición de categorías
 // ─────────────────────────────────────────────────────────────────────────────
+//  El índice de cada entrada es el ID real de la categoría (usado por
+//  RenderContent() y por Hub::QuickBtn/m_ActiveTab para saltar a una
+//  pestaña concreta) — NO reordenar este arreglo. El orden de *visualización*
+//  en el sidebar, agrupado por tema, se controla aparte con k_NavGroups.
+
+// Icono mínimo por categoría, dibujado a mano con primitivas de ImDrawList
+// (sin depender de ningún PNG/asset externo) -- ver DrawCategoryIcon.
+enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download };
 
 struct Category {
     const char* tag;
     const char* label;
     const char* description;
+    CatIcon      icon;
+    ImU32        color; // color de identidad de la categoría (icono + acento del ítem)
 };
 
 static const Category k_Categories[] = {
-    { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales"     },
-    { "GEN", "General",         "Inicio, guardado y carpetas"             },
-    { "PRY", "Proyección",      "Monitor, texto y márgenes"               },
-    { "SOU", "Audio",           "Volumen, dispositivo y fade"             },
-    { "LNG", "Idioma",          "Idioma de la interfaz"                   },
-    { "UPD", "Actualizaciones", "Versión instalada y canales"             },
+    { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
+    { "GEN", "General",         "Inicio, guardado y carpetas",             CatIcon::Sliders,   IM_COL32( 95, 150, 245, 255) }, // 1
+    { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 2
+    { "STG", "Stage",           "Monitor de confianza para el equipo",     CatIcon::Cast,      IM_COL32( 80, 205, 165, 255) }, // 3
+    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
+    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
+    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
+    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
+    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
 };
-static constexpr int k_CategoryCount = 6;
+static constexpr int k_CategoryCount = 9;
+
+// Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
+// radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
+// de fila) en el color de identidad de cada categoría.
+static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, ImU32 color) {
+    switch (icon) {
+        case CatIcon::Palette: {
+            dl->AddCircle(c, r, color, 16, 1.3f);
+            float dr = r * 0.30f;
+            dl->AddCircleFilled(ImVec2(c.x - r * 0.35f, c.y - r * 0.25f), dr, color);
+            dl->AddCircleFilled(ImVec2(c.x + r * 0.30f, c.y - r * 0.35f), dr, color);
+            dl->AddCircleFilled(ImVec2(c.x + r * 0.05f, c.y + r * 0.40f), dr, color);
+            break;
+        }
+        case CatIcon::Sliders: {
+            float w = r * 1.7f;
+            float ys[3] = { c.y - r * 0.65f, c.y, c.y + r * 0.65f };
+            float hx[3] = { c.x - w * 0.15f, c.x + w * 0.20f, c.x - w * 0.05f };
+            for (int i = 0; i < 3; i++) {
+                dl->AddLine(ImVec2(c.x - w * 0.5f, ys[i]), ImVec2(c.x + w * 0.5f, ys[i]), color, 1.4f);
+                dl->AddCircleFilled(ImVec2(hx[i], ys[i]), r * 0.16f, color);
+            }
+            break;
+        }
+        case CatIcon::Monitor: {
+            ImVec2 mn(c.x - r * 0.85f, c.y - r * 0.65f), mx(c.x + r * 0.85f, c.y + r * 0.30f);
+            dl->AddRect(mn, mx, color, 2.0f, 0, 1.3f);
+            dl->AddLine(ImVec2(c.x, mx.y), ImVec2(c.x, mx.y + r * 0.35f), color, 1.3f);
+            dl->AddLine(ImVec2(c.x - r * 0.35f, mx.y + r * 0.35f), ImVec2(c.x + r * 0.35f, mx.y + r * 0.35f), color, 1.3f);
+            break;
+        }
+        case CatIcon::Cast: {
+            ImVec2 mn(c.x - r * 0.85f, c.y - r * 0.20f), mx(c.x + r * 0.30f, c.y + r * 0.50f);
+            dl->AddRect(mn, mx, color, 2.0f, 0, 1.2f);
+            ImVec2 arcCenter(mn.x, mx.y);
+            dl->PathArcTo(arcCenter, r * 0.45f, -IM_PI * 0.5f, 0.0f, 8);
+            dl->PathStroke(color, false, 1.2f);
+            dl->PathClear();
+            dl->PathArcTo(arcCenter, r * 0.78f, -IM_PI * 0.5f, 0.0f, 10);
+            dl->PathStroke(color, false, 1.2f);
+            break;
+        }
+        case CatIcon::Speaker: {
+            ImVec2 bodyMin(c.x - r * 0.80f, c.y - r * 0.22f), bodyMax(c.x - r * 0.30f, c.y + r * 0.22f);
+            dl->AddRectFilled(bodyMin, bodyMax, color, 1.0f);
+            dl->AddTriangleFilled(
+                ImVec2(c.x - r * 0.30f, c.y - r * 0.55f),
+                ImVec2(c.x - r * 0.30f, c.y + r * 0.55f),
+                ImVec2(c.x + r * 0.20f, c.y), color);
+            dl->PathClear();
+            dl->PathArcTo(ImVec2(c.x + r * 0.05f, c.y), r * 0.55f, -IM_PI * 0.28f, IM_PI * 0.28f, 8);
+            dl->PathStroke(color, false, 1.2f);
+            dl->PathClear();
+            dl->PathArcTo(ImVec2(c.x + r * 0.05f, c.y), r * 0.85f, -IM_PI * 0.28f, IM_PI * 0.28f, 8);
+            dl->PathStroke(color, false, 1.2f);
+            break;
+        }
+        case CatIcon::MusicNote: {
+            ImVec2 head(c.x - r * 0.35f, c.y + r * 0.45f);
+            dl->AddCircleFilled(head, r * 0.30f, color);
+            dl->AddLine(ImVec2(head.x + r * 0.28f, head.y - r * 0.05f), ImVec2(head.x + r * 0.28f, c.y - r * 0.75f), color, 1.5f);
+            dl->AddLine(ImVec2(head.x + r * 0.28f, c.y - r * 0.75f), ImVec2(head.x + r * 0.68f, c.y - r * 0.50f), color, 1.5f);
+            break;
+        }
+        case CatIcon::Keyboard: {
+            float keyW = r * 0.42f, keyH = r * 0.34f, gap = r * 0.10f;
+            for (int row = 0; row < 2; row++) {
+                for (int col = 0; col < 3; col++) {
+                    ImVec2 p0(c.x - r * 0.72f + col * (keyW + gap), c.y - r * 0.46f + row * (keyH + gap));
+                    dl->AddRectFilled(p0, ImVec2(p0.x + keyW, p0.y + keyH), color, 1.0f);
+                }
+            }
+            break;
+        }
+        case CatIcon::Globe: {
+            dl->AddCircle(c, r * 0.85f, color, 20, 1.3f);
+            dl->AddLine(ImVec2(c.x - r * 0.85f, c.y), ImVec2(c.x + r * 0.85f, c.y), color, 1.1f);
+            dl->PathClear();
+            for (int i = 0; i <= 20; i++) {
+                float t = (float)i / 20.0f * IM_PI * 2.0f;
+                dl->PathLineTo(ImVec2(c.x + cosf(t) * r * 0.32f, c.y + sinf(t) * r * 0.85f));
+            }
+            dl->PathStroke(color, true, 1.1f);
+            break;
+        }
+        case CatIcon::Download: {
+            dl->AddLine(ImVec2(c.x, c.y - r * 0.70f), ImVec2(c.x, c.y + r * 0.10f), color, 1.5f);
+            dl->AddTriangleFilled(
+                ImVec2(c.x - r * 0.35f, c.y - r * 0.05f),
+                ImVec2(c.x + r * 0.35f, c.y - r * 0.05f),
+                ImVec2(c.x, c.y + r * 0.35f), color);
+            dl->AddLine(ImVec2(c.x - r * 0.6f, c.y + r * 0.65f), ImVec2(c.x + r * 0.6f, c.y + r * 0.65f), color, 1.5f);
+            break;
+        }
+    }
+}
+
+// Orden y agrupación visual del sidebar (por índice real de k_Categories).
+// Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
+// sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
+struct NavGroup { const char* label; const int items[3]; int count; };
+static const NavGroup k_NavGroups[] = {
+    { "GENERAL",    { 0, 1,    }, 2 },
+    { "PROYECCIÓN", { 2, 3, 5  }, 3 },
+    { "AUDIO",      { 4,       }, 1 },
+    { "SISTEMA",    { 6, 7, 8  }, 3 },
+};
+static constexpr int k_NavGroupCount = 4;
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
 // ImVec4, con un multiplicador opcional de alpha.
@@ -37,13 +158,23 @@ static inline ImVec4 ThemeCol(const float* a, float alphaMul = 1.0f) {
     return ImVec4(a[0], a[1], a[2], a[3] * alphaMul);
 }
 
-// Suavizado exponencial independiente del framerate (0..1 por segundo de "velocidad")
-static inline float SmoothTowards(float current, float target, float dt, float speed) {
-    float t = 1.0f - std::exp(-speed * dt);
-    return current + (target - current) * t;
+// Sombra suave apilando rectángulos redondeados semitransparentes con
+// desplazamiento creciente hacia abajo — el mismo truco de "blur pobre" que
+// ya usan AnimatedProgressBar/SpinnerWidget en este archivo, sin necesidad
+// de un shader de blur real. Da la sensación de "isla flotante" a cada
+// panel (separada del resto de la ventana).
+static inline void DrawFloatingIslandShadow(ImDrawList* dl, ImVec2 pos, ImVec2 size, float rounding) {
+    const int   layers    = 5;
+    const float maxOffset = 16.0f;
+    for (int i = layers; i >= 1; --i) {
+        float  t      = (float)i / (float)layers;
+        float  offset = maxOffset * t;
+        int    alpha  = (int)(30.0f * (1.0f - t * 0.6f));
+        ImVec2 p0(pos.x - offset * 0.2f,          pos.y + offset * 0.3f);
+        ImVec2 p1(pos.x + size.x + offset * 0.2f, pos.y + size.y + offset * 0.55f);
+        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, alpha), rounding + offset * 0.25f);
+    }
 }
-
-static inline float EaseOutQuad(float t) { return 1.0f - (1.0f - t) * (1.0f - t); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constructor
@@ -67,11 +198,10 @@ void SettingsPanel::Render(bool* isOpen) {
     m_CheckingAnim += dt * 280.0f;
 
     // ── Detecta la transición cerrado -> abierto ────────────────────────────
+    // Sin fade/pop-in: el panel aparece directo a tamaño y posición final,
+    // sin animar nada (ver pedido explícito de sacar animaciones del panel).
     const bool justOpened = !m_WasOpenLastFrame;
     m_WasOpenLastFrame = true;
-    if (justOpened) m_OpenAnim = 0.0f;
-    m_OpenAnim = std::min(1.0f, m_OpenAnim + dt * 7.0f); // ~0.14s
-    const float eased = EaseOutQuad(m_OpenAnim);
 
     const ImVec2 baseSize(900.0f, 650.0f);
 
@@ -79,79 +209,171 @@ void SettingsPanel::Render(bool* isOpen) {
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
                        vp->WorkPos.y + vp->WorkSize.y * 0.5f);
 
-    // Mientras la ventana está "apareciendo" forzamos posición y tamaño en
-    // cada frame (centrada, con un ligero efecto de "pop-in" de escala).
-    // Esto evita depender de cualquier posición/tamaño guardado previamente
-    // en el .ini (que es lo que hacía que la ventana apareciera en una
-    // esquina, a veces fuera de la pantalla, al reabrir el panel).
-    if (m_OpenAnim < 1.0f) {
-        float scale = 0.95f + 0.05f * eased;
-        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(baseSize.x * scale, baseSize.y * scale), ImGuiCond_Always);
-    } else if (justOpened) {
+    // Centrada y a tamaño fijo desde el primer frame -- sin animar el
+    // tamaño de la ventana (un "pop-in" de escala hacía que las dos islas
+    // se vieran reacomodándose/estirándose durante la apertura). La única
+    // animación de apertura es el fade de alpha de más abajo.
+    // Esto también evita depender de cualquier posición/tamaño guardado
+    // previamente en el .ini (que es lo que hacía que la ventana apareciera
+    // en una esquina, a veces fuera de la pantalla, al reabrir el panel).
+    if (justOpened) {
         ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
     }
 
     ImGui::SetNextWindowSizeConstraints(ImVec2(720, 500), ImVec2(FLT_MAX, FLT_MAX));
 
-    // Estilo "Liquid Glass" tomado del tema activo, no de valores fijos.
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,      ThemeCol(theme.base));
+    // Este panel es una utilidad flotante independiente: nunca debe poder
+    // acoplarse (dock) a otras ventanas ni aceptar que otras se acoplen a
+    // él. DockingAllowUnclassed=false + ImGuiWindowFlags_NoDocking en el
+    // Begin() de abajo son cinturón-y-tirantes para el mismo objetivo.
+    // Nota: NO forzar ViewportFlagsOverrideSet=TopMost aquí -- con
+    // multi-viewport activo eso entra en conflicto con el auto-merge de
+    // ImGui (la ventana intenta fusionarse/separarse del viewport principal
+    // cada frame) y se ve como un parpadeo/"intento de acople". El "siempre
+    // adelante" ya lo cubre BringWindowToDisplayFront más abajo.
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    // El "chrome" de la ventana (barra de título + botón de cerrar) sigue
+    // siendo la ventana ImGui real -- eso es lo que se puede arrastrar y
+    // cerrar -- pero su cuerpo queda solo levemente traslúcido (no 100%
+    // transparente): el margen alrededor de las islas se ve como un marco
+    // tenue en vez de un hueco vacío, mientras el fondo principal lo siguen
+    // pintando las dos "islas" (sidebar / contenido) más abajo.
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,      ThemeCol(theme.base, 0.85f));
     ImGui::PushStyleColor(ImGuiCol_TitleBg,       ThemeCol(theme.surface0));
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ThemeCol(theme.surface1));
-    ImGui::PushStyleColor(ImGuiCol_Border,        ThemeCol(theme.border, 0.85f));
+    ImGui::PushStyleColor(ImGuiCol_Border,        ImVec4(0, 0, 0, 0));
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,  theme.windowRounding);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, eased); // fade-in general al abrir
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
     // NoSavedSettings: no persistimos pos/tamaño en el .ini, así el panel
     // siempre vuelve a nacer centrado la próxima vez que se abra, sin
     // arrastrar coordenadas obsoletas de una resolución/monitor distinto.
+    // NoDocking: ver comentario de floatingClass arriba.
     bool open = ImGui::Begin("Preferencias", isOpen,
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 
-    ImGui::PopStyleVar(4);
+    // Comodidad para el usuario: este panel siempre queda por delante de la
+    // ventana principal, sin depender de tener el foco (p.ej. si el usuario
+    // hace clic en un panel detrás mientras Ajustes sigue abierto, Ajustes
+    // no debe quedar tapado).
+    //
+    // OJO: NO hacer esto mientras un popup NUESTRO esté abierto (combo,
+    // color picker, el modal de reiniciar, etc.) -- reordenar la ventana
+    // dueña de un popup en pleno vuelo rompe el chequeo interno de ImGui de
+    // "sigue siendo la misma ventana en el mismo orden" y el popup se
+    // cierra solo en el mismo frame en que se abre (bug real: el combo de
+    // fuentes se abría y se cerraba de inmediato).
+    //
+    // La condición ANTERIOR (bloquear si HABÍA CUALQUIER popup abierto en
+    // TODA la app) era demasiado amplia: cualquier tooltip/combo de OTRO
+    // panel detrás también nos hacía saltar el reordenamiento ese frame, y
+    // por eso el panel "se iba para atrás" o parpadeaba de forma
+    // intermitente incluso sin tocar Ajustes. Ahora solo se salta si el
+    // popup abierto es nuestro (Ajustes tiene foco/hover, en sí misma o en
+    // una ventana hija/popup) -- un popup de cualquier OTRA parte de la app
+    // no nos debe frenar de volver al frente.
+    bool ownPopupOpen = ImGui::GetCurrentContext()->OpenPopupStack.Size > 0 &&
+        (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
+         ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByPopup));
+    if (!ownPopupOpen)
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+    ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(4);
 
     if (!open) { ImGui::End(); return; }
 
-    ImVec2 avail    = ImGui::GetContentRegionAvail();
-    float  sideW    = 240.0f;
-    float  footerH  = 70.0f;
-    float  contentW = avail.x - sideW;
-    float  contentH = avail.y - footerH;
+    ImVec2 avail  = ImGui::GetContentRegionAvail();
+    const float margin  = 14.0f;  // aire entre el borde de la ventana y las islas
+    const float gap     = 12.0f;  // "división al medio muy pequeña" entre ambas islas
+    const float sideW   = 240.0f;
+    const float footerH = 70.0f;
+    const float islandH  = avail.y - margin * 2.0f;
+    const float contentW = avail.x - margin * 2.0f - sideW - gap;
 
-    // ── Sidebar ───────────────────────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.surface0, 0.55f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 25.0f));
-    ImGui::BeginChild("##sidebar", ImVec2(sideW, contentH), false, ImGuiWindowFlags_NoScrollbar);
+    ImVec2 origin(ImGui::GetCursorScreenPos().x + margin, ImGui::GetCursorScreenPos().y + margin);
+    ImVec2 sideOrigin(origin.x, origin.y);
+    ImVec2 contentOrigin(origin.x + sideW + gap, origin.y);
+
+    ImDrawList* winDl = ImGui::GetWindowDrawList();
+    DrawFloatingIslandShadow(winDl, sideOrigin,    ImVec2(sideW,    islandH), theme.windowRounding);
+    DrawFloatingIslandShadow(winDl, contentOrigin, ImVec2(contentW, islandH), theme.windowRounding);
+
+    // Pequeño conector central: una línea sutil a media altura del hueco,
+    // que refuerza la lectura de "dos piezas unidas" sin partir la ventana
+    // en dos de verdad.
+    {
+        float midX = sideOrigin.x + sideW + gap * 0.5f;
+        float y0   = sideOrigin.y + islandH * 0.30f;
+        float y1   = sideOrigin.y + islandH * 0.70f;
+        ImU32 segCol = ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.border, 0.95f));
+        winDl->AddLine(ImVec2(midX, y0), ImVec2(midX, y1), segCol, 1.5f);
+    }
+
+    // ── Isla derecha: contenido + barra de guardado (se dibuja PRIMERO) ──────
+    // Se renderiza antes que el sidebar a propósito: RenderContent() es lo
+    // que llena m_SectionAnchors (subcategorías) y calcula
+    // m_ActiveSubsection para el frame actual -- si el sidebar se dibujara
+    // primero, mostraría la lista de subcategorías de la categoría anterior
+    // durante un frame cada vez que se cambia de categoría.
+    ImGui::SetCursorScreenPos(contentOrigin);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.base, 0.94f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.85f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   theme.windowRounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 0.0f));
+    ImGui::BeginChild("##content_island", ImVec2(contentW, islandH), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PopStyleVar();
+
+    ImVec2 islandAvail = ImGui::GetContentRegionAvail();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(45.0f, 40.0f));
+    ImGui::BeginChild("##content_scroll", ImVec2(islandAvail.x, islandAvail.y - footerH),
+                      ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::PopStyleVar();
+
+    // Un click en una subcategoría del sidebar (frame anterior) deja
+    // pendiente un salto de scroll -- se aplica acá, ya con este child
+    // activo. Instantáneo a propósito (nada de animar el scroll): ver
+    // feedback del usuario sobre no querer más movimiento/animación de la
+    // cuenta en este panel.
+    if (m_HasPendingScroll) {
+        ImGui::SetScrollY(m_PendingScrollY);
+        m_HasPendingScroll = false;
+    }
+
+    RenderContent();
+    ImGui::EndChild();
+
+    // La barra de guardado se dibuja mientras seguimos dentro de
+    // "##content_island": así toma su rect (GetWindowPos/Size) y sus
+    // esquinas inferiores redondeadas coinciden con las de esta isla, en
+    // vez de abarcar todo el ancho de la ventana como antes.
+    RenderSaveBar();
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+
+    // ── Isla izquierda: navegación (usa m_SectionAnchors ya frescos) ─────────
+    ImGui::SetCursorScreenPos(sideOrigin);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.surface0, 0.92f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.85f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   theme.windowRounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 25.0f));
+    ImGui::BeginChild("##sidebar", ImVec2(sideW, islandH), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
     RenderSidebar();
     ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    // Línea separadora suave (efecto cristal)
-    ImDrawList* winDl = ImGui::GetWindowDrawList();
-    ImVec2 sep = ImGui::GetCursorScreenPos();
-    winDl->AddLine(ImVec2(sep.x, sep.y), ImVec2(sep.x, sep.y + contentH),
-                   ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.border, 0.9f)), 1.5f);
-
-    ImGui::SameLine(0, 0);
-
-    // ── Área de contenido ─────────────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.base, 0.85f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(45.0f, 40.0f));
-    ImGui::BeginChild("##content", ImVec2(contentW, contentH),
-                      ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_HorizontalScrollbar);
-    ImGui::PopStyleVar();
-    RenderContent();
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    // ── Footer ────────────────────────────────────────────────────────────────
-    RenderSaveBar();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 
     ImGui::End();
 
@@ -168,7 +390,6 @@ void SettingsPanel::Render(bool* isOpen) {
 void SettingsPanel::RenderSidebar() {
     auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
     const auto& theme = mgr.GetSettings().theme;
-    const float dt    = ImGui::GetIO().DeltaTime;
     ImDrawList* dl    = ImGui::GetWindowDrawList();
 
     ImVec4 accent = ThemeCol(theme.accent);
@@ -199,53 +420,109 @@ void SettingsPanel::RenderSidebar() {
 
     float targetPillY = -1.0f;
 
-    for (int i = 0; i < k_CategoryCount; i++) {
-        bool selected = (m_SelectedCategory == i);
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        p.x += 10.0f; // Margen izquierdo
+    // Navegación agrupada por tema (ver k_NavGroups): en vez de una lista
+    // plana de 9 categorías, se muestran en bloques con un encabezado
+    // pequeño ("GENERAL", "PROYECCIÓN", "AUDIO", "SISTEMA"), más fácil de
+    // escanear visualmente.
+    for (int g = 0; g < k_NavGroupCount; g++) {
+        const NavGroup& group = k_NavGroups[g];
 
-        ImGui::SetCursorPosX(10.0f);
+        if (g > 0) ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        ImGui::SetCursorPosX(25.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
+        ImGui::SetWindowFontScale(0.82f);
+        ImGui::TextUnformatted(group.label);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
+        for (int gi = 0; gi < group.count; gi++) {
+            int  i        = group.items[gi];
+            bool selected = (m_SelectedCategory == i);
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            p.x += 10.0f; // Margen izquierdo
 
-        char selectId[32];
-        snprintf(selectId, sizeof(selectId), "##nav%d", i);
+            ImGui::SetCursorPosX(10.0f);
 
-        dl->ChannelsSetCurrent(1);
+            ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
 
-        bool clicked = ImGui::Selectable(selectId, selected, ImGuiSelectableFlags_None, ImVec2(itemW, itemH));
-        bool hovered = ImGui::IsItemHovered();
+            char selectId[32];
+            snprintf(selectId, sizeof(selectId), "##nav%d", i);
 
-        if (clicked && m_SelectedCategory != i) {
-            m_SelectedCategory = i;
-            m_ContentFade = 0.0f; // dispara el fade/slide del contenido nuevo
+            dl->ChannelsSetCurrent(1);
+
+            bool clicked = ImGui::Selectable(selectId, selected, ImGuiSelectableFlags_None, ImVec2(itemW, itemH));
+            bool hovered = ImGui::IsItemHovered() && !selected;
+
+            if (clicked && m_SelectedCategory != i) {
+                m_SelectedCategory = i;
+            }
+
+            if (selected) {
+                targetPillY = p.y - ImGui::GetWindowPos().y;
+            } else if (hovered) {
+                dl->AddRectFilled(p, ImVec2(p.x + itemW, p.y + itemH),
+                                  ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.surface2, 0.5f)), 8.0f);
+            }
+
+            // Icono de identidad de la categoría, en su color propio (ver
+            // k_Categories) -- a todo color cuando está seleccionada, algo
+            // apagado en el resto para que no compitan visualmente entre sí.
+            ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(k_Categories[i].color);
+            iconColV.w *= selected ? 1.0f : (hovered ? 0.90f : 0.55f);
+            DrawCategoryIcon(dl, k_Categories[i].icon,
+                ImVec2(p.x + 22.0f, p.y + itemH * 0.5f), 8.5f,
+                ImGui::ColorConvertFloat4ToU32(iconColV));
+
+            float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
+            float labelX = p.x + 42.0f;
+            ImVec4 labelColV = selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
+            dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), k_Categories[i].label);
+
+            ImGui::PopStyleColor(3);
+
+            // Subcategorías: solo se muestran para la categoría activa
+            // (igual que el menú de referencia). Clickear una NO cambia de
+            // categoría -- solo hace scroll hasta esa sección, que sigue
+            // viviendo en la misma página (ver m_SectionAnchors,
+            // RenderContent/SectionTitle).
+            if (selected && !m_SectionAnchors.empty()) {
+                ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                for (size_t si = 0; si < m_SectionAnchors.size(); si++) {
+                    const std::string& subLabel = m_SectionAnchors[si].first;
+                    float              subY     = m_SectionAnchors[si].second;
+                    bool isActiveSub = (subLabel == m_ActiveSubsection);
+
+                    ImGui::SetCursorPosX(34.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0, 0, 0, 0));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ThemeCol(theme.surface2, 0.5f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ThemeCol(theme.surface2, 0.7f));
+                    ImGui::PushStyleColor(ImGuiCol_Text,
+                        isActiveSub ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textFaint));
+                    ImGui::SetWindowFontScale(0.88f);
+
+                    std::string subId = subLabel + "##sub" + std::to_string(i) + "_" + std::to_string(si);
+                    if (ImGui::Selectable(subId.c_str(), isActiveSub, ImGuiSelectableFlags_None, ImVec2(itemW - 24.0f, 24.0f))) {
+                        m_PendingScrollY   = subY;
+                        m_HasPendingScroll = true;
+                    }
+
+                    ImGui::SetWindowFontScale(1.0f);
+                    ImGui::PopStyleColor(4);
+                }
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            }
         }
-
-        if (selected) {
-            targetPillY = p.y;
-        } else if (hovered) {
-            dl->AddRectFilled(p, ImVec2(p.x + itemW, p.y + itemH),
-                              ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.surface2, 0.5f)), 8.0f);
-        }
-
-        float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
-        ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim));
-        dl->AddText(ImVec2(p.x + 25.0f, labelY), labelCol, k_Categories[i].label);
-
-        ImGui::PopStyleColor(3);
     }
 
-    // Píldora de selección: se desliza suavemente hacia la fila activa
-    // en lugar de saltar instantáneamente.
+    // Píldora de selección: posición fija en la fila activa, sin animar
+    // (ver pedido explícito de sacar animaciones del panel).
     if (targetPillY >= 0.0f) {
-        if (!m_PillInit) { m_PillY = targetPillY; m_PillInit = true; }
-        m_PillY = SmoothTowards(m_PillY, targetPillY, dt, 22.0f);
-
         dl->ChannelsSetCurrent(0);
 
-        ImVec2 pillP(ImGui::GetWindowPos().x + 10.0f, m_PillY);
+        ImVec2 pillP(ImGui::GetWindowPos().x + 10.0f, ImGui::GetWindowPos().y + targetPillY);
 
         ImU32 colLeft  = ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.accent, 0.30f));
         ImU32 colRight = ImGui::ColorConvertFloat4ToU32(ImVec4(theme.accent[0], theme.accent[1], theme.accent[2], 0.0f));
@@ -271,13 +548,11 @@ void SettingsPanel::RenderContent() {
     ImDrawList* dl    = ImGui::GetWindowDrawList();
     ImVec4      accent = ThemeCol(theme.accent);
 
-    // Avanza el fade/slide de "entrada" del contenido cuando se cambia de
-    // categoría (se reinicia a 0 desde RenderSidebar al hacer clic).
-    m_ContentFade = std::min(1.0f, m_ContentFade + dt * 9.0f);
-    float fadeT       = EaseOutQuad(m_ContentFade);
-    float slideOffset = (1.0f - fadeT) * 10.0f;
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + slideOffset);
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * (0.25f + 0.75f * fadeT));
+    // Se reconstruye entera cada frame (la vuelve a llenar SectionTitle() a
+    // medida que la categoría activa dibuja sus secciones) -- ver
+    // RenderSidebar(), que la usa para mostrar las subcategorías de la
+    // categoría seleccionada.
+    m_SectionAnchors.clear();
 
     // Título de la sección
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
@@ -311,14 +586,29 @@ void SettingsPanel::RenderContent() {
         case 0: RenderCategoryTheme();      break;
         case 1: RenderCategoryGeneral();    break;
         case 2: RenderCategoryProjection(); break;
-        case 3: RenderCategoryAudio();      break;
-        case 4: RenderCategoryLanguage();   break;
-        case 5: RenderCategoryUpdates();    break;
+        case 3: RenderCategoryStage();      break;
+        case 4: RenderCategoryAudio();      break;
+        case 5: RenderCategorySongs();      break;
+        case 6: RenderCategoryShortcuts();  break;
+        case 7: RenderCategoryLanguage();   break;
+        case 8: RenderCategoryUpdates();    break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 
     ImGui::PopStyleVar(2);
-    ImGui::PopStyleVar(); // alpha del fade de contenido
+
+    // Cuál subcategoría está "a la vista" según el scroll actual: la última
+    // cuyo ancla ya quedó por encima del tope visible (+ un margen chico).
+    // Todavía estamos dentro de "##content_scroll", así que GetScrollY() es
+    // el del área de contenido real, no el del sidebar.
+    m_ActiveSubsection.clear();
+    float scrollY = ImGui::GetScrollY();
+    for (const auto& anchor : m_SectionAnchors) {
+        if (anchor.second <= scrollY + 40.0f)
+            m_ActiveSubsection = anchor.first;
+        else
+            break;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -386,15 +676,16 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PopStyleVar();
 
     if (!m_SaveStatusMsg.empty()) {
+        // Solo se desvanece con el timer al final (no "aparece" con
+        // movimiento) -- ver pedido de sacar animaciones del panel.
         float alpha = std::min(1.0f, m_SaveTimer);
-        // Pequeño "pop" de entrada: aparece deslizándose levemente desde la izquierda
-        float pop   = std::min(1.0f, (3.0f - m_SaveTimer) * 6.0f);
-        float slide = (1.0f - EaseOutQuad(std::max(0.0f, pop))) * 8.0f;
 
         float textY = winSize.y - barH + (barH - ImGui::GetTextLineHeight()) * 0.5f;
-        const float sideW = 240.0f;
 
-        ImGui::SetCursorPos(ImVec2(sideW + 45.0f + slide, textY));
+        // Antes offset por sideW (240px del sidebar) porque la barra abarcaba
+        // toda la ventana; ahora vive solo dentro de la isla de contenido, así
+        // que el mensaje arranca desde el borde izquierdo de esa isla.
+        ImGui::SetCursorPos(ImVec2(45.0f, textY));
         ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.success, alpha));
         ImGui::TextUnformatted(m_SaveStatusMsg.c_str());
         ImGui::PopStyleColor();
@@ -483,9 +774,24 @@ void SettingsPanel::SpinnerWidget(float radius, float thickness, const ImVec4& c
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helper: SectionTitle (usa acento del tema)
 // ─────────────────────────────────────────────────────────────────────────────
-void SettingsPanel::SectionTitle(const char* label) {
+void SettingsPanel::SectionTitle(const char* label, const char* navGroup) {
     auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
     const auto& theme = mgr.GetSettings().theme;
+
+    // Registra esta sección como subcategoría navegable (ver RenderSidebar /
+    // m_SectionAnchors), agrupando por navGroup si se pasó uno: varios
+    // SectionTitle con el mismo grupo comparten UNA sola entrada en el
+    // sidebar (la del primero), en vez de una subcategoría técnica por cada
+    // subtítulo interno -- ver CategoryTheme.cpp. La posición se toma ANTES
+    // del espaciado de arriba, asi el scroll-to-section deja un poco de
+    // aire encima del título.
+    const char* group = navGroup ? navGroup : label;
+    bool alreadyRegistered = false;
+    for (const auto& anchor : m_SectionAnchors) {
+        if (anchor.first == group) { alreadyRegistered = true; break; }
+    }
+    if (!alreadyRegistered)
+        m_SectionAnchors.emplace_back(group, ImGui::GetCursorPosY());
 
     ImGui::Dummy(ImVec2(0.0f, 15.0f));
 

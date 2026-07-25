@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ninja)",
+      "Bash(find /home/vixcho/Documentos/ProyecThor -maxdepth 3 -iname \"ProyecThor\" -newer CMakeLists.txt 2>/dev/null; echo ---; find /home/vixcho/Documentos/ProyecThor/build -maxdepth 2 -newer /tmp/dstest.cpp -type f 2>/dev/null | grep -i proyecthor)",
+      "Read(//tmp/**)",
+      "Bash(DISPLAY=:0 ./ProyecThor)",
+      "Bash(disown)",
+      "Bash(DISPLAY=:0 wmctrl -l)",
+      "Bash(DISPLAY=:0 xwininfo -root -tree)",
+      "Bash(which xwininfo *)",
+      "Bash(ldconfig -p)",
+      "Bash(pkg-config --exists openssl)",
+      "Bash(DISPLAY=:0 magick import -window root /home/vixcho/Documentos/ProyecThor/pt_test.png)",
+      "Bash(kill 87284)",
+      "Bash(timeout 3 xdpyinfo)",
+      "Bash(grep -n \"m_ShowConfig\\)\\\\s*$\\\\|m_SettingsPanel.Render\\(&m_ShowConfig\\)\" src/frontend/ui/UIManager.cpp)"
+    ]
+  }
+}

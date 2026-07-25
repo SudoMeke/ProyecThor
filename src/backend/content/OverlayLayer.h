@@ -17,7 +17,11 @@ namespace ProyecThor::Core {
 
     class OverlayLayer {
     private:
-        VLCBasePlayer m_Player;
+        // useHardwareDecode=false: mismo motivo que BackgroundLayer (ver su
+        // constructor) — este player corre a la par de los de Fondos, y
+        // pedir decode de hardware a todos a la vez puede pasarse del limite
+        // de sesiones NVDEC/VAAPI concurrentes de la GPU.
+        VLCBasePlayer m_Player{ 2, false, false };
         bool m_IsActive = false;
 
         std::filesystem::path GetAppDir() {
@@ -91,30 +95,47 @@ namespace ProyecThor::Core {
 
         bool IsActive() const { return m_IsActive; }
 
-        void Render() {
-            if (!m_IsActive) return;
+       void Render() {
+    if (!m_IsActive) return;
 
-            void* texID = m_Player.GetTextureID();
-            if (!texID) return;
+    void* texID = m_Player.GetTextureID();
+    if (!texID) return;
 
-            glEnable(GL_TEXTURE_2D);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
-            
-            glBindTexture(GL_TEXTURE_2D, (GLuint)(intptr_t)texID);
-            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    // BackgroundLayer::Render() SOLO limpia el shader activo (glUseProgram(0))
+    // cuando dibuja un fondo de video, via BlitTexture(). Si el fondo es un
+    // color solido, BackgroundLayer::Render() retorna temprano sin tocar el
+    // shader, y lo que haya quedado bound (tipicamente el shader de ImGui,
+    // ya que este Render() corre entre llamadas de construccion de UI)
+    // sigue activo. El pipeline fijo de abajo (glBegin/glEnd) no funciona
+    // correctamente con un shader program bound: el resultado es
+    // indefinido, casi siempre negro. Por eso forzamos glUseProgram(0)
+    // aca, sin depender de que BackgroundLayer haya corrido antes.
+    GLint prevProgram = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+    glUseProgram(0);
 
-            glBegin(GL_QUADS);
-                glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
-                glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
-                glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
-                glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
-            glEnd();
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+    
+    glBindTexture(GL_TEXTURE_2D, (GLuint)(intptr_t)texID);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
-            glBindTexture(GL_TEXTURE_2D, 0);
-            glDisable(GL_BLEND);
-            glDisable(GL_TEXTURE_2D);
-        }
+    glBegin(GL_QUADS);
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
+        glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
+        glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_BLEND);
+    glDisable(GL_TEXTURE_2D);
+
+    // Restauramos el shader por si algo despues de esta llamada (otro
+    // layer, ImGui, etc.) asume que sigue activo.
+    glUseProgram(static_cast<GLuint>(prevProgram));
+}
     };
 
 } // namespace ProyecThor::Core

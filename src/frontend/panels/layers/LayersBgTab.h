@@ -4,11 +4,16 @@
 #include <unordered_map>
 #include <imgui.h>
 #include "../BackgroundsPanel.h"
+#include "backend/core/ThumbnailWorker.h"
 
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersBgTab — toda la logica del tab "Fondos"
+//  Layout tipo ProPresenter: carpetas en una columna angosta a la izquierda,
+//  contenido de la carpeta seleccionada en el area central. Toolbar compacta
+//  arriba (solo iconos, sin titulos) con importar / nueva carpeta / zoom /
+//  grid-lista.
 // ─────────────────────────────────────────────────────────────────────────────
 class LayersBgTab {
 public:
@@ -25,18 +30,35 @@ private:
     // ── Datos ─────────────────────────────────────────────────────────────────
     std::vector<BgEntry>     m_AllBackgrounds;
     std::vector<std::string> m_BgFolders;
-    std::string              m_CurrentBgFolder;
+    std::string              m_CurrentBgFolder; // "" = raiz / "Todos"
 
-    // Previene autoclick al entrar en carpeta: se activa al cambiar de carpeta
-    // y se limpia tras el primer frame renderizado en la nueva vista
-    bool m_JustEnteredFolder = false;
+    // Previene autoclick al cambiar de seleccion en el sidebar: se activa al
+    // cambiar y se limpia tras el primer frame renderizado en la nueva vista
+    bool  m_JustEnteredFolder = false;
+    // Fade-in suave del contenido central al cambiar de carpeta (0..1)
+    float m_ContentFade = 1.0f;
 
     // ── Thumbnails ────────────────────────────────────────────────────────────
+    // Las miniaturas de video se generan en 2do plano (ThumbnailWorker, sin
+    // abrir ninguna ventana) y se cachean en disco — solo se regeneran la
+    // primera vez que se ve cada video, nunca en sesiones siguientes.
     std::unordered_map<std::string, ImTextureID> m_ThumbnailCache;
+    Core::ThumbnailWorker                        m_ThumbWorker;
     ImTextureID GetThumbnail(const std::string& path, bool isVideo);
+    void        DrainThumbnailResults(); // llamar una vez por frame desde Render()
+
+    // ── Preview al mantener presionado ───────────────────────────────────────
+    // Mientras el usuario mantiene el click sobre una tarjeta/fila, se
+    // muestra en grande (sin aplicarlo) para que pueda verlo antes de
+    // soltar. Se recalcula cada frame en RenderContentArea (se limpia al
+    // empezar y la tarjeta/fila activa lo vuelve a fijar si sigue presionada).
+    std::string m_HeldPreviewPath;
+    bool        m_HeldPreviewIsVideo = false;
+    void RenderHoldPreview();
 
     // ── Vistas ────────────────────────────────────────────────────────────────
-    bool m_GridMode = true;
+    bool  m_GridMode  = true;
+    float m_ThumbZoom = 1.0f; // 0.6 .. 1.8 — controla el tamano de las tarjetas
 
     // ── Estado de renombrado ──────────────────────────────────────────────────
     bool        m_RenamingBg      = false;
@@ -52,17 +74,17 @@ private:
     char m_NewFolderBuf[128] = {};
 
     // ── Render helpers ────────────────────────────────────────────────────────
-    void RenderToolbar();
-    void RenderBreadcrumb();
-    void RenderFolderView();        // vista raiz
-    void RenderFilesInFolder();     // vista dentro de una carpeta
+    void RenderTopBar();                          // toolbar compacta (icon-only) + zoom + grid/lista
+    void RenderFolderSidebar(float w, float h);    // columna izquierda: "Todos" + carpetas
+    void RenderSidebarItem(const std::string& label, const std::string& folderKey,
+                           int count, bool selected, float w);
+    void RenderContentArea(float w, float h);      // grid/lista de la seleccion actual
 
-    void RenderFolderCard(const std::string& name, float cardW, float cardH, int col, int cols);
-    void RenderFolderRow(const std::string& name, float panelW, float rowH);
     void RenderBgCard(const BgEntry& e, float cardW, float cardH, int col, int cols);
     void RenderBgRow(const BgEntry& e, float panelW, float rowH);
 
-    void RenderViewToggleBar(bool& gridMode);
+    void SelectFolder(const std::string& folderKey);
+
     void BgContextMenu(const BgEntry& entry);
     void FolderContextMenu(const std::string& folderName);
 

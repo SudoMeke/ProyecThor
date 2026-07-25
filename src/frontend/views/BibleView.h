@@ -1,44 +1,12 @@
 #pragma once
+
 #include <string>
 #include <vector>
 #include <imgui.h>
+#include "biblia/BibleTypes.h"
+#include "biblia/BibleQuickNav.h"
 
 namespace ProyecThor::UI {
-
-struct VerseData {
-    int         number = 0;
-    std::string text;
-    bool        edited = false;
-};
-
-struct ChapterData {
-    int                    number = 0;
-    std::vector<VerseData> verses;
-};
-
-struct BookData {
-    std::string              name;
-    std::vector<ChapterData> chapters;
-    int                      canonicalNumber = 0;
-};
-
-struct BibleData {
-    std::string           name;
-    std::vector<BookData> books;
-};
-
-enum class BibleSection {
-    Pentateuch, HistoricalOT, Wisdom, MajorProphets, MinorProphets,
-    Gospels, Acts, PaulineEpistles, GeneralEpistles, Apocalypse
-};
-
-struct HistoryEntry {
-    std::string ref;
-    std::string fullText;
-    int         bookIdx  = -1;
-    int         chapIdx  = -1;
-    int         verseIdx = -1;
-};
 
 class BibleView {
 public:
@@ -48,23 +16,49 @@ public:
     void Render();
 
 private:
-    void         LoadXMLBible(const std::string& path);
-    void         SaveVerseToXML(int bookIdx, int chapIdx, int verseIdx);
-    void         ProjectVerse(int bookIdx, int chapIdx, int verseIdx);
-    void         ReprojectInCurrentBible();
-    bool         ParseSmartQuery(const std::string& raw,
-                                  int& outBook, int& outChap, int& outVerse);
-    void         NavigateVerse(int delta);
-    BibleSection GetBookSection(int canonicalNumber) const;
-    void         GetSectionColor(BibleSection section,
-                                  float& r, float& g, float& b) const;
+    void LoadXMLBible(const std::string& path);
+    void SaveVerseToXML(int bookIdx, int chapIdx, int verseIdx);
+    void ProjectVerse(int bookIdx, int chapIdx, int verseIdx);
+    void ReprojectInCurrentBible();
+    void NavigateVerse(int delta);
+    // Texto del proximo versiculo (mismo rollover capitulo/libro que
+    // NavigateVerse), sin mutar estado. Vacio si no hay siguiente. Solo para
+    // el Stage Display, nunca se muestra al publico.
+    std::string PeekNextVerseText(int bookIdx, int chapIdx, int verseIdx) const;
 
     void RenderTopBar();
     void RenderHistoryPopup();
+    void RenderFavoritesPopup();
     void RenderBookGrid();
     void RenderChapterGrid();
     void RenderVerseList();
     void RenderEditModal();
+
+    // Navega a un versiculo favorito, cargando su Biblia si es distinta a
+    // la actualmente abierta (ver RenderFavoritesPopup).
+    void JumpToFavorite(const std::string& bible, int bookNum, int chapterNum, int verseNum);
+enum class JumpKind { None, Chapter, Verse };
+
+// Salto rapido de capitulo/versiculo (tap de Ctrl / Alt)
+void UpdateModifierTaps();
+void OpenJump(JumpKind kind);
+void CloseJump();
+void UpdateJumpOverlay();
+void RenderJumpOverlay();
+void ConfirmJump();
+
+JumpKind    m_JumpMode = JumpKind::None;
+std::string m_JumpBuffer;
+std::string m_JumpStatus;
+ImVec2      m_JumpCardMin = {};
+ImVec2      m_JumpCardMax = {};
+
+double m_CtrlDownSince  = -1.0;
+bool   m_CtrlComboFired = false;
+double m_AltDownSince   = -1.0;
+bool   m_AltComboFired  = false;
+    // Aplica la seleccion confirmada del buscador rapido (biblia/BibleQuickNav)
+    void HandleQuickNavConfirm();
 
     // Datos de la Biblia activa
     BibleData   m_CurrentBible;
@@ -85,7 +79,7 @@ private:
     int m_ProjectedChapIdx  = -1;
     int m_ProjectedVerseIdx = -1;
 
-    // Busqueda inteligente
+    // Busqueda inteligente (barra de texto en la parte superior)
     char m_LiveSearch[128]  = "";
     int  m_FilteredBook     = -1;
     int  m_FilteredChapter  = -1;
@@ -98,11 +92,22 @@ private:
     ImVec2 m_HistoryBtnPos  = {};
     ImVec2 m_HistoryBtnSize = {};
 
+    // Favoritos (ver biblia/BibleFavorites.h)
+    bool   m_ShowFavorites    = false;
+    ImVec2 m_FavoritesBtnPos  = {};
+    ImVec2 m_FavoritesBtnSize = {};
+
+    // Buscador rapido tipo "quick nav" (overlay, letra por letra, con
+    // previsualizacion en vivo de Libro / Capitulo / Versiculo)
+    BibleQuickNav m_QuickNav;
+    ImVec2        m_QuickNavBtnPos  = {};
+    ImVec2        m_QuickNavBtnSize = {};
+
     // Edicion de versiculo
-    bool        m_ShowEditModal = false;
-    int         m_EditBookIdx   = -1;
-    int         m_EditChapIdx   = -1;
-    int         m_EditVerseIdx  = -1;
+    bool        m_ShowEditModal    = false;
+    int         m_EditBookIdx      = -1;
+    int         m_EditChapIdx      = -1;
+    int         m_EditVerseIdx     = -1;
     char        m_EditBuffer[4096] = {};
     std::string m_EditStatus;
 

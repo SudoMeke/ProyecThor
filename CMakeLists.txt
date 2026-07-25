@@ -3,14 +3,31 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.3.2
+    VERSION 0.4.1
     LANGUAGES C CXX
 )
+
+# Sin esto, CMake no aplica ninguna optimizacion por defecto (equivale a
+# -O0): el binario resultante corre notablemente mas lento en PCs de bajos
+# recursos. Quien necesite un build de debug puede seguir pasando
+# -DCMAKE_BUILD_TYPE=Debug explicitamente.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O2)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
+# PROYECTHOR_BUILD_NUMBER: "local" en builds de desarrollo (scripts/build.sh);
+# CI (.github/workflows/build.yml) lo pisa con -DPROYECTHOR_BUILD_NUMBER=<github.run_number>,
+# un numero que aumenta solo con cada build de GitHub Actions. Se muestra en
+# el splash (ver src/main.cpp) junto a la version.
+set(PROYECTHOR_BUILD_NUMBER "local" CACHE STRING "Numero de build (lo inyecta CI)")
+
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"
     "${CMAKE_BINARY_DIR}/generated/Version.h"
@@ -35,6 +52,21 @@ FetchContent_Declare(
     GIT_TAG 0.9.9.8
 )
 FetchContent_MakeAvailable(glm)
+
+# ── 1b. FOUDREVUE (app hermana, editor de overlays) ──────────────────────────
+# Vive como submodulo en la raiz (carpeta FoudreVue/, repo propio en
+# github.com/TheVixcho/FoudreVue). Se compila junto a ProyecThor como un
+# ejecutable aparte (target "FoudreVue"), no como libreria: cada app sigue
+# siendo standalone, solo comparten build system para facilitar desarrollo
+# en conjunto ("git submodule update --remote FoudreVue" trae los ultimos
+# cambios de la app hermana).
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FoudreVue/CMakeLists.txt")
+    add_subdirectory(FoudreVue)
+else()
+    message(WARNING
+        "FoudreVue/ no encontrado o vacio — corre 'git submodule update --init "
+        "--recursive' para traer el codigo de la app hermana.")
+endif()
 
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
@@ -61,17 +93,21 @@ file(GLOB EXTERNAL_TOOLS            CONFIGURE_DEPENDS "src/external/tools/*.cpp"
 file(GLOB FRONTEND_UI_BIN_SOURCES   CONFIGURE_DEPENDS "src/frontend/ui/bin/*.cpp")
 
 # -- FRONTEND --
+file(GLOB FRONTEND_WINDOWING_SOURCES CONFIGURE_DEPENDS "src/frontend/windowing/*.cpp")
 file(GLOB FRONTEND_PANELS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/*.cpp")
 file(GLOB FRONTEND_CAPTURE_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/capture/*.cpp")
 file(GLOB FRONTEND_LAYERS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/layers/*.cpp")
+file(GLOB FRONTEND_OVERLAY_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/overlay/*.cpp")
 file(GLOB FRONTEND_MONITOR_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/monitor/*.cpp")
 file(GLOB FRONTEND_STYLES_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/styles/*.cpp")
 file(GLOB FRONTEND_VIEWS_SOURCES    CONFIGURE_DEPENDS "src/frontend/views/*.cpp")
+file(GLOB FRONTEND_VIEWS_BIBLIA_SOURCES CONFIGURE_DEPENDS "src/frontend/views/biblia/*.cpp")
 file(GLOB FRONTEND_UI_SOURCES       CONFIGURE_DEPENDS "src/frontend/ui/*.cpp")
 file(GLOB PREVIEW_DOC_SOURCES       CONFIGURE_DEPENDS "src/frontend/views/documents/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/preview/monitors/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_image_write_impl.cpp")
 file(GLOB FRONTEND_BIBLIO_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/biblio/*.cpp")
+file(GLOB FRONTEND_HOME_SOURCES     CONFIGURE_DEPENDS "src/frontend/panels/home/*.cpp")
 # -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -112,6 +148,7 @@ if(WIN32)
     add_executable(ProyecThor WIN32
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
+        ${FRONTEND_HOME_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -124,10 +161,13 @@ if(WIN32)
         ${FRONTEND_PANELS_SOURCES}
         ${FRONTEND_CAPTURE_SOURCES}
         ${FRONTEND_LAYERS_SOURCES}
+        ${FRONTEND_OVERLAY_SOURCES}
         ${FRONTEND_MONITOR_SOURCES}
         ${FRONTEND_STYLES_SOURCES}
         ${FRONTEND_VIEWS_SOURCES}
+        ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
         ${EXTERNAL_TOOLS}
@@ -139,6 +179,7 @@ else()
     add_executable(ProyecThor
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
+        ${FRONTEND_HOME_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -151,10 +192,13 @@ else()
         ${FRONTEND_PANELS_SOURCES}
         ${FRONTEND_CAPTURE_SOURCES}
         ${FRONTEND_LAYERS_SOURCES}
+        ${FRONTEND_OVERLAY_SOURCES}
         ${FRONTEND_MONITOR_SOURCES}
         ${FRONTEND_STYLES_SOURCES}
         ${FRONTEND_VIEWS_SOURCES}
+        ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
         ${EXTERNAL_TOOLS}
@@ -196,11 +240,13 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/shaders"
 
     # FRONTEND
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/windowing"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/ui"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/capture"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/layers"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/overlay"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/monitor"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/styles"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/preview"
@@ -209,6 +255,7 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/toolbar"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/biblio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/home"
     # EXTERNAS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/external/tools"
     "${IMGUI_DIR}"
@@ -268,6 +315,8 @@ if(WIN32)
         ws2_32
         iphlpapi
         winhttp
+        d3d11
+        dxgi
     )
 
     target_link_options(ProyecThor PRIVATE
@@ -288,6 +337,23 @@ else()
     endif()
 
     find_package(OpenGL REQUIRED)
+
+    # Camaras reales en el panel de Captura: CapturePanel.cpp ya tiene la
+    # enumeracion/lectura real via cv::VideoCapture (V4L2 por debajo) detras
+    # de la macro PT_USE_OPENCV -- pero como nada definia esa macro nunca se
+    # compilaba, y el panel caia siempre en el stub de "Camara 0 (simulada)"
+    # con un patron de prueba animado en vez de listar dispositivos reales.
+    # Opcional, igual que XComposite/PipeWire arriba/abajo: si OpenCV no
+    # esta instalado, el build sigue igual que antes (stub simulado).
+    find_package(OpenCV QUIET COMPONENTS core videoio)
+    if(OpenCV_FOUND)
+        message(STATUS "OpenCV encontrado (${OpenCV_VERSION}): deteccion real de camaras habilitada en Captura")
+        target_link_libraries(ProyecThor PRIVATE ${OpenCV_LIBS})
+        target_include_directories(ProyecThor PRIVATE ${OpenCV_INCLUDE_DIRS})
+        target_compile_definitions(ProyecThor PRIVATE PT_USE_OPENCV)
+    else()
+        message(STATUS "OpenCV NO encontrado: Captura seguira usando la camara simulada de prueba")
+    endif()
 
     # VLC para Linux: build .so vendorizado, igual que PDFium (no se
     # compila VLC desde cero, se linkea contra binarios ya generados en
@@ -469,7 +535,48 @@ exec ./ProyecThor \"\$@\"
     else()
         message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
     endif()
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    target_link_libraries(ProyecThor PRIVATE ${X11_LIBRARIES})
+    target_include_directories(ProyecThor PRIVATE ${X11_INCLUDE_DIR})
 
+    # XComposite: opcional. Sin ella, la captura de ventanas (CapturePanel)
+    # lee XGetImage directo sobre la ventana, que devuelve contenido
+    # indefinido/basura en las zonas tapadas por otras ventanas. Si esta
+    # disponible, la usamos para leer el pixmap ya compuesto por el
+    # servidor X y capturar bien aunque la ventana este solapada. Si no
+    # esta instalada (dev headers ausentes), el build sigue igual que
+    # antes — no es un requisito duro.
+    if(X11_Xcomposite_FOUND)
+        message(STATUS "libXcomposite encontrada: captura de ventanas correcta bajo solapamiento")
+        target_link_libraries(ProyecThor PRIVATE ${X11_Xcomposite_LIB})
+        target_include_directories(ProyecThor PRIVATE ${X11_Xcomposite_INCLUDE_PATH})
+        target_compile_definitions(ProyecThor PRIVATE PT_HAVE_XCOMPOSITE)
+    else()
+        message(STATUS "libXcomposite NO encontrada: captura de ventanas usara XGetImage directo (puede fallar si hay solapamiento)")
+    endif()
+
+    # Captura de pantalla/ventana en sesiones Wayland: XGetImage/XComposite
+    # (arriba) no sirven ahi -- el compositor Wayland no vuelca contenido
+    # real a la "ventana raiz" X11 heredada, es una restriccion de
+    # seguridad del protocolo. El camino nativo es el portal de escritorio
+    # (org.freedesktop.portal.ScreenCast) + PipeWire para consumir el
+    # stream. Opcional: sin estas dos libs, el build sigue igual que hoy y
+    # la captura de pantalla queda limitada a X11 puro.
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(PIPEWIRE libpipewire-0.3)
+        pkg_check_modules(DBUS dbus-1)
+    endif()
+    if(PIPEWIRE_FOUND AND DBUS_FOUND)
+        message(STATUS "libpipewire-0.3 y dbus-1 encontradas: captura de pantalla/ventana via portal Wayland habilitada")
+        target_link_libraries(ProyecThor PRIVATE ${PIPEWIRE_LIBRARIES} ${DBUS_LIBRARIES})
+        target_include_directories(ProyecThor PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${DBUS_INCLUDE_DIRS})
+        target_compile_definitions(ProyecThor PRIVATE PT_HAVE_WAYLAND_CAPTURE)
+    else()
+        message(STATUS "libpipewire-0.3 y/o dbus-1 NO encontradas: sin captura de pantalla/ventana nativa en Wayland")
+    endif()
+endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps

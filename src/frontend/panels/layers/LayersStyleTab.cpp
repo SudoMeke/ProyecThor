@@ -67,7 +67,6 @@ LayersStyleTab::LayersStyleTab() {
 
     auto onFontImported = [this](const std::string& fontPath) {
         Core::PresentationCore::Get().LoadSingleFontIntoImGui(fontPath);
-        ImGui::GetIO().Fonts->TexID = nullptr;
         LoadFontsList();
     };
     m_StyleEditor = std::make_unique<CanvaStyleEditor>(&m_AvailableFonts, onFontImported);
@@ -222,18 +221,68 @@ void LayersStyleTab::ApplyCurrentStyleToCore() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  View toggle
+//  Toolbar superior — compacta, solo iconos (estilo ProPresenter/Holyrics)
 // ─────────────────────────────────────────────────────────────────────────────
-void LayersStyleTab::RenderViewToggleBar(bool& gridMode) {
-    // FIXED: This is called with SameLine already set by the caller.
-    // Draw toggle buttons inline.
-    ImGui::PushID("styletoggle");
-    if (LPIconToggle("##sgrid", gridMode))  gridMode = true;
-    DrawGridIcon(gridMode);
-    ImGui::SameLine(0,4);
-    if (LPIconToggle("##slist", !gridMode)) gridMode = false;
-    DrawListIcon(!gridMode);
+void LayersStyleTab::RenderTopBar() {
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+    ImGui::TextUnformatted("Estilos");
+    ImGui::PopStyleColor();
+
+    const float btnSz = 26.0f;
+    const float zoomW = 76.0f;
+    const float gap   = 4.0f;
+    const float rowW  = zoomW + gap + btnSz*5 + gap*5; // +1 boton: "Ajustes rapidos"
+    const float avail = ImGui::GetWindowContentRegionMax().x;
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
+
+    if (m_GridMode) {
+        LPZoomSlider("##stzoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
+        ImGui::SameLine(0, gap);
+    } else {
+        ImGui::Dummy(ImVec2(zoomW, btnSz));
+        ImGui::SameLine(0, gap);
+    }
+
+    ImGui::PushID("styleview");
+    if (LPCornerIconBtn("##sgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            float cs = r*0.42f, g = r*0.18f;
+            for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
+                ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
+                dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
+            }
+        }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
+        m_GridMode = true;
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            for (int i=0;i<3;i++) {
+                float y = c.y - r*0.5f + i*r*0.5f;
+                dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
+            }
+        }, "Vista en lista", {btnSz,btnSz}, !m_GridMode))
+        m_GridMode = false;
     ImGui::PopID();
+
+    ImGui::SameLine(0, gap*2);
+    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", {btnSz,btnSz}))
+        LoadFontsList();
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", {btnSz,btnSz}, true))
+        m_StyleEditor->OpenNew(m_CurrentStyle);
+    ImGui::SameLine(0, gap);
+    if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            // Tres sliders verticales — mismo lenguaje visual que
+            // ControlIcons::DrawQuality, para "ajustes rapidos".
+            float th = std::max(1.2f, r * 0.16f);
+            const float xs[3]    = { -0.5f, 0.0f, 0.5f };
+            const float knobY[3] = { 0.18f, -0.28f, 0.05f };
+            for (int i = 0; i < 3; i++) {
+                float x = c.x + xs[i] * r;
+                dl->AddLine({x, c.y - r*0.75f}, {x, c.y + r*0.75f}, col, th);
+                dl->AddCircleFilled({x, c.y + knobY[i]*r}, r*0.16f, col, 12);
+            }
+        }, "Ajustes rapidos", {btnSz,btnSz}))
+        ImGui::OpenPopup("##QuickAdjustPopup");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,29 +293,38 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
     ImGui::PushID(idx);
     bool isSel = (m_SelectedTheme==name);
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool hov   = ImGui::IsMouseHoveringRect(pos,{pos.x+W,pos.y+H});
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos,{pos.x+W,pos.y+H});
+    float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    float inset = 2.0f * t;
+    ImVec2 p0 = {pos.x - inset, pos.y - inset};
+    ImVec2 p1 = {pos.x + W + inset, pos.y + H + inset};
+
     ImU32 bg = isSel ? LPU32({0.18f,0.20f,0.36f,1.0f})
-                     : (hov ? LPU32(LP::Surface2) : LPU32(LP::Surface1));
-    dl->AddRectFilled(pos,{pos.x+W,pos.y+H},bg,10.0f);
+                     : LPU32(ImVec4(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
+                                    LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
+                                    LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f));
+    dl->AddRectFilled(p0,p1,bg,10.0f);
 
-    ImU32 border = isSel ? LPU32(LP::Accent)
-                         : (hov ? LPU32({LP::Accent.x,LP::Accent.y,LP::Accent.z,0.40f})
-                                : LPU32(LP::Border));
-    dl->AddRect(pos,{pos.x+W,pos.y+H},border,10.0f,0,isSel?2.0f:1.0f);
+    ImVec4 borderC = isSel ? LP::Accent
+                     : ImVec4(LP::Border.x+(LP::Accent.x-LP::Border.x)*0.4f*t,
+                              LP::Border.y+(LP::Accent.y-LP::Border.y)*0.4f*t,
+                              LP::Border.z+(LP::Accent.z-LP::Border.z)*0.4f*t,
+                              LP::Border.w+(0.4f-LP::Border.w)*t);
+    dl->AddRect(p0,p1,LPU32(borderC),10.0f,0,isSel?2.0f:(1.0f+0.4f*t));
 
-    ImVec2 pp = {pos.x+12.0f, pos.y+12.0f};
+    ImVec2 pp = {p0.x+12.0f, p0.y+12.0f};
     dl->AddText(ImGui::GetFont(),14.0f,pp,LPU32({1,1,1,0.95f}),"Aa Bb");
     dl->AddText(ImGui::GetFont(),10.0f,{pp.x,pp.y+18.0f},LPU32({0.65f,0.65f,0.65f,0.75f}),"123 — Gz");
 
-    if (isSel) LPBadge(dl,{pos.x+W-52.0f,pos.y+7.0f},"ACTIVO",LP::Accent,{1,1,1,1});
+    if (isSel) LPBadge(dl,{p1.x-52.0f,p0.y+7.0f},"ACTIVO",LP::Accent,{1,1,1,1});
 
     std::string dn=name.length()>17?name.substr(0,14)+"...":name;
-    dl->AddRectFilled({pos.x,pos.y+H-24.0f},{pos.x+W,pos.y+H},
+    dl->AddRectFilled({p0.x,p1.y-24.0f},{p1.x,p1.y},
         LPU32({0,0,0,0.52f}),10.0f,ImDrawFlags_RoundCornersBottom);
     ImVec2 ns=ImGui::CalcTextSize(dn.c_str());
-    dl->AddText({pos.x+(W-ns.x)*0.5f,pos.y+H-20.0f},
+    dl->AddText({p0.x+(W-ns.x)*0.5f,p1.y-20.0f},
         isSel?LPU32(LP::Accent):LPU32(LP::Text),dn.c_str());
 
     ImGui::InvisibleButton("##tcard",{W,H});
@@ -296,17 +354,20 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
     ImGui::PushID(idx);
     bool isSel = (m_SelectedTheme == name);
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool hov   = ImGui::IsMouseHoveringRect(pos, {pos.x + W, pos.y + rowH});
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x + W, pos.y + rowH});
+    float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImU32 bg = hov ? LPU32(LP::Surface2) : LPU32(LP::Surface1);
+    ImU32 bg = LPU32(ImVec4(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
+                             LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
+                             LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f));
     if (isSel) bg = LPU32(ImVec4(0.15f, 0.16f, 0.20f, 1.0f));
     dl->AddRectFilled(pos, {pos.x + W, pos.y + rowH}, bg, 3.0f);
 
     if (isSel) {
         dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32(LP::Accent), 3.0f, ImDrawFlags_RoundCornersLeft);
-    } else if (hov) {
-        dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32({LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.3f}), 3.0f, ImDrawFlags_RoundCornersLeft);
+    } else if (t > 0.01f) {
+        dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32({LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.3f*t}), 3.0f, ImDrawFlags_RoundCornersLeft);
     }
 
     float px = pos.x + 16.0f, py = pos.y + 8.0f;
@@ -341,40 +402,10 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
 //  RenderThemeGrid (Ajustado para evitar márgenes negativos)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderThemeGrid() {
-    ImGui::Dummy(ImVec2(0.0f, 6.0f)); // Un poquito más de aire arriba
-
-    float avail    = ImGui::GetContentRegionAvail().x;
-    float reloadW  = 140.0f; // Ajustado para que el texto respire mejor
-    float gap      = 8.0f;   // Un pelín más de separación (diseño más moderno)
-    float newBtnW  = 160.0f; 
-    float btnH     = 32.0f;  // 32px es el estándar "sweet spot" para botones interactivos
-
-    // --- FILA 1: Botones principales ---
-    float row1Width = newBtnW + gap + reloadW;
-    ImGui::SetCursorPosX(std::max(0.0f, (avail - row1Width) * 0.5f));
-
-    // Quitamos los espacios manuales ("  ") para que el texto se centre de forma nativa
-    if (LPPrimaryBtn("+ Nuevo Estilo", {newBtnW, btnH}))
-        m_StyleEditor->OpenNew(m_CurrentStyle);
-
-    // CAMBIO CLAVE: Volvemos a SameLine para que se calculen en la misma fila centrada
-    ImGui::SameLine(0.0f, gap); 
-    
-    if (LPGhostBtn("Recargar Fuentes", {reloadW, btnH})) 
-        LoadFontsList();
-
-    // --- FILA 2: Toggle Bar ---
-    ImGui::Spacing(); // Espacio interlineal limpio en lugar de NewLine() a secas
-    
-    float toggleW = 56.0f; 
-    ImGui::SetCursorPosX(std::max(0.0f, (avail - toggleW) * 0.5f));
-    
-    RenderViewToggleBar(m_GridMode);
-
-    // Separador y espacio final
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    RenderTopBar();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
     LPSeparatorLine();
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     if (m_AvailableThemes.empty()) {
         ImVec2 p = ImGui::GetCursorScreenPos();
@@ -382,7 +413,7 @@ void LayersStyleTab::RenderThemeGrid() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + w, p.y + 60}, LPU32(LP::Surface1), 12.0f);
         ImGui::Dummy({0, 18});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* h = "Crea tu primer estilo con el botón de arriba";
+        const char* h = "Crea tu primer estilo con el boton + de arriba";
         float tw = ImGui::CalcTextSize(h).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w - tw) * 0.5f));
         ImGui::Text("%s", h);
@@ -392,7 +423,7 @@ void LayersStyleTab::RenderThemeGrid() {
     }
 
     if (m_GridMode) {
-        const float cW = 145.0f, cH = 90.0f, gap2 = 10.0f;
+        const float cW = 145.0f * m_ThumbZoom, cH = 90.0f * m_ThumbZoom, gap2 = 10.0f;
         float pW = ImGui::GetContentRegionAvail().x;
         
         int cols = std::max(1, (int)((pW + gap2) / (cW + gap2)));
@@ -537,6 +568,26 @@ void LayersStyleTab::RenderQuickAdjust() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Popup de Ajustes Rapidos — se abre desde el icono de sliders en la
+//  toolbar (ver RenderTopBar). Antes vivia fijo debajo de la galeria de
+//  temas, robandole ~45% del alto; ahora la galeria usa todo el espacio y
+//  esto aparece solo cuando el usuario lo pide.
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersStyleTab::RenderQuickAdjustPopup() {
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.10f, 0.11f, 0.14f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
+    if (ImGui::BeginPopup("##QuickAdjustPopup")) {
+        ImGui::BeginChild("##quickAdjustPopupContent", ImVec2(300.0f, 0.0f), false);
+        RenderQuickAdjust();
+        ImGui::EndChild();
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Modal del editor de estilos (Se mantiene igual)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderStyleEditorModal() {
@@ -555,21 +606,15 @@ void LayersStyleTab::RenderStyleEditorModal() {
 //  Render principal del tab (AHORA CON LAYOUT DE 2 COLUMNAS)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::Render() {
-    // ── GALERÍA DE TEMAS (arriba) ──────────────────────────────────────────
-    float availH    = ImGui::GetContentRegionAvail().y;
-    float topHeight = availH * 0.55f;   // 55% para la galería
-
-    ImGui::BeginChild("##ThemesListChild", ImVec2(0, topHeight), false);
+    // ── GALERÍA DE TEMAS — ahora ocupa todo el alto disponible. Ajustes
+    //    Rapidos se movio a un popup (icono de sliders en la toolbar) en
+    //    vez de robarle ~45% del espacio de forma fija (ver RenderTopBar /
+    //    RenderQuickAdjustPopup).
+    ImGui::BeginChild("##ThemesListChild", ImGui::GetContentRegionAvail(), false);
     RenderThemeGrid();
     ImGui::EndChild();
 
-    // Separador visual entre secciones
-    LPSeparatorLine();
-
-    // ── AJUSTES RÁPIDOS (abajo) ────────────────────────────────────────────
-    ImGui::BeginChild("##QuickAdjustChild", ImVec2(0, 0), false);
-    RenderQuickAdjust();
-    ImGui::EndChild();
+    RenderQuickAdjustPopup();
 
     // Modal del editor (siempre al final, fuera de children)
     RenderStyleEditorModal();

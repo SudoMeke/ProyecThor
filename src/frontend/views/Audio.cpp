@@ -5,6 +5,7 @@
 #include "Audio.h"
 #include "audio/AudioHelpers.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "backend/core/PresentationCore.h"
 
 #include <vlc/vlc.h>
 
@@ -107,20 +108,68 @@ static bool IconButton(const char* id,
 }
 
 // Slider vertical para el ecualizador
-static bool EqBandSlider(const char* id, float* value,
-                          float minV, float maxV,
-                          float width, float height) {
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,          ImVec4(0.10f, 0.12f, 0.16f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       ImVec4(0.35f, 0.65f, 1.00f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.50f, 0.80f, 1.00f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding,  4.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+// Fader vertical dibujado a mano (pista redondeada + relleno desde la linea
+// de 0dB + cabezal circular) — antes esto era un ImGui::VSliderFloat con
+// solo los colores cambiados, que se veia generico al lado del resto del
+// panel (disco/tornamesa con dibujo custom). La interaccion real (drag,
+// click-to-set, navegacion por teclado) se sigue delegando a
+// ImGui::VSliderFloat -- se lo vuelve invisible y se dibuja encima, asi no
+// hace falta reimplementar esa logica.
+static bool EqBandSlider(const char* id, float* value, float minV, float maxV,
+                         float width, float height, ImU32 accentColor) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,          IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,   IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,    IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, IM_COL32(0, 0, 0, 0));
 
     ImGui::SetNextItemWidth(width);
     bool changed = ImGui::VSliderFloat(id, ImVec2(width, height), value, minV, maxV, "");
+    bool hovered = ImGui::IsItemHovered();
+    bool active  = ImGui::IsItemActive();
+    if (hovered || active) ImGui::SetTooltip("%+.1f dB", *value);
 
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleColor(5);
+
+    ImDrawList* dl     = ImGui::GetWindowDrawList();
+    ImVec2      p1     = ImVec2(pos.x + width, pos.y + height);
+    float       trackW = std::max(4.0f, width * 0.34f);
+    float       trackX = pos.x + (width - trackW) * 0.5f;
+
+    // Pista de fondo
+    dl->AddRectFilled(ImVec2(trackX, pos.y), ImVec2(trackX + trackW, p1.y),
+                      IM_COL32(13, 15, 20, 255), trackW * 0.5f);
+
+    // Linea de 0dB (referencia visual de "sin cambio")
+    float zeroT = (0.0f - minV) / (maxV - minV);
+    float zeroY = p1.y - zeroT * height;
+    dl->AddLine(ImVec2(trackX - 3.0f, zeroY), ImVec2(trackX + trackW + 3.0f, zeroY),
+               IM_COL32(70, 74, 86, 200), 1.0f);
+
+    // Relleno desde 0dB hasta el valor actual — boost lleno con el color de
+    // acento, corte mas apagado (misma idea que un fader de consola real).
+    float valT = std::clamp((*value - minV) / (maxV - minV), 0.0f, 1.0f);
+    float valY = p1.y - valT * height;
+    ImU32 dimAccent = (accentColor & 0x00FFFFFFu) | (110u << 24);
+
+    if (valY < zeroY)
+        dl->AddRectFilled(ImVec2(trackX, valY), ImVec2(trackX + trackW, zeroY),
+                          accentColor, trackW * 0.5f);
+    else if (valY > zeroY)
+        dl->AddRectFilled(ImVec2(trackX, zeroY), ImVec2(trackX + trackW, valY),
+                          dimAccent, trackW * 0.5f);
+
+    // Cabezal
+    float  handleR = trackW * 0.95f;
+    ImVec2 handleC(trackX + trackW * 0.5f, valY);
+    ImU32  handleCol = active ? IM_COL32(255, 255, 255, 255)
+                     : hovered ? IM_COL32(235, 237, 242, 255)
+                               : IM_COL32(210, 213, 222, 255);
+    dl->AddCircleFilled(handleC, handleR, IM_COL32(8, 8, 11, 200), 16);
+    dl->AddCircleFilled(handleC, handleR - 1.5f, handleCol, 16);
+
     return changed;
 }
 
@@ -493,6 +542,18 @@ void AudioPanel::Play(int trackIndex) {
     libvlc_media_player_set_media(m_Player, m_Media);
     libvlc_audio_set_volume(m_Player, ComputeEffectiveVolume());
     libvlc_media_player_play(m_Player);
+
+#ifndef _WIN32
+    // En Linux, cada set_media()/play() reinicia el modulo de salida de
+    // audio (aout) de libVLC (ver el mismo comentario en
+    // VLCBasePlayer.cpp), lo que puede perder el volumen fijado ANTES de
+    // play() y deja el mute en un estado indefinido (nunca se fija
+    // explicitamente aca). Resultado: la pista arranca pero no suena.
+    // Se reaplica volumen + mute=false una vez que el player ya esta
+    // reproduciendo, igual que hace BackgroundLayer con VLCBasePlayer.
+    libvlc_audio_set_mute(m_Player, 0);
+    libvlc_audio_set_volume(m_Player, ComputeEffectiveVolume());
+#endif
 
     if (m_EqEnabled) {
         libvlc_equalizer_t* eq = libvlc_audio_equalizer_new();
@@ -970,6 +1031,43 @@ void AudioPanel::RenderNowPlayingCard() {
 
     dl->AddRectFilled(winPos, ImVec2(winPos.x + winW, winPos.y + 2.0f), accentColor);
 
+    // ── Boton "En vivo" — manda disco+caratula+ondas al proyector real ────
+    // (ver PresentationCore::SetBackgroundAudio / AudioPanel::RenderLiveBackground)
+    {
+        bool  live       = m_IsLiveBackground;
+        bool  canGoLive  = live || (m_CurrentTrack >= 0 && m_CurrentTrack < static_cast<int>(m_Tracks.size()));
+        const char* label = live ? "EN VIVO" : "Enviar en vivo";
+        ImVec2 btnSize(live ? 80.0f : 116.0f, 26.0f);
+        ImVec2 btnPos(winPos.x + winW - btnSize.x - padding, winPos.y + 10.0f);
+
+        ImGui::SetCursorScreenPos(btnPos);
+        ImGui::BeginDisabled(!canGoLive);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,
+            live ? ImVec4(0.90f, 0.25f, 0.30f, 1.0f) : ImVec4(0.16f, 0.18f, 0.24f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+            live ? ImVec4(1.00f, 0.32f, 0.36f, 1.0f) : ImVec4(0.22f, 0.25f, 0.34f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+            live ? ImVec4(0.80f, 0.20f, 0.24f, 1.0f) : ImVec4(0.28f, 0.32f, 0.42f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+        if (ImGui::Button(label, btnSize)) {
+            auto& core = Core::PresentationCore::Get();
+            if (live) {
+                core.StopBackgroundMedia();
+                m_IsLiveBackground = false;
+            } else {
+                core.SetBackgroundAudio();
+                core.SetProjecting(true);
+                m_IsLiveBackground = true;
+            }
+        }
+
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar();
+        ImGui::EndDisabled();
+    }
+
     // ── Disco giratorio ───────────────────────────────────────────────────
     float discCX = winPos.x + padding + discR + 6.0f;
     float discCY = winPos.y + cardH * 0.50f;
@@ -1055,6 +1153,78 @@ void AudioPanel::RenderNowPlayingCard() {
 
     ImGui::EndChild();
     ImGui::PopStyleColor();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderLiveBackground — fondo "now playing" para el proyector real
+//  (disco + caratula + titulo + ondas). Ver comentario en Audio.h: se dibuja
+//  en el drawlist de la ventana ACTUAL (pensado para llamarse desde dentro
+//  del Begin("ProjectorLive") de UIManager), (x,y,w,h) = rectangulo
+//  completo del proyector en coordenadas de pantalla.
+// ─────────────────────────────────────────────────────────────────────────────
+void AudioPanel::RenderLiveBackground(float x, float y, float w, float h) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    float hue = (m_CurrentTrack >= 0 && m_CurrentTrack < static_cast<int>(m_Tracks.size()))
+        ? m_Tracks[m_CurrentTrack].accentH : 0.58f;
+
+    // Fondo: degrade oscuro sutil con el acento de la pista (no negro plano).
+    float topR, topG, topB, botR, botG, botB;
+    HsvToRgb(hue, 0.35f, 0.09f, topR, topG, topB);
+    HsvToRgb(hue, 0.45f, 0.02f, botR, botG, botB);
+    ImU32 topCol = IM_COL32(static_cast<int>(topR * 255), static_cast<int>(topG * 255),
+                             static_cast<int>(topB * 255), 255);
+    ImU32 botCol = IM_COL32(static_cast<int>(botR * 255), static_cast<int>(botG * 255),
+                             static_cast<int>(botB * 255), 255);
+    dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x + w, y + h), topCol, topCol, botCol, botCol);
+
+    // Disco centrado, tamano proporcional al alto disponible.
+    float discR  = std::min(w, h) * 0.26f;
+    float discCX = x + w * 0.5f;
+    float discCY = y + h * 0.42f;
+    RenderSpinningDisc(discCX, discCY, discR);
+
+    if (m_CurrentTrack < 0 || m_CurrentTrack >= static_cast<int>(m_Tracks.size()))
+        return;
+
+    const auto& track = m_Tracks[m_CurrentTrack];
+
+    // Titulo, escalado segun la resolucion del proyector (no un tamano fijo
+    // de fuente de operador, que se veria minusculo en una pantalla grande).
+    float titleSize = std::clamp(h * 0.032f, ImGui::GetFontSize(), ImGui::GetFontSize() * 4.0f);
+    float scaleFactor = titleSize / ImGui::GetFontSize();
+    ImVec2 baseTs = ImGui::CalcTextSize(track.displayName.c_str());
+    ImVec2 titleTs = ImVec2(baseTs.x * scaleFactor, baseTs.y * scaleFactor);
+    float titleY = discCY + discR + h * 0.06f;
+    dl->AddText(nullptr, titleSize,
+                ImVec2(x + (w - titleTs.x) * 0.5f, titleY),
+                IM_COL32(240, 242, 245, 255), track.displayName.c_str());
+
+    // Ondas centradas debajo del titulo.
+    float waveAreaY  = titleY + titleTs.y + h * 0.035f;
+    float waveH      = h * 0.09f;
+    float waveAreaW  = w * 0.46f;
+    float barGap     = 4.0f;
+    float barW       = waveAreaW / static_cast<float>(kWaveBars) - barGap;
+    float waveStartX = x + (w - waveAreaW) * 0.5f;
+
+    for (int i = 0; i < kWaveBars; i++) {
+        float barHeight = m_WaveBars[i] * waveH;
+        if (barHeight < 3.0f) barHeight = 3.0f;
+
+        float bx  = waveStartX + i * (barW + barGap);
+        float by0 = waveAreaY + (waveH - barHeight) * 0.5f;
+        float by1 = by0 + barHeight;
+
+        float brightness = 0.45f + m_WaveBars[i] * 0.55f;
+        float barR, barG, barB;
+        HsvToRgb(hue, 0.65f, brightness, barR, barG, barB);
+        ImU32 barColor = IM_COL32(static_cast<int>(barR * 255), static_cast<int>(barG * 255),
+                                   static_cast<int>(barB * 255),
+                                   static_cast<int>(190 + m_WaveBars[i] * 65));
+
+        dl->AddRectFilled(ImVec2(bx, by0), ImVec2(bx + barW, by1), barColor, barW * 0.3f);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1401,20 +1571,39 @@ void AudioPanel::RenderEqualizerSection() {
     ImGui::Spacing();
 
     // Sliders de bandas verticales
-    const float sliderH     = 88.0f;
-    const float sliderW_b   = 18.0f;
-    const float bandSpacing = 4.0f;
+    constexpr float kBandMin    = -20.0f;
+    constexpr float kBandMax    =  20.0f;
+    const float sliderH     = 92.0f;
+    const float sliderW_b   = 20.0f;
+    const float bandSpacing = 6.0f;
     const float totalBands  = kEqBands * sliderW_b + (kEqBands - 1) * bandSpacing;
     float       eqStartX    = (ImGui::GetContentRegionAvail().x - totalBands) * 0.5f;
     if (eqStartX < 4.0f) eqStartX = 4.0f;
 
-    bool anyBandChanged = false;
+    // Color de acento: el de la pista actual (misma identidad visual que el
+    // disco/waveform), apagado a gris mientras el EQ esta desactivado.
+    float hue = (m_CurrentTrack >= 0 && m_CurrentTrack < static_cast<int>(m_Tracks.size()))
+        ? m_Tracks[m_CurrentTrack].accentH : 0.58f;
+    float accR, accG, accB;
+    HsvToRgb(hue, 0.65f, 0.95f, accR, accG, accB);
+    ImU32 accentColor = m_EqEnabled
+        ? IM_COL32(static_cast<int>(accR * 255), static_cast<int>(accG * 255),
+                   static_cast<int>(accB * 255), 255)
+        : IM_COL32(90, 94, 106, 255);
+
+    bool   anyBandChanged = false;
+    ImVec2 curvePts[kEqBands];
     for (int b = 0; b < kEqBands; b++) {
         float cursorX = eqStartX + b * (sliderW_b + bandSpacing);
         ImGui::SetCursorPosX(cursorX);
         ImGui::PushID(b);
-        if (EqBandSlider("##band", &m_EqBands[b], -20.0f, 20.0f, sliderW_b, sliderH))
+        if (EqBandSlider("##band", &m_EqBands[b], kBandMin, kBandMax, sliderW_b, sliderH, accentColor))
             anyBandChanged = true;
+
+        ImVec2 rMin = ImGui::GetItemRectMin();
+        float  valT = std::clamp((m_EqBands[b] - kBandMin) / (kBandMax - kBandMin), 0.0f, 1.0f);
+        curvePts[b] = ImVec2(rMin.x + sliderW_b * 0.5f, rMin.y + sliderH - valT * sliderH);
+
         ImGui::PopID();
 
         float labelX = cursorX + sliderW_b * 0.5f
@@ -1426,6 +1615,17 @@ void AudioPanel::RenderEqualizerSection() {
 
         if (b < kEqBands - 1)
             ImGui::SameLine(eqStartX + (b + 1) * (sliderW_b + bandSpacing));
+    }
+
+    // Curva fina conectando los cabezales — lectura visual inmediata de la
+    // forma del filtro, como en un EQ grafico real.
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImU32 curveCol = (accentColor & 0x00FFFFFFu) | (150u << 24);
+        for (int b = 0; b < kEqBands - 1; b++)
+            dl->AddLine(curvePts[b], curvePts[b + 1], curveCol, 1.5f);
+        for (int b = 0; b < kEqBands; b++)
+            dl->AddCircleFilled(curvePts[b], 2.0f, curveCol, 8);
     }
 
     if (anyBandChanged && m_EqEnabled && m_Player) {

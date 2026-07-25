@@ -1,5 +1,6 @@
 #include "MonitorUIHelpers.h"
 #include "MonitorDesign.h"
+#include "DesignSystem.h"
 #include <imgui_internal.h>
 #include <iomanip>
 #include <sstream>
@@ -95,22 +96,20 @@ bool BMButton(const char* label, ImVec2 size, ImVec4 base, ImVec4 hov, ImVec4 ac
     return pressed;
 }
 
-bool BMSlider(const char* id, float* val, float lo, float hi, const char* fmt, ImVec4 frameBg, ImVec4 grab, ImVec4 grabAct, float width)
+bool BMSlider(const char* id, float* val, float lo, float hi, const char* /*fmt*/, ImVec4 frameBg, ImVec4 grab, ImVec4 grabAct, float width)
 {
-    if (width > 0.0f) ImGui::SetNextItemWidth(width);
-    else              ImGui::SetNextItemWidth(-1.0f);
-    ImVec4 frameBgHov = { frameBg.x * 1.4f, frameBg.y * 1.4f, frameBg.z * 1.4f, 1.0f };
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,          frameBg);
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,   frameBgHov);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,        grab);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive,  grabAct);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding,  3.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize,   12.0f);
-    bool changed = ImGui::SliderFloat(id, val, lo, hi, fmt, ImGuiSliderFlags_AlwaysClamp);
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(4);
-    return changed;
+    // Antes: ImGui::SliderFloat con estilos pisados — quedaba una barra
+    // gruesa rellena a todo lo alto del frame (look "grueso" que se pidio
+    // reemplazar por uno mas moderno). Ahora rutea a DS::ModernSlider
+    // (track fino + thumb circular animado); frameBg/grab ya no se usan
+    // como fondo de frame sino como track/acento para no romper la firma en
+    // los 3 call sites existentes (ViewPanel PROGRAM/PREVIEW/volumen y el
+    // scrub de Monitor Preview). grabAct queda sin uso: el feedback de
+    // "activo" ahora lo da la animacion de crecimiento del thumb.
+    (void)grabAct;
+    ImU32 trackCol  = ImGui::ColorConvertFloat4ToU32(frameBg);
+    ImU32 accentCol = ImGui::ColorConvertFloat4ToU32(grab);
+    return DS::ModernSlider(id, val, lo, hi, width, accentCol, trackCol);
 }
 
 void DrawTimeRow(float innerW, float padLeft, int64_t curMs, int64_t lenMs)

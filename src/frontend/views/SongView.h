@@ -1,11 +1,16 @@
 #pragma once
 #include <string>
-#include <filesystem>
-
-struct ImGuiInputTextCallbackData;
+#include <imgui.h>
+#include "SongEditView.h"
 
 namespace ProyecThor::UI {
 
+    // SongView es dueña del swap in-place Browse<->Edit (rework del editor):
+    // Render() muestra la grilla de estrofas (RenderBrowseGrid) o el editor
+    // unificado (m_EditView.Render()) segun m_ShowEditor, nunca los dos, y
+    // nunca en una ventana flotante — mismo espiritu que el toggle
+    // Canciones/Playlists de LibrarySongs.cpp, aplicado aca porque el punto
+    // de entrada real ("Editar") vive en esta clase, no en LibraryPanel.
     class SongView {
     public:
         SongView();
@@ -16,24 +21,23 @@ namespace ProyecThor::UI {
     private:
         std::string m_CurrentSongTitle;
         int         m_ActiveStanzaIndex;
+        bool        m_HasRecordedCurrentSongProjection;
+        float       m_StanzaCardZoom = 1.0f; // slider: agranda/achica las tarjetas de estrofa
 
-        bool        m_ShowEditor;
-        bool        m_OpenEditorPopup;   // Flag diferido: abre el popup en el nivel raiz
-        char        m_EditBuffer[16384];
-        std::string m_EditingFilePath;
-        bool        m_SaveSuccess;
+        bool         m_ShowEditor = false;
+        SongEditView m_EditView;
 
-        char        m_AuthorBuffer[256];
+        // Popup de color por estrofa: se abre una sola vez en el frame del
+        // click (m_OpenColorPickerRequest), no en cada frame mientras esta
+        // abierto — evita pisar el estado interno del popup de ImGui.
+        int         m_ColorPickerForStanza    = -1;
+        bool        m_OpenColorPickerRequest  = false;
+        bool        m_OpenSongSettingsRequest = false;
 
-        bool        m_FocusStanzaPending;
-        int         m_FocusStanzaCharStart;
-        int         m_FocusStanzaCharEnd;
-
-        void RenderEditorModal();
-        bool SaveBufferToFile();
-        void OpenEditorForSong(const std::string& songTitle, const std::string& stanzaText, bool focusStanza);
-
-        static int EditorFocusCallback(ImGuiInputTextCallbackData* data);
+        void RenderBrowseGrid();
+        void RenderSettingsCard(const std::string& songFilename, ImVec2 p_min, ImVec2 p_max, bool isHovered);
+        void RenderSongSettingsPopup(const std::string& songFilename);
+        void RenderStanzaColorBar(const std::string& songFilename, int stanzaIndex, ImVec2 p_min, ImVec2 p_max, float barH);
     };
 
 } // namespace ProyecThor::UI

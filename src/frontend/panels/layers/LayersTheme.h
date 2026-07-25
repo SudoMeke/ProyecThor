@@ -1,9 +1,20 @@
 #pragma once
 #include <imgui.h>
+#include <imgui_internal.h>
+#include <algorithm>
+#include <cmath>
+#include "DesignSystem.h"
+
+namespace ProyecThor::Settings { struct ThemeSettings; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersTheme — paleta de colores y widgets compartidos por todos los tabs
 //  del panel de capas.  Incluir en cada .cpp que necesite dibujar UI.
+//
+//  Los campos no son constexpr: se recalculan en LP::Sync() a partir del
+//  tema activo (ver ProyecThor::UI::DS::SyncFromTheme / MonitorTheme::Sync /
+//  HubTheme::Sync, mismo patron), asi este panel deja de quedar fijo en un
+//  look violeta-oscuro sin importar el preset elegido en Preferencias.
 // ─────────────────────────────────────────────────────────────────────────────
 
 namespace ProyecThor::UI {
@@ -11,39 +22,45 @@ namespace ProyecThor::UI {
 // ── Paleta ────────────────────────────────────────────────────────────────────
 struct LP {  // "Layers Palette"
     // Surfaces
-    static constexpr ImVec4 Base        = {0.07f, 0.08f, 0.10f, 1.0f};
-    static constexpr ImVec4 Surface0    = {0.09f, 0.10f, 0.13f, 1.0f};
-    static constexpr ImVec4 Surface1    = {0.12f, 0.13f, 0.17f, 1.0f};
-    static constexpr ImVec4 Surface2    = {0.16f, 0.17f, 0.22f, 1.0f};
-    static constexpr ImVec4 Surface3    = {0.20f, 0.21f, 0.28f, 1.0f};
+    static inline ImVec4 Base        = {0.07f, 0.08f, 0.10f, 1.0f};
+    static inline ImVec4 Surface0    = {0.09f, 0.10f, 0.13f, 1.0f};
+    static inline ImVec4 Surface1    = {0.12f, 0.13f, 0.17f, 1.0f};
+    static inline ImVec4 Surface2    = {0.16f, 0.17f, 0.22f, 1.0f};
+    static inline ImVec4 Surface3    = {0.20f, 0.21f, 0.28f, 1.0f};
 
     // Borders
-    static constexpr ImVec4 Border      = {0.22f, 0.24f, 0.32f, 0.6f};
-    static constexpr ImVec4 BorderHov   = {0.35f, 0.38f, 0.55f, 0.8f};
+    static inline ImVec4 Border      = {0.22f, 0.24f, 0.32f, 0.6f};
+    static inline ImVec4 BorderHov   = {0.35f, 0.38f, 0.55f, 0.8f};
 
-    // Accent — electric violet-blue
-    static constexpr ImVec4 Accent      = {0.42f, 0.48f, 1.00f, 1.0f};
-    static constexpr ImVec4 AccentHov   = {0.52f, 0.58f, 1.00f, 1.0f};
-    static constexpr ImVec4 AccentDim   = {0.42f, 0.48f, 1.00f, 0.18f};
-    static constexpr ImVec4 AccentActive= {0.32f, 0.38f, 0.90f, 1.0f};
+    // Accent — sigue el acento del tema activo (antes fijo violeta-azul)
+    static inline ImVec4 Accent      = {0.42f, 0.48f, 1.00f, 1.0f};
+    static inline ImVec4 AccentHov   = {0.52f, 0.58f, 1.00f, 1.0f};
+    static inline ImVec4 AccentDim   = {0.42f, 0.48f, 1.00f, 0.18f};
+    static inline ImVec4 AccentActive= {0.32f, 0.38f, 0.90f, 1.0f};
 
-    // Semantic
-    static constexpr ImVec4 Gold        = {0.95f, 0.75f, 0.20f, 1.0f};
-    static constexpr ImVec4 GoldDim     = {0.95f, 0.75f, 0.20f, 0.15f};
-    static constexpr ImVec4 Green       = {0.30f, 0.85f, 0.55f, 1.0f};
-    static constexpr ImVec4 GreenDim    = {0.30f, 0.85f, 0.55f, 0.15f};
-    static constexpr ImVec4 Red         = {0.95f, 0.35f, 0.35f, 1.0f};
-    static constexpr ImVec4 RedDim      = {0.95f, 0.35f, 0.35f, 0.15f};
+    // Semantic — Green/Red siguen success/danger del tema; Gold no tiene
+    // token equivalente en ThemeSettings y queda fijo a proposito (badge de
+    // highlight, ya legible sobre cualquier fondo claro u oscuro).
+    static inline ImVec4 Gold        = {0.95f, 0.75f, 0.20f, 1.0f};
+    static inline ImVec4 GoldDim     = {0.95f, 0.75f, 0.20f, 0.15f};
+    static inline ImVec4 Green       = {0.30f, 0.85f, 0.55f, 1.0f};
+    static inline ImVec4 GreenDim    = {0.30f, 0.85f, 0.55f, 0.15f};
+    static inline ImVec4 Red         = {0.95f, 0.35f, 0.35f, 1.0f};
+    static inline ImVec4 RedDim      = {0.95f, 0.35f, 0.35f, 0.15f};
 
     // Text
-    static constexpr ImVec4 Text        = {0.92f, 0.93f, 0.96f, 1.0f};
-    static constexpr ImVec4 TextSub     = {0.65f, 0.67f, 0.75f, 1.0f};
-    static constexpr ImVec4 TextMuted   = {0.42f, 0.44f, 0.52f, 1.0f};
+    static inline ImVec4 Text        = {0.92f, 0.93f, 0.96f, 1.0f};
+    static inline ImVec4 TextSub     = {0.65f, 0.67f, 0.75f, 1.0f};
+    static inline ImVec4 TextMuted   = {0.42f, 0.44f, 0.52f, 1.0f};
 
     // Tab bar sticky
-    static constexpr ImVec4 TabBar      = {0.08f, 0.09f, 0.12f, 1.0f};
-    static constexpr ImVec4 TabActive   = {0.12f, 0.13f, 0.17f, 1.0f};
-    static constexpr ImVec4 TabInactive = {0.09f, 0.10f, 0.13f, 1.0f};
+    static inline ImVec4 TabBar      = {0.08f, 0.09f, 0.12f, 1.0f};
+    static inline ImVec4 TabActive   = {0.12f, 0.13f, 0.17f, 1.0f};
+    static inline ImVec4 TabInactive = {0.09f, 0.10f, 0.13f, 1.0f};
+
+    // Recalcula toda la paleta de arriba a partir del tema activo. Se llama
+    // desde SettingsManager::ApplyTheme(), junto a DS::SyncFromTheme().
+    static void Sync(const ProyecThor::Settings::ThemeSettings& theme);
 };
 
 // ── Conversion helpers ─────────────────────────────────────────────────────
@@ -142,6 +159,98 @@ inline void LPBadge(ImDrawList* dl, ImVec2 pos, const char* text,
         {pos.x + ts.x + padX, pos.y + ts.y + padY},
         LPU32(bgColor), 5.0f);
     dl->AddText(pos, LPU32(fgColor), text);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Animacion — hover suavizado (mismo patron que IconRail/LibrarySidebar).
+//  Guarda el valor entre frames en el ImGuiStorage del contexto actual.
+// ─────────────────────────────────────────────────────────────────────────────
+inline float LPHoverLerp(ImGuiID id, bool hovered, float speed = 14.0f) {
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* pT = storage->GetFloatRef(id ^ 0x4C50484Cu, 0.0f); // salt "LPHL"
+    float target = hovered ? 1.0f : 0.0f;
+    *pT += (target - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+    return *pT;
+}
+
+// Version por puntero (para animar cualquier float propio, ej. fade de contenido)
+inline float LPApproach(float current, float target, float speed) {
+    return current + (target - current) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Toolbars compactas — boton plano solo-icono, sin titulo (ProPresenter-like).
+// ─────────────────────────────────────────────────────────────────────────────
+using LPDrawIconFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
+
+inline bool LPCornerIconBtn(const char* id, LPDrawIconFn drawIcon, const char* tooltip,
+                            ImVec2 size = {26.0f, 26.0f}, bool active = false) {
+    ImVec4 bg = active ? ImVec4(0.24f, 0.27f, 0.46f, 1.0f) : ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        bg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::Surface2);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  LP::Surface3);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    bool clicked = ImGui::Button(id, size);
+
+    ImVec2 bMin = ImGui::GetItemRectMin();
+    ImVec2 bMax = ImGui::GetItemRectMax();
+    ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+    ImU32 col = active ? LPU32(LP::Accent) : LPU32(LP::TextSub);
+    drawIcon(ImGui::GetWindowDrawList(), center, size.x * 0.42f, col);
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+
+    if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("%s", tooltip);
+    return clicked;
+}
+
+inline void LPDrawPlus(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float s  = r * 0.85f;
+    float th = std::max(1.4f, r * 0.24f);
+    dl->AddLine({c.x - s, c.y}, {c.x + s, c.y}, col, th);
+    dl->AddLine({c.x, c.y - s}, {c.x, c.y + s}, col, th);
+}
+
+inline void LPDrawFolderGlyph(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float w = r * 1.5f, h = r * 1.05f;
+    ImVec2 tl = {c.x - w * 0.5f, c.y - h * 0.32f};
+    dl->AddRectFilled({tl.x, tl.y - h * 0.30f}, {tl.x + w * 0.46f, tl.y + h*0.02f}, col, r * 0.10f);
+    dl->AddRectFilled(tl, {tl.x + w, tl.y + h}, col, r * 0.14f);
+}
+
+inline void LPDrawFolderPlus(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    LPDrawFolderGlyph(dl, {c.x, c.y + r * 0.12f}, r * 0.72f, col);
+    LPDrawPlus(dl, {c.x + r * 0.62f, c.y - r * 0.55f}, r * 0.34f, col);
+}
+
+inline void LPDrawRefresh(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float rad = r * 0.62f;
+    float th  = std::max(1.4f, r * 0.20f);
+    dl->PathArcTo(c, rad, -IM_PI * 0.65f, IM_PI * 0.85f, 20);
+    dl->PathStroke(col, ImDrawFlags_None, th);
+    float ang = IM_PI * 0.85f;
+    ImVec2 tip  = {c.x + rad * std::cos(ang), c.y + rad * std::sin(ang)};
+    ImVec2 perp = {-std::sin(ang), std::cos(ang)};
+    ImVec2 back = {std::cos(ang), std::sin(ang)};
+    float asz = r * 0.42f;
+    dl->AddTriangleFilled(
+        {tip.x + back.x * asz,               tip.y + back.y * asz},
+        {tip.x - perp.x * asz * 0.7f,        tip.y - perp.y * asz * 0.7f},
+        {tip.x + perp.x * asz * 0.7f,        tip.y + perp.y * asz * 0.7f}, col);
+}
+
+// ── Slider compacto para controlar el zoom de las miniaturas (grid) ────────
+// Antes: ImGui::SliderFloat con estilos pisados (barra gruesa, y encima con
+// el acento violeta-azul de LP::Accent, que ya no combina con el tema gris
+// del resto de la app). Ahora rutea a DS::ModernSlider (track fino + thumb
+// circular animado) con los tokens grises de DS::.
+inline bool LPZoomSlider(const char* id, float* zoom, float minZ, float maxZ, float width) {
+    bool changed = ProyecThor::UI::DS::ModernSlider(id, zoom, minZ, maxZ, width);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Tamano de las miniaturas");
+    return changed;
 }
 
 } // namespace ProyecThor::UI

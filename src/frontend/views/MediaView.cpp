@@ -30,29 +30,49 @@ namespace ProyecThor::UI {
         if (selection.title != m_LastSelectedFile) {
             m_LastSelectedFile = selection.title;
 
-            if (selection.type == Core::ItemType::Video) {
+            // FIX (crash en Windows/Wine): la cola del Monitor pasa por
+            // SetSelection(..., fromQueue=true) al arrancar/avanzar cada
+            // item, solo para que el titulo se muestre — no es una eleccion
+            // manual del operador en la Biblioteca. Antes esto no se
+            // distinguia, asi que cada avance de la cola disparaba TAMBIEN
+            // una carga en el reproductor de Preview del mismo archivo que
+            // la cola ya esta reproduciendo/precargando (a la vez que
+            // MonitorView::Render() hacia lo mismo sobre el mismo preview
+            // player) — dos/tres instancias de VLC abriendo el mismo
+            // archivo al mismo tiempo, lo que crasheaba en Windows.
+            bool fromQueue = Core::PresentationCore::Get().IsSelectionFromQueue();
+
+            if (selection.type == Core::ItemType::Video && fromQueue) {
+                // No tocar el preview para nada: ni cargarlo (evita el
+                // choque de instancias de VLC descripto arriba) ni
+                // detenerlo (si el operador tenia otra cosa en preview,
+                // que un avance interno de la cola no se lo pise).
+            } else if (selection.type == Core::ItemType::Video) {
                 if (previewPlayer) {
                     std::string previewPath = selection.title;
-                    
+
                     // Si NO es un enlace de internet, armamos la ruta local
                     if (previewPath.rfind("http", 0) != 0) {
                         previewPath = VideosPath() + previewPath;
                     }
-                    
-                    // Ahora sí reproducimos
-                    previewPlayer->Play(previewPath, true, true);
+
+                    // Carga en un hilo aparte (ver
+                    // PresentationCore::RequestPreviewLoad): el video en
+                    // vivo al publico nunca debe esperar a que el Preview
+                    // termine de abrir un archivo.
+                    Core::PresentationCore::Get().RequestPreviewLoad(previewPath, /*loop=*/true, /*startMuted=*/true);
                     m_IsPlayingPreview = true;
                 }
             } else if (selection.type == Core::ItemType::Image) {
                 if (previewPlayer) {
-                    previewPlayer->Stop();
+                    Core::PresentationCore::Get().RequestPreviewStop();
                     m_IsPlayingPreview = false;
                 }
                 m_ImageView.LoadImageFromFile(ImagesPath() + selection.title);
                 m_ImageView.ResetAdjustments();
             } else {
                 if (previewPlayer) {
-                    previewPlayer->Stop();
+                    Core::PresentationCore::Get().RequestPreviewStop();
                     m_IsPlayingPreview = false;
                 }
                 m_ImageView.Clear();

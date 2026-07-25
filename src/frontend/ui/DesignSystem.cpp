@@ -1,5 +1,6 @@
 #include "DesignSystem.h"
 #include "SettingsManager.h"
+#include "frontend/ui/bin/StyleGeneralApp.h"
 #include <imgui_internal.h>
 #include <cmath>
 #include <algorithm>
@@ -10,54 +11,72 @@ namespace ProyecThor::UI::DS {
 static ImU32 ToU32(const float* v) {
     return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0], v[1], v[2], v[3]));
 }
-static ImU32 ToU32Alpha(const float* v, float a) {
-    return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0], v[1], v[2], a));
+static ImU32 ToU32Opaque(const float* v) {
+    return ImGui::ColorConvertFloat4ToU32(ImVec4(v[0], v[1], v[2], 1.0f));
 }
 
-static ImU32 WithAlpha(ImU32 col, int a)
+// ── BlendOver ────────────────────────────────────────────────────────────
+//  Pre-mezcla un tint semitransparente (tint, alpha) contra un color de
+//  fondo base, y devuelve el resultado como color SOLIDO (alpha=255).
+//  Esto es lo que reemplaza a "poner alpha 255 directo al tint": sin esto,
+//  cualquier tint casi-blanco (como t.textPrimary usado al 6%) se veia
+//  como blanco puro en vez de una insinuacion sutil sobre el fondo.
+static ImU32 BlendOver(const float* tint, float alpha, const float* base)
 {
-    return (col & 0x00FFFFFFu) | (static_cast<ImU32>(std::clamp(a, 0, 255)) << 24);
+    float r = tint[0] * alpha + base[0] * (1.0f - alpha);
+    float g = tint[1] * alpha + base[1] * (1.0f - alpha);
+    float b = tint[2] * alpha + base[2] * (1.0f - alpha);
+    return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, 1.0f));
+}
+
+static ImU32 WithAlpha(ImU32 col, int /*a*/)
+{
+    return (col & 0x00FFFFFFu) | (255u << 24);
 }
 
 void SyncFromTheme(const ProyecThor::Settings::ThemeSettings& t) {
-    // ... (sin cambios, igual que antes)
     TextPrimary   = ToU32(t.textPrimary);
     TextSecondary = ToU32(t.textDim);
     TextHint      = ToU32(t.textFaint);
 
     AccentColor    = ToU32(t.accent);
     AccentLight    = ToU32(t.accentLight);
-    AccentPastel   = ToU32Alpha(t.accentLight, 0.9f);
-    AccentColorDim = ToU32Alpha(t.accent, 0.30f);
-    AccentColorHov = ToU32Alpha(t.accent, 0.78f);
+    AccentPastel   = ToU32Opaque(t.accentLight);
+
+    // Antes: tint low-alpha sobre lo que hubiera debajo. Ahora: pre-mezclado
+    // contra t.base (el fondo real del panel), asi queda opaco pero con el
+    // mismo aspecto visual aproximado.
+    AccentColorDim = BlendOver(t.accent, 0.30f, t.base);
+    AccentColorHov = BlendOver(t.accent, 0.78f, t.base);
 
     DangerColor    = ToU32(t.danger);
-    DangerColorDim = ToU32Alpha(t.danger, 0.25f);
+    DangerColorDim = BlendOver(t.danger, 0.25f, t.base);
     SuccessColor   = ToU32(t.success);
 
-    GlassFillTop   = ToU32Alpha(t.surface1, 0.74f);
-    GlassFillBot   = ToU32Alpha(t.base,     0.82f);
-    GlassTint      = ToU32Alpha(t.accent,   0.07f);
-    GlassBorder    = ToU32Alpha(t.accent,   0.28f);
-    GlassHighlight = ToU32Alpha(t.textPrimary, 0.37f);
-    GlassShadow    = IM_COL32(0, 0, 0, 90);
+    GlassFillTop   = ToU32Opaque(t.surface1);
+    GlassFillBot   = ToU32Opaque(t.base);
+    GlassTint      = IM_COL32(0, 0, 0, 0); // sin uso, ya no hay overlay
+    GlassBorder    = BlendOver(t.accent,      0.28f, t.base);
+    GlassHighlight = BlendOver(t.textPrimary, 0.37f, t.base); // <- el culpable original
+    GlassShadow    = IM_COL32(0, 0, 0, 255);
 
-    RowSelectedFill = ToU32Alpha(t.accent, 0.20f);
+    RowSelectedFill = BlendOver(t.accent,      0.20f, t.base);
     RowSelectedBar  = ToU32(t.accentLight);
-    RowHoverFill    = ToU32Alpha(t.textPrimary, 0.06f);
+    RowHoverFill    = BlendOver(t.textPrimary, 0.06f, t.base); // <- y este tambien
 
-    BtnDefaultFill  = ToU32Alpha(t.textPrimary, 0.06f);
-    BtnDefaultBord  = ToU32Alpha(t.accent, 0.22f);
-    BtnHoverFill    = ToU32Alpha(t.accent, 0.11f);
-    BtnHoverBord    = ToU32Alpha(t.accent, 0.35f);
+    BtnDefaultFill  = BlendOver(t.textPrimary, 0.06f, t.base); // <- este era el peor: fondo de TODOS los botones "default"
+    BtnDefaultBord  = BlendOver(t.accent,      0.22f, t.base);
+    BtnHoverFill    = BlendOver(t.accent,      0.11f, t.base);
+    BtnHoverBord    = BlendOver(t.accent,      0.35f, t.base);
 
-    SepColor        = ToU32Alpha(t.accent, 0.14f);
+    SepColor        = BlendOver(t.accent, 0.14f, t.base);
 }
 
-bool BeginGlassPanel(const char* name, GlassRenderer& glass, bool* open,
+bool BeginGlassPanel(const char* name, GlassRenderer& /*glass*/, bool* open,
                      ImGuiWindowFlags flags, ImVec2 windowPadding)
 {
-    // Ventana completamente transparente — dibujamos nosotros el fondo
+    // Ventana con fondo sólido, dibujado a mano igual que antes, pero
+    // sin la capa de blur ni ningun canal de transparencia.
     ImGui::PushStyleColor(ImGuiCol_WindowBg,    ImVec4(0.f, 0.f, 0.f, 0.f));
     ImGui::PushStyleColor(ImGuiCol_Border,      ImVec4(0.f, 0.f, 0.f, 0.f));
     ImGui::PushStyleColor(ImGuiCol_TitleBg,     ImVec4(0.f, 0.f, 0.f, 0.f));
@@ -75,57 +94,12 @@ bool BeginGlassPanel(const char* name, GlassRenderer& glass, bool* open,
         ImVec2 winMax  = ImVec2(winPos.x + winSize.x, winPos.y + winSize.y);
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        const float W = static_cast<float>(glass.GetScreenWidth());
-        const float H = static_cast<float>(glass.GetScreenHeight());
-
-        // ── 1. Capa de blur (fondo desenfocado capturado) ─────────────────
-        if (W > 0.f && H > 0.f)
-        {
-            // UV con Y invertido (OpenGL)
-            ImVec2 uv0(winPos.x / W,  1.0f - winPos.y / H);
-            ImVec2 uv1(winMax.x / W,  1.0f - winMax.y / H);
-
-            dl->AddImageRounded(
-                static_cast<ImTextureID>(glass.GetBlurredTexture()),
-                winPos, winMax,
-                uv0, uv1,
-                IM_COL32(255, 255, 255, 230),   // α: opacidad del blur
-                RadiusLarge);
-        }
-
-        // ── 2. Capa de color semi-opaca sobre el blur ─────────────────────
-        //    Top más claro (toque azulado) → bottom más oscuro
-        ImU32 bodyTop = IM_COL32( 30,  36,  72, 185); // azul oscuro α≈73%
-        ImU32 bodyBot = IM_COL32( 14,  18,  42, 210); // azul muy oscuro α≈82%
-        dl->AddRectFilledMultiColor(winPos, winMax,
-            bodyTop, bodyTop, bodyBot, bodyBot);
-        // Clip a borde redondeado
-        dl->AddRectFilled(winPos, winMax, IM_COL32(0,0,0,0), RadiusLarge);
-
-        // ── 3. Tint glass (reflejo frío) ───────────────────────────────────
-        dl->AddRectFilled(winPos, winMax, GlassTint, RadiusLarge);
-
-        // ── 4. Borde luminoso exterior ─────────────────────────────────────
+        // Plano: un solo tono de relleno (antes degrade top->bottom) y un
+        // borde fino, sin lineas de brillo/sombra arriba/abajo — ese combo
+        // era el "liquid glass" que se pidio sacar (mismo criterio que
+        // BeginCard en ControlWidgets.cpp).
+        dl->AddRectFilled(winPos, winMax, GlassFillTop, RadiusLarge);
         dl->AddRect(winPos, winMax, GlassBorder, RadiusLarge, 0, 1.0f);
-
-        // ── 5. Highlight especular superior (línea de luz) ─────────────────
-        {
-            float hy  = winPos.y + 1.0f;
-            float hx0 = winPos.x + RadiusLarge;
-            float hx1 = winMax.x - RadiusLarge;
-            if (hx1 > hx0)
-                dl->AddLine(ImVec2(hx0, hy), ImVec2(hx1, hy), GlassHighlight, 1.0f);
-        }
-
-        // ── 6. Sombra suave inferior (borde de profundidad) ────────────────
-        {
-            float sy  = winMax.y - 1.5f;
-            float sx0 = winPos.x + RadiusLarge;
-            float sx1 = winMax.x - RadiusLarge;
-            if (sx1 > sx0)
-                dl->AddLine(ImVec2(sx0, sy), ImVec2(sx1, sy),
-                            IM_COL32(0, 0, 0, 60), 1.5f);
-        }
     }
 
     return visible;
@@ -140,12 +114,75 @@ void EndGlassPanel()
 
 // ── GlassButton ────────────────────────────────────────────────────────────
 
+bool ModernSlider(const char* id, float* value, float minVal, float maxVal,
+                  float width, ImU32 accentOverride, ImU32 trackOverride)
+{
+    ImGuiID     imId   = ImGui::GetID(id);
+    const float w      = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
+    const float thumbR = 7.0f;
+    const float height  = thumbR * 2.0f + 6.0f;
+
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, ImVec2(w, height));
+    bool hovered = ImGui::IsItemHovered();
+    bool active  = ImGui::IsItemActive();
+    bool changed = false;
+
+    if (active && ImGui::IsMouseDown(ImGuiMouseButton_Left) && maxVal > minVal)
+    {
+        float t = std::clamp((ImGui::GetIO().MousePos.x - pos.x) / w, 0.0f, 1.0f);
+        float newVal = minVal + t * (maxVal - minVal);
+        if (newVal != *value) { *value = newVal; changed = true; }
+    }
+
+    // Animacion de hover/drag: el thumb crece un poco (mismo patron que
+    // LPHoverLerp en LayersTheme.h, reimplementado aca para no depender
+    // frontend/ui/ de frontend/panels/layers/).
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* pT = storage->GetFloatRef(imId ^ 0x4D534C44u, 0.0f); // salt "MSLD"
+    float  target = (hovered || active) ? 1.0f : 0.0f;
+    *pT += (target - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    float t = *pT;
+
+    float frac = (maxVal > minVal)
+        ? std::clamp((*value - minVal) / (maxVal - minVal), 0.0f, 1.0f)
+        : 0.0f;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float cy = pos.y + height * 0.5f;
+    const float trackH = 4.0f;
+
+    ImU32 trackCol = trackOverride ? trackOverride : IM_COL32(255, 255, 255, 26);
+    ImU32 fillCol  = accentOverride ? accentOverride : AccentColor;
+
+    dl->AddRectFilled({ pos.x, cy - trackH * 0.5f }, { pos.x + w, cy + trackH * 0.5f },
+                      trackCol, trackH * 0.5f);
+
+    float fillW = w * frac;
+    if (fillW > 0.5f)
+        dl->AddRectFilled({ pos.x, cy - trackH * 0.5f }, { pos.x + fillW, cy + trackH * 0.5f },
+                          fillCol, trackH * 0.5f);
+
+    float thumbRadius = thumbR * (1.0f + 0.2f * t);
+    ImVec2 thumbCenter = { pos.x + fillW, cy };
+
+    if (t > 0.01f) {
+        ImU32 haloAlpha = ((ImU32)std::clamp((int)(50.0f * t), 0, 255)) << 24;
+        ImU32 haloCol   = (fillCol & 0x00FFFFFFu) | haloAlpha;
+        dl->AddCircleFilled(thumbCenter, thumbRadius + 5.0f * t, haloCol, 20);
+    }
+
+    dl->AddCircleFilled(thumbCenter, thumbRadius, fillCol, 20);
+    dl->AddCircle(thumbCenter, thumbRadius, IM_COL32(0, 0, 0, 70), 20, 1.3f);
+
+    return changed;
+}
+
 bool GlassButton(const char* label, const ImVec2& size, ImU32 accent)
 {
     ImVec2 sz = size;
     ImVec2 textSize = ImGui::CalcTextSize(label, nullptr, true);
 
-    // Auto-size: margen horizontal generoso, altura mínima
     if (sz.x <= 0.0f) sz.x = textSize.x + 32.0f;
     if (sz.y <= 0.0f) sz.y = ButtonHeight;
 
@@ -160,46 +197,77 @@ bool GlassButton(const char* label, const ImVec2& size, ImU32 accent)
     ImVec2 bMin = cursor;
     ImVec2 bMax = ImVec2(cursor.x + sz.x, cursor.y + sz.y);
 
-    // ── Fondo del botón ────────────────────────────────────────────────────
-    ImU32 bgTop, bgBot, border, highlight;
+    ImU32 bg, border;
 
     if (active) {
-        // Presionado: fondo de acento sólido
-        bgTop     = WithAlpha(accent, 230);
-        bgBot     = WithAlpha(accent, 200);
-        border    = WithAlpha(accent, 255);
-        highlight = IM_COL32(255, 255, 255, 120);
+        bg     = WithAlpha(accent, 255);
+        border = WithAlpha(accent, 255);
     } else if (hovered) {
-        // Hover: translúcido más visible + borde más brillante
-        bgTop     = IM_COL32(255, 255, 255, 38);
-        bgBot     = IM_COL32(255, 255, 255, 22);
-        border    = BtnHoverBord;
-        highlight = GlassHighlight;
+        bg     = BtnHoverFill;
+        border = BtnHoverBord;
     } else {
-        // Reposo: glass muy sutil
-        bgTop     = IM_COL32(255, 255, 255, 22);
-        bgBot     = IM_COL32(255, 255, 255, 10);
-        border    = BtnDefaultBord;
-        highlight = WithAlpha(GlassHighlight, 60);
+        bg     = BtnDefaultFill;
+        border = BtnDefaultBord;
     }
 
-    // Gradiente vertical
-    dl->AddRectFilledMultiColor(bMin, bMax, bgTop, bgTop, bgBot, bgBot);
-    // Borde
+    // Plano: un solo tono de relleno y borde fino, sin la linea de brillo
+    // superior (era parte del look "liquid glass" que se pidio sacar).
+    dl->AddRectFilled(bMin, bMax, bg, RadiusMedium);
     dl->AddRect(bMin, bMax, border, RadiusMedium, 0, 1.0f);
-    // Highlight superior
-    float hx0 = bMin.x + RadiusMedium;
-    float hx1 = bMax.x - RadiusMedium;
-    if (hx1 > hx0)
-        dl->AddLine(ImVec2(hx0, bMin.y + 0.5f), ImVec2(hx1, bMin.y + 0.5f),
-                    highlight, 1.0f);
 
-    // ── Texto centrado ─────────────────────────────────────────────────────
     ImU32 textCol = active ? IM_COL32(255, 255, 255, 255) : TextPrimary;
     ImVec2 tp(
         bMin.x + std::floor((sz.x - textSize.x) * 0.5f),
         bMin.y + std::floor((sz.y - textSize.y) * 0.5f));
     dl->AddText(tp, textCol, label);
+
+    return clicked;
+}
+
+// ── GlassIconButton ─────────────────────────────────────────────────────────
+// Extraida de LibrarySongs.cpp (ver comentario en DesignSystem.h) — misma
+// implementacion exacta, sin cambios de comportamiento.
+bool GlassIconButton(const char* id,
+                      const char* iconKey,
+                      const char* fallbackGlyph,
+                      const char* tooltip,
+                      ImVec2      size,
+                      ImVec4      tint)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, RadiusMedium);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImGui::ColorConvertU32ToFloat4(BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(AccentColor));
+    ImGui::PushStyleColor(ImGuiCol_Text,          tint);
+
+    auto it = StyleGeneralApp::Icons.find(iconKey);
+    bool hasIcon = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
+    std::string label = (hasIcon ? "" : std::string(fallbackGlyph)) + "##" + id;
+
+    bool clicked = ImGui::Button(label.c_str(), size);
+
+    if (hasIcon) {
+        ImVec2 bMin = ImGui::GetItemRectMin();
+        ImVec2 bMax = ImGui::GetItemRectMax();
+
+        const float minSide  = std::min(size.x, size.y);
+        const float iconSide = minSide * 0.48f;
+        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+        const ImVec2 pMin    = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
+        const ImVec2 pMax    = { center.x + iconSide * 0.5f, center.y + iconSide * 0.5f };
+
+        ImGui::GetWindowDrawList()->AddImage(
+            it->second.textureID,
+            pMin, pMax,
+            ImVec2(0, 0), ImVec2(1, 1),
+            ImGui::ColorConvertFloat4ToU32(tint));
+    }
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar();
+
+    if (tooltip && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tooltip);
 
     return clicked;
 }
@@ -211,7 +279,6 @@ bool GlassListRow(const char* label, bool selected, float indent, float height)
     ImVec2 cursor = ImGui::GetCursorScreenPos();
     float  rowW   = ImGui::GetContentRegionAvail().x;
 
-    // ID único basado en label + posición
     ImGui::PushID(label);
     bool clicked = ImGui::InvisibleButton("##row", ImVec2(rowW, height));
     bool hovered = ImGui::IsItemHovered();
@@ -221,21 +288,17 @@ bool GlassListRow(const char* label, bool selected, float indent, float height)
     ImVec2 rMin = cursor;
     ImVec2 rMax = ImVec2(cursor.x + rowW, cursor.y + height);
 
-    // ── Fondo de fila ──────────────────────────────────────────────────────
     if (selected) {
-        // Degradado sutil del acento
-        dl->AddRectFilledMultiColor(rMin, rMax,
-            IM_COL32( 99, 112, 255, 65), IM_COL32( 99, 112, 255, 45),
-            IM_COL32( 99, 112, 255, 35), IM_COL32( 99, 112, 255, 55));
+        // Plano: mismo tratamiento sutil que SongListRow (un solo tono
+        // translucido en vez del relleno solido "liquid glass" anterior).
+        dl->AddRectFilled(rMin, rMax, IM_COL32(99, 112, 255, 42));
 
-        // Barra lateral indicadora
         dl->AddRectFilled(
             rMin,
             ImVec2(rMin.x + 3.0f, rMax.y),
             RowSelectedBar,
             1.5f);
 
-        // Borde inferior sutil
         dl->AddLine(
             ImVec2(rMin.x + 4.0f, rMax.y - 0.5f),
             ImVec2(rMax.x,        rMax.y - 0.5f),
@@ -243,11 +306,9 @@ bool GlassListRow(const char* label, bool selected, float indent, float height)
 
     } else if (hovered) {
         dl->AddRectFilled(rMin, rMax, RowHoverFill, RadiusSmall * 0.5f);
-        // Borde sutil al hover
         dl->AddRect(rMin, rMax, IM_COL32(255, 255, 255, 18), RadiusSmall * 0.5f, 0, 0.5f);
     }
 
-    // ── Texto alineado verticalmente ───────────────────────────────────────
     ImFont* font = ImGui::GetFont();
     float fontSize     = ImGui::GetFontSize();
     ImVec2 textSz      = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label);
@@ -270,22 +331,12 @@ void GlassSeparator(float thickness)
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Gradiente: transparente → visible → transparente
-    float mid = p.x + w * 0.5f;
-    dl->AddRectFilledMultiColor(
+    // Antes tenia un degrade a transparente en los extremos; ahora es una
+    // linea solida pareja.
+    dl->AddRectFilled(
         ImVec2(p.x,   p.y),
-        ImVec2(mid,   p.y + thickness),
-        IM_COL32(255,255,255,0),
-        IM_COL32(255,255,255,40),
-        IM_COL32(255,255,255,40),
-        IM_COL32(255,255,255,0));
-    dl->AddRectFilledMultiColor(
-        ImVec2(mid,   p.y),
         ImVec2(p.x+w, p.y + thickness),
-        IM_COL32(255,255,255,40),
-        IM_COL32(255,255,255,0),
-        IM_COL32(255,255,255,0),
-        IM_COL32(255,255,255,40));
+        SepColor);
 
     ImGui::Dummy(ImVec2(w, thickness + 2.0f));
 }
@@ -301,20 +352,15 @@ void GlassSectionHeader(const char* label)
     ImVec2 textSz = ImGui::CalcTextSize(label);
     float lineY   = p.y + textSz.y * 0.5f;
 
-    // Texto
     dl->AddText(p, TextHint, label);
 
-    // Línea decorativa a la derecha
     float lx0 = p.x + textSz.x + 8.0f;
     float lx1 = p.x + w;
     if (lx1 > lx0)
-        dl->AddRectFilledMultiColor(
+        dl->AddRectFilled(
             ImVec2(lx0, lineY),
             ImVec2(lx1, lineY + 1.0f),
-            IM_COL32(255,255,255,30),
-            IM_COL32(255,255,255,0),
-            IM_COL32(255,255,255,0),
-            IM_COL32(255,255,255,30));
+            SepColor);
 
     ImGui::Dummy(ImVec2(w, textSz.y + 6.0f));
 }

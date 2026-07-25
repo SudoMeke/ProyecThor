@@ -6,6 +6,8 @@
 #include <cstring>
 #include "frontend/views/Audio.h"
 #include "frontend/views/DocumentView.h"
+#include "frontend/views/OClock.h"
+#include "StreamingPanel.h"
 #include "IPanel.h"
 #include "biblio/LibraryContext.h"
 
@@ -21,6 +23,15 @@ enum class LibraryCategory {
     Bibles,
     Documents,
     Audio
+};
+
+// Grupo aparte, abajo del todo en el sidebar izquierdo (ver LibrarySidebar.cpp),
+// separado de las categorias de contenido de arriba por una linea. No toca
+// LibraryCategory/m_CurrentCategory -- es un modo de vista independiente.
+enum class LibrarySideMode {
+    Categories = 0,
+    Streaming  = 1, // "Red" — antes vivia en ViewToolsPanel
+    Clock      = 2, // "Reloj" — antes vivia en ViewToolsPanel
 };
 
 class LibraryPanel : public IPanel {
@@ -65,6 +76,14 @@ private:
     DocumentView              m_DocumentView;
     std::string              m_LoadedDocPath;
 
+    // ── Grupo "Red"/"Reloj" del sidebar (ver LibrarySideMode) ────────────
+    // Mudados desde ViewToolsPanel: la propiedad de OClock/StreamingPanel
+    // (y el registro en PresentationCore::SetOClockRef) se movio junto con
+    // el boton, para que ambos vivan donde el operador los usa ahora.
+    LibrarySideMode m_SideMode = LibrarySideMode::Categories;
+    OClock          m_OClock;
+    StreamingPanel  m_StreamingPanel;
+
     bool m_ShowSongEditor = false;
     char m_EditTitle  [256]{};
     char m_EditContent[8192]{};
@@ -80,7 +99,12 @@ private:
     char        m_RenameBuffer[512]{};
     bool        m_RenameIsURL       = false;
     int         m_RenameURLIndex    = -1;
+bool        m_ShowPlaylistsTab   = false;
+    std::string m_ActivePlaylistName;
+    int         m_ActivePlaylistIndex = -1;
+    char        m_EditTags[256]{};
 
+    void SelectPlaylistSong(const std::string& playlistName, int index);
     // ── Toast "archivo en uso" ───────────────────────────────────────────
     // Aviso temporal que aparece cuando DeleteSelectedItem() no logra
     // eliminar un archivo porque sigue bloqueado por otro subsistema

@@ -1,5 +1,4 @@
 #pragma once
-#include "IPanel.h"
 #include "styles/CanvaStyleEditor.h"
 #include <string>
 #include <memory>
@@ -8,13 +7,15 @@ namespace ProyecThor::UI {
 
 class LayersStyleTab; // Tu clase original que renderiza los estilos
 
-class CanvasStylesPanel : public IPanel {
+// Ya no es un IPanel independiente: vive como seccion del sidebar del hub de
+// Diseño (ver StylesHubPanel.h/.cpp).
+class CanvasStylesPanel {
 public:
     CanvasStylesPanel();
-    ~CanvasStylesPanel() override;
+    ~CanvasStylesPanel();
 
-    void Render() override;
-    std::string GetName() const override { return "Estilos"; }
+    void RenderContent();
+    std::string GetName() const { return "Estilos"; }
 
 private:
     std::unique_ptr<LayersStyleTab> m_StyleTab;

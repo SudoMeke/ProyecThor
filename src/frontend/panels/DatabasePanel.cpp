@@ -3,6 +3,8 @@
 // Ajusta esta ruta al lugar real donde tengas AssetsPath.h en tu proyecto.
 // Expone ProyecThor::SongsPath() -> "%APPDATA%/ProyecThor/assets/songs/"
 #include "../src/backend/core/AppPaths.h"
+#include "frontend/ui/DesignSystem.h"
+#include "ControlWidgets.h"
 
 #include <imgui.h>
 #include <filesystem>
@@ -201,9 +203,9 @@ void DatabasePanel::Render()
         }
         else
         {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.369f, 0.420f, 1.000f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.500f, 0.550f, 1.000f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.280f, 0.330f, 0.860f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button,        ToVec4(ColA(DS::AccentColor, 217)));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::AccentColorHov));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ToVec4(DS::AccentColor));
         }
 
         if (ImGui::Button(label, ImVec2(110.f, 0.f)))

@@ -1,5 +1,6 @@
 #include "TabTypography.h"
 #include "backend/core/AppPaths.h"
+#include "DesignSystem.h"
 #include <imgui.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -152,14 +153,7 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
     ImGui::Text("Tamanio inicial   %.0f px", data.textSize);
     ImGui::PopStyleColor();
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,         CanvaPalette::Surface1);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       CanvaPalette::Accent);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, CanvaPalette::AccentHov);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-    ImGui::SetNextItemWidth(colWidth);
-    ImGui::SliderFloat("##editSize", &data.textSize, 20.0f, 300.0f, "");
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
+    DS::ModernSlider("##editSize", &data.textSize, 20.0f, 300.0f, colWidth);
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
@@ -168,14 +162,7 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
     ImGui::Text("Referencia (nombre + version)   %.0f px", data.refTextSize);
     ImGui::PopStyleColor();
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,         CanvaPalette::Surface1);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       CanvaPalette::Accent);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, CanvaPalette::AccentHov);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-    ImGui::SetNextItemWidth(colWidth);
-    ImGui::SliderFloat("##editRefSize", &data.refTextSize, 10.0f, 200.0f, "");
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
+    DS::ModernSlider("##editRefSize", &data.refTextSize, 10.0f, 200.0f, colWidth);
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
@@ -184,14 +171,7 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
     ImGui::Text("Versiculo (cuerpo del texto)   %.0f px", data.verseTextSize);
     ImGui::PopStyleColor();
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,         CanvaPalette::Surface1);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       CanvaPalette::Accent);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, CanvaPalette::AccentHov);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-    ImGui::SetNextItemWidth(colWidth);
-    ImGui::SliderFloat("##editVerseSize", &data.verseTextSize, 10.0f, 300.0f, "");
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
+    DS::ModernSlider("##editVerseSize", &data.verseTextSize, 10.0f, 300.0f, colWidth);
 }
 
 void TabTypography::RenderAutoScaleCheckbox(StyleData& data) {

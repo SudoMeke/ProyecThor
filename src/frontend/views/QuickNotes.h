@@ -4,23 +4,39 @@
 
 namespace ProyecThor::UI {
 
-    class QuickNotes {
-    public:
-        QuickNotes();
-        ~QuickNotes();
+// Mismo esquema que OClockTransmitMode: reutilizarlo tal cual evitaria
+// duplicacion, pero lo declaro aparte para no acoplar OClock <-> QuickNotes.
+enum class QuickNoteTransmitMode {
+    Off,
+    MainOnly,
+    LANOnly,
+    Both
+};
 
-        std::string GetName() const;
-        void Render();
+class QuickNotes {
+public:
+    QuickNotes();
+    ~QuickNotes();
 
-    private:
-        // Envia el texto del buffer al PresentationCore,
-        // identico a SetLayer2_Text() en SongView.
-        void PushToCore();
+    std::string GetName() const;
+    void Render();
 
-        static const size_t MAX_NOTE_LENGTH = 1024;
-        std::array<char, MAX_NOTE_LENGTH> m_TextBuffer{};
+private:
+    void PushToCore();
+    void ClearFromCore();
+    void SyncTransmission();      // <-- nuevo: reemplaza el push directo
+    void RenderTransmitCards();   // <-- nuevo: UI tipo tarjetas (igual a OClock)
+    void RenderStyleSelector();   // <-- nuevo
 
-        bool m_IsLive;
-    };
+    std::array<char, 4096> m_TextBuffer{};
+    bool m_IsLive = false;
+
+    // ── Transmision ───────────────────────────────────────────────────
+    QuickNoteTransmitMode m_TransmitMode     = QuickNoteTransmitMode::Off;
+    QuickNoteTransmitMode m_PrevTransmitMode = QuickNoteTransmitMode::Off;
+
+    // ── Estilo predeterminado (igual criterio que OClock) ──────────────
+    std::string m_StyleName; // vacio = usar el estilo activo actual
+};
 
 } // namespace ProyecThor::UI

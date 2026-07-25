@@ -1,5 +1,6 @@
 #include "StreamingPanel.h"
 #include "backend/core/PresentationCore.h"
+#include "SettingsManager.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -11,8 +12,6 @@
 #include <string>
 #include <algorithm>
 
-#include "stb_image_write.h"
-
 #if __has_include("qrcodegen.hpp")
 #   define PROYECTHOR_HAS_QRCODEGEN 1
 #   include "qrcodegen.hpp"
@@ -21,19 +20,40 @@
 namespace ProyecThor::UI {
 
 // ── Paleta Mejorada (Estilo Cinemático/Premium) ───────────────────────────────
+// kAccent/kGreen/kRed quedan fijos a proposito: identidad visual de esta
+// seccion (azul), igual criterio que ViewToolsSettings::categoryColor.
+// kSurface*/kGray* si se recalculan en SyncPalette() a partir del tema
+// activo: eran fondos/texto fijos que quedaban negros sobre cualquier tema.
 static constexpr ImVec4 kGreen      = { 0.15f, 0.85f, 0.45f, 1.0f };
 static constexpr ImVec4 kRed        = { 0.90f, 0.25f, 0.30f, 1.0f };
-static constexpr ImVec4 kGrayDim    = { 0.45f, 0.47f, 0.55f, 1.0f };
-static constexpr ImVec4 kGrayText   = { 0.65f, 0.68f, 0.75f, 1.0f };
+static ImVec4 kGrayDim    = { 0.45f, 0.47f, 0.55f, 1.0f };
+static ImVec4 kGrayText   = { 0.65f, 0.68f, 0.75f, 1.0f };
 static constexpr ImVec4 kAccent     = { 0.25f, 0.55f, 1.00f, 1.0f };
 static constexpr ImVec4 kAccentLow  = { 0.25f, 0.55f, 1.00f, 0.15f };
-static constexpr ImVec4 kSurface    = { 0.05f, 0.06f, 0.08f, 1.0f };
-static constexpr ImVec4 kSurface2   = { 0.10f, 0.11f, 0.15f, 1.0f };
-static constexpr ImVec4 kSurface3   = { 0.13f, 0.15f, 0.20f, 1.0f };
+static ImVec4 kSurface    = { 0.05f, 0.06f, 0.08f, 1.0f };
+static ImVec4 kSurface2   = { 0.10f, 0.11f, 0.15f, 1.0f };
+static ImVec4 kSurface3   = { 0.13f, 0.15f, 0.20f, 1.0f };
 
 static ImU32 Col(ImVec4 v)  { return ImGui::ColorConvertFloat4ToU32(v); }
 static ImU32 ColA(ImVec4 v, float a) {
     v.w = a; return ImGui::ColorConvertFloat4ToU32(v);
+}
+
+static ImVec4 BlendOver(const float* tint, float alpha, const float* base) {
+    return ImVec4(
+        tint[0] * alpha + base[0] * (1.0f - alpha),
+        tint[1] * alpha + base[1] * (1.0f - alpha),
+        tint[2] * alpha + base[2] * (1.0f - alpha),
+        1.0f);
+}
+
+static void SyncPalette() {
+    const auto& t = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
+    kSurface  = ImVec4(t.surface0[0], t.surface0[1], t.surface0[2], t.surface0[3]);
+    kSurface2 = ImVec4(t.surface1[0], t.surface1[1], t.surface1[2], t.surface1[3]);
+    kSurface3 = ImVec4(t.surface2[0], t.surface2[1], t.surface2[2], t.surface2[3]);
+    kGrayText = ImVec4(t.textDim[0], t.textDim[1], t.textDim[2], t.textDim[3]);
+    kGrayDim  = BlendOver(t.textPrimary, 0.35f, t.base);
 }
 
 // ── Efectos Visuales (Sombras y Gradientes) ───────────────────────────────────
@@ -47,16 +67,10 @@ static void DrawSoftShadow(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float rounding)
     }
 }
 
-// ── stb callback ──────────────────────────────────────────────────────────────
-static void StbCb(void* ctx, void* data, int size)
-{
-    auto* buf = static_cast<std::vector<uint8_t>*>(ctx);
-    const uint8_t* p = static_cast<const uint8_t*>(data);
-    buf->insert(buf->end(), p, p + size);
-}
-
 // ── CaptureAndPushFrame ───────────────────────────────────────────────────────
-// ── CaptureAndPushFrame ───────────────────────────────────────────────────────
+// La lectura de GPU (RenderProjectorToFBO, via PBO doble) es barata y se
+// queda en el hilo de render. El encode JPEG se delega al FrameEncodeWorker
+// (hilo dedicado) para que no bloquee ese mismo hilo — ver FrameEncodeWorker.h.
 void StreamingPanel::CaptureAndPushFrame(int w, int h, int quality)
 {
     if (w <= 0 || h <= 0) return;
@@ -65,15 +79,10 @@ void StreamingPanel::CaptureAndPushFrame(int w, int h, int quality)
     std::vector<uint8_t> rgb;
     if (!core.RenderProjectorToFBO(w, h, rgb)) return;
 
-    // Se eliminó la inversión manual (flipped). 
-    // Pasamos el buffer rgb directamente, ahorrando CPU y RAM en cada frame.
-    std::vector<uint8_t> jpeg;
-    jpeg.reserve(static_cast<size_t>(w) * h / 4);
-    
-    // Escribimos directamente desde rgb.data()
-    stbi_write_jpg_to_func(StbCb, &jpeg, w, h, 3, rgb.data(), quality);
-
-    core.PushFrame(std::move(jpeg));
+    m_EncodeWorker.SubmitFrame(std::move(rgb), w, h, quality,
+        [](std::vector<uint8_t> jpeg) {
+            Core::PresentationCore::Get().PushFrame(std::move(jpeg));
+        });
 }
 
 // ── RebuildQR ─────────────────────────────────────────────────────────────────
@@ -141,7 +150,7 @@ void StreamingPanel::DrawQR(ImDrawList* dl, ImVec2 origin, float size)
             float y0 = origin.y + pad + row * cell + 0.5f;
             float x1 = x0 + cell - 1.0f;
             float y1 = y0 + cell - 1.0f;
-            dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), IM_COL32(15, 18, 26, 255), 1.5f);
+            dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), Col(kSurface2), 1.5f);
         }
     }
 }
@@ -168,41 +177,64 @@ static void SectionDivider(const char* label)
     dl->AddText(ImVec2(tx, pos.y), Col(kAccent), label);
     ImGui::Dummy(ImVec2(w, ts.y + 12.0f));
 }
+// Frecuencia de CAPTURA deseada segun el modo activo. Debe calzar con el
+// ritmo al que realmente se va a enviar, para no gastar CPU comprimiendo
+// frames que nunca se transmiten a tiempo (o que quedan obsoletos antes
+// de salir por /stream), y para que el modo Ultra reciba un frame nuevo
+// justo cuando el pacing del servidor lo necesita.
+static int DesiredCaptureFPS(const Core::StreamConfig& cfg)
+{
+    switch (cfg.videoMode) {
+        case Core::StreamConfig::VideoMode::UltraStable:
+            return std::clamp(cfg.targetFPS, 24, 60);
+        case Core::StreamConfig::VideoMode::HighQuality:
+            return 30;
+        case Core::StreamConfig::VideoMode::LowLatency:
+        default:
+            // El cliente solo pollea /frame cada ~150-500ms; capturar mas
+            // rapido que eso es trabajo tirado.
+            return 8;
+    }
+}
 
-// ── Render ────────────────────────────────────────────────────────────────────
-void StreamingPanel::Render()
+void StreamingPanel::Update()
 {
     auto& core  = Core::PresentationCore::Get();
     auto  state = core.GetState();
 
-    if (state.isStreamingNet && m_Config.sendBackground)
-        CaptureAndPushFrame(m_Config.frameWidth, m_Config.frameHeight, m_Config.jpegQuality);
+    if (state.isStreamingNet && m_Config.sendBackground) {
+        double now      = ImGui::GetTime();
+        int    fps      = DesiredCaptureFPS(m_Config);
+        double interval = 1.0 / static_cast<double>(fps);
+
+        if (now - m_LastCaptureTime >= interval) {
+            m_LastCaptureTime = now;
+            CaptureAndPushFrame(m_Config.frameWidth, m_Config.frameHeight, m_Config.jpegQuality);
+        }
+    }
 
     if (state.isStreamingNet)
         RebuildQRTexture(state.networkURL);
     else if (!m_QRCachedURL.empty())
         RebuildQRTexture("");
+}
 
-    // Configuración limpia del contenedor principal sin forzar espaciados rotos
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, kSurface);
+void StreamingPanel::RenderContent()
+{
+    SyncPalette();
+    auto& core  = Core::PresentationCore::Get();
+    auto  state = core.GetState();
+
+    // Activamos la región del Child permitiendo scroll automático
     ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0,0,0,0));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ColA(kGrayText, 0.2f));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ColA(kAccent, 0.5f));
-
-    bool open = ImGui::Begin("Transmisión en Red", nullptr, ImGuiWindowFlags_NoCollapse);
-    ImGui::PopStyleColor(4);
-
-    if (!open) { ImGui::End(); return; }
-
-    // Aplicamos el padding de forma nativa a la subregión de Scroll
-    const float PAD = 24.0f;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(PAD, PAD));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(10.0f, 10.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6.0f);
 
-    // Activamos la región del Child permitiendo scroll automático
     ImGui::BeginChild("##scroll_area", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None);
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(3);
 
     RenderServerControl();
     RenderLayerSelector();
@@ -214,7 +246,6 @@ void StreamingPanel::Render()
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f)); // Espacio final respiratorio
     ImGui::EndChild();
-    ImGui::End();
 }
 
 // ── RenderServerControl ───────────────────────────────────────────────────────
@@ -236,8 +267,8 @@ void StreamingPanel::RenderServerControl()
 
     DrawSoftShadow(dl, p0, p1, 10.0f);
 
-    ImU32 bg  = on ? Col(ImVec4(0.12f, 0.22f, 0.16f, 1.0f)) : Col(kSurface2);
-    ImU32 bdr = on ? IM_COL32(60, 200, 100, 80) : IM_COL32(255, 255, 255, 12);
+    ImU32 bg  = on ? ColA(kGreen, 0.16f) : Col(kSurface2);
+    ImU32 bdr = on ? ColA(kGreen, 0.31f) : ColA(kGrayText, 0.15f);
     dl->AddRectFilled(p0, p1, bg, 10.0f);
     dl->AddRect(p0, p1, bdr, 10.0f, 0, 1.5f);
 
@@ -271,7 +302,7 @@ void StreamingPanel::RenderServerControl()
     ImGui::SetNextItemWidth(portW);
     
     ImGui::BeginDisabled(on);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.02f, 0.03f, 0.05f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, kSurface);
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
@@ -460,7 +491,6 @@ void StreamingPanel::RenderLayerSelector()
     }
 }
 
-// ── RenderQualitySelector ─────────────────────────────────────────────────────
 void StreamingPanel::RenderQualitySelector()
 {
     auto& core = Core::PresentationCore::Get();
@@ -470,25 +500,33 @@ void StreamingPanel::RenderQualitySelector()
     ImGui::Dummy(ImVec2(0.0f, 15.0f));
     SectionDivider("MODO DE TRANSMISIÓN");
 
-    bool isHQ = (m_Config.videoMode == Core::StreamConfig::VideoMode::HighQuality);
+    using VM = Core::StreamConfig::VideoMode;
 
     struct Card {
         const char* id; const char* title; const char* sub1; const char* sub2;
-        bool active; Core::StreamConfig::VideoMode mode;
-    } cards[2] = {
-        { "##ll", "Bajo Consumo",  "~150 ms latencia", "Polling (Dispositivos lentos)",  !isHQ, Core::StreamConfig::VideoMode::LowLatency  },
-        { "##hq", "Alta Calidad",  "< 33 ms latencia", "MJPEG Fluido (Recomendado)",      isHQ, Core::StreamConfig::VideoMode::HighQuality },
+        bool active; VM mode;
+    } cards[3] = {
+        { "##ll", "Bajo Consumo", "~150 ms latencia",
+          "Polling (dispositivos lentos)",
+          m_Config.videoMode == VM::LowLatency,  VM::LowLatency  },
+        { "##hq", "Alta Calidad", "< 33 ms latencia",
+          "MJPEG fluido (recomendado)",
+          m_Config.videoMode == VM::HighQuality, VM::HighQuality },
+        { "##us", "Ultra Estable", "Mas delay, cero cortes",
+          "MJPEG a FPS fijo + nitidez maxima",
+          m_Config.videoMode == VM::UltraStable, VM::UltraStable },
     };
 
-    float cardW = (w - 12.0f) * 0.5f;
-    float cardH = 85.0f;
+    float gap   = 10.0f;
+    float cardW = (w - gap * 2.0f) / 3.0f;
+    float cardH = 90.0f;
 
     float startSelectorLocalY = ImGui::GetCursorPosY();
     ImVec2 baseScreenPos = ImGui::GetCursorScreenPos();
 
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         auto& c = cards[i];
-        float localX = (i == 0) ? 0.0f : cardW + 12.0f;
+        float localX = i * (cardW + gap);
 
         ImVec2 p0 = ImVec2(baseScreenPos.x + localX, baseScreenPos.y);
         ImVec2 p1 = ImVec2(p0.x + cardW, p0.y + cardH);
@@ -508,35 +546,75 @@ void StreamingPanel::RenderQualitySelector()
             dl->AddRectFilled(p0, ImVec2(p1.x, p0.y + 4.0f), Col(kAccent), 12.0f, ImDrawFlags_RoundCornersTop);
         }
 
-        // Posicionamiento local del botón invisible para evitar solapamientos rotos
         ImGui::SetCursorPos(ImVec2(localX, startSelectorLocalY));
         ImGui::InvisibleButton(c.id, ImVec2(cardW, cardH));
-        
+
         bool hovered = ImGui::IsItemHovered();
         bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
-        if (hovered && !c.active) {
+        if (hovered && !c.active)
             dl->AddRectFilled(p0, p1, ColA(kAccent, 0.05f), 12.0f);
-        }
 
         float lh = ImGui::GetTextLineHeight();
-        float py = p0.y + 14.0f;
-        float px = p0.x + 14.0f;
+        float py = p0.y + 12.0f;
+        float px = p0.x + 12.0f;
 
         dl->AddText(ImVec2(px, py), c.active ? Col(kAccent) : Col(kGrayText), c.title);
-        py += lh + 6.0f;
+        py += lh + 5.0f;
         dl->AddText(ImVec2(px, py), Col(kGrayDim), c.sub1);
-        py += lh + 4.0f;
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f, ImVec2(px, py), 
-            ColA(kGrayDim, 0.7f), c.sub2, nullptr, cardW - 20.0f);
+        py += lh + 3.0f;
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.82f, ImVec2(px, py),
+            ColA(kGrayDim, 0.7f), c.sub2, nullptr, cardW - 16.0f);
 
         if (!c.active && clicked) {
             m_Config.videoMode = c.mode;
+            // Al entrar a Ultra, subimos la calidad por defecto a un piso
+            // alto (el usuario puede bajarla despues si su red no aguanta).
+            if (c.mode == VM::UltraStable && m_Config.jpegQuality < 92)
+                m_Config.jpegQuality = 95;
             m_ConfigDirty = true;
         }
     }
 
     ImGui::SetCursorPosY(startSelectorLocalY + cardH);
+
+    // ── Selector de FPS, solo visible/relevante en modo Ultra ─────────────
+    if (m_Config.videoMode == VM::UltraStable) {
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        ImGui::TextColored(kGrayText, "Cuadros por segundo:");
+        ImGui::SameLine(0.0f, 10.0f);
+
+        bool is30 = (m_Config.targetFPS == 30);
+        bool is60 = (m_Config.targetFPS == 60);
+
+        auto fpsButton = [&](const char* label, int fps, bool active) {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                active ? ColA(kAccent, 0.35f) : Col(kSurface2));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(kAccent, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_Text, active ? kAccent : kGrayText);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            bool clicked = ImGui::Button(label, ImVec2(64.0f, 28.0f));
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+            if (clicked && m_Config.targetFPS != fps) {
+                m_Config.targetFPS = fps;
+                m_ConfigDirty = true;
+            }
+        };
+
+        fpsButton("30 FPS", 30, is30);
+        ImGui::SameLine(0.0f, 6.0f);
+        fpsButton("60 FPS", 60, is60);
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(kGrayDim, 0.85f));
+        ImGui::TextWrapped(
+            "Prioriza fluidez perfecta sobre latencia: el servidor envia a "
+            "ritmo fijo y con calidad alta. Recomendado con JPEG en 90%% o mas "
+            "y red WiFi estable — a 60 FPS + calidad alta el consumo de ancho "
+            "de banda es considerablemente mayor.");
+        ImGui::PopStyleColor();
+    }
 
     if (m_ConfigDirty && on) {
         core.GetNetworkServer()->SetConfig(m_Config);

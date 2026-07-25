@@ -2,6 +2,7 @@
 #include <string>
 #include <imgui.h>
 #include "Version.h"
+#include "StageLayoutTemplates.h"
 
 namespace ProyecThor::Settings {
 
@@ -49,6 +50,52 @@ namespace ProyecThor::Settings {
         float fadeDuration = 0.3f;
         bool  vsync        = true;
         int   targetFPS    = 60;
+
+        // ── Calidad de salida (video de fondo) ──────────────────────────
+        // outputWidth/outputHeight/targetFPS (arriba) se reutilizan como el
+        // tamano/fps del modo Custom. outputQualityMode: 0=Auto, 1=Preset,
+        // 2=Custom (ver ProjectionQualityPresets.h).
+        int   outputQualityMode = 0;
+        int   outputPresetIndex = 3; // default: "1080p / 60 FPS"
+
+        // ── Logo (pantalla de carga) ─────────────────────────────────────
+        // Imagen que se muestra a la salida REAL (publico) mientras un
+        // fondo/video esta cargando (ver PresentationCore::
+        // ShouldShowLoadingScreen) en vez de dejar ver un frame
+        // entrecortado/viejo. Vacio = sin logo, comportamiento sin cambios.
+        std::string loadingLogoPath;
+
+        // ── Efectos de post-proceso (salida en vivo, panel "Shaders") ────
+        // fsrEnabled/fsrSharpness: ya corren hoy en BackgroundLayer (solo
+        // sobre el fondo, para upscale); antes no se persistian ni tenian
+        // UI. crt/grain/fxaa corren sobre el COMPOSITE completo de
+        // "ProjectorLive" (ver CompositePostChain.h) — filtros 1:1, sin
+        // upscale.
+        bool  fsrEnabled            = true;
+        float fsrSharpness          = 0.2f;
+        bool  crtEnabled            = false;
+        float crtScanlineIntensity  = 0.5f;
+        bool  grainEnabled          = false;
+        float grainIntensity        = 0.15f;
+        bool  fxaaEnabled           = false;
+        bool  saturationEnabled     = false;
+        float saturationAmount      = 1.3f;
+        bool  vignetteEnabled       = false;
+        float vignetteIntensity     = 0.45f;
+        // "Rellenado": llena las barras de letterbox/pillarbox con el
+        // mismo fondo estirado y muy desenfocado en vez de negro. Ver
+        // BackgroundLayer::GetBlurredFillTexture / UIManager.cpp.
+        bool  fillBlurEnabled       = false;
+        // 0 = negro, 1 = brillo real del fondo desenfocado.
+        float fillBlurBrightness    = 0.6f;
+
+        // ── Motor de renderizado del fondo de video ──────────────────────
+        // 0 = OpenGL compuesto (default: fondo + overlays + texto en vivo
+        // juntos, como siempre). 1 = VLC en ventana nativa (el fondo se
+        // muestra en una ventana propia con el renderer acelerado de VLC;
+        // sin overlays/texto encima ni transicion animada entre clips —
+        // ver BackgroundLayer::SetUseNativeEngine).
+        int videoRenderEngine = 0;
     };
 
     // ── Audio ────────────────────────────────────────────────────────────
@@ -74,6 +121,18 @@ namespace ProyecThor::Settings {
         std::string defaultMediaFolder  = "";
         Language    language            = Language::Spanish;
         std::string dismissedChangelog  = "";
+        // Titulos bajo los iconos de los 4 rails (Biblioteca/Home/Control/Diseño).
+        // Apagarlo los deja solo-icono para ocupar menos espacio en pantalla.
+        bool        showRailLabels      = true;
+        // Panel opcional de diagnostico (CPU/RAM/FPS/GPU), activable desde
+        // el menu Vista. Apagado por default: es una herramienta puntual,
+        // no algo que se quiera ver todo el tiempo.
+        bool        showPerfPanel       = false;
+        // Riel angosto de botones "Limpiar <tipo>" a la derecha del video en
+        // Vista en Vivo (ver ViewPanel::RenderQuickActions). Opcional desde
+        // el menu Vista para operadores que no lo necesitan y prefieren mas
+        // ancho para el video.
+        bool        showViewQuickActions = true;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -89,16 +148,19 @@ namespace ProyecThor::Settings {
     struct ThemeSettings {
         ThemePreset preset = ThemePreset::Dark;
 
-        float base[4]        = { 0.036f, 0.040f, 0.060f, 1.0f }; // ventana principal
-        float surface0[4]    = { 0.060f, 0.065f, 0.090f, 1.0f }; // paneles hijos
-        float surface1[4]    = { 0.080f, 0.085f, 0.115f, 1.0f }; // popups / inputs
-        float surface2[4]    = { 0.110f, 0.115f, 0.150f, 1.0f }; // hover
-        float surface3[4]    = { 0.140f, 0.145f, 0.185f, 1.0f }; // active
+        // Gris neutro tipo ProPresenter/OBS (ver MakeThemePreset(Dark) para
+        // el preset real que se aplica en runtime; estos son solo el
+        // fallback de construccion por defecto de la struct).
+        float base[4]        = { 0.078f, 0.078f, 0.082f, 1.0f }; // ventana principal
+        float surface0[4]    = { 0.098f, 0.098f, 0.102f, 1.0f }; // paneles hijos
+        float surface1[4]    = { 0.130f, 0.130f, 0.136f, 1.0f }; // popups / inputs
+        float surface2[4]    = { 0.165f, 0.165f, 0.172f, 1.0f }; // hover
+        float surface3[4]    = { 0.205f, 0.205f, 0.213f, 1.0f }; // active
 
-        float accent[4]      = { 0.369f, 0.420f, 1.000f, 1.0f };
-        float accentLight[4] = { 0.520f, 0.575f, 1.000f, 1.0f };
-        float accentDim[4]   = { 0.250f, 0.290f, 0.700f, 1.0f };
-        float accentFaint[4] = { 0.369f, 0.420f, 1.000f, 0.18f };
+        float accent[4]      = { 0.550f, 0.560f, 0.580f, 1.0f };
+        float accentLight[4] = { 0.720f, 0.730f, 0.750f, 1.0f };
+        float accentDim[4]   = { 0.380f, 0.390f, 0.410f, 1.0f };
+        float accentFaint[4] = { 0.550f, 0.560f, 0.580f, 0.18f };
 
         float border[4]      = { 1.000f, 1.000f, 1.000f, 0.08f };
         float borderFaint[4] = { 1.000f, 1.000f, 1.000f, 0.04f };
@@ -113,9 +175,22 @@ namespace ProyecThor::Settings {
         float windowRounding = 14.0f;
         float frameRounding  =  9.0f;
         float scrollbarSize  =  8.0f;
+
+        // Ruta absoluta a un .ttf/.otf elegido por el usuario para la
+        // interfaz de la app (ver CategoryTheme.cpp, seccion "Fuente de la
+        // interfaz"). Vacio = usar la fuente por defecto. Se valida antes de
+        // cargar (ver IsValidFontFile) y si falla se cae a la default -- ver
+        // main.cpp, carga de io.Fonts justo antes de ImGui_ImplGlfw_InitForOpenGL.
+        std::string customFontPath = "";
     };
 
     ThemeSettings MakeThemePreset(ThemePreset preset);
+
+    // Valida que 'path' sea un archivo de fuente (.ttf/.otf) que ImGui pueda
+    // parsear realmente, sin arriesgarse al IM_ASSERT fatal de
+    // AddFontFromFileTTF ante un archivo inexistente/corrupto (ver
+    // stbtt_InitFont, misma libreria que usa ImGui por debajo).
+    bool IsValidFontFile(const std::string& path);
 
     // ── Actualizaciones ──────────────────────────────────────────────────
     struct UpdatesSettings {
@@ -126,12 +201,173 @@ namespace ProyecThor::Settings {
         bool        autoDownload   = false;
     };
 
+    // ── FoudreVue (app hermana de overlays) ──────────────────────────────
+    // Solo guarda el canal elegido para el chequeo de version en el modal
+    // de descarga (ver LayersOverlayTab::RenderFoudreVueDownloadModal).
+    struct FoudreVueSettings {
+        std::string releaseChannel = "stable"; // "stable" | "beta"
+    };
+
+    // ── Stage Display (monitor de control) ──────────────────────────────
+    struct StageDisplaySettings {
+        int layoutTemplateIndex = 0; // indice en kStageLayoutTemplates
+        int cellWidget[kStageMaxCells] = {
+            (int)StageWidgetType::LiveText, (int)StageWidgetType::Clock, 0, 0
+        };
+
+        // Antes vivian como miembros efimeros de StageDisplayPanel (se
+        // reseteaban a 0/false en cada arranque). Se persisten aca para que
+        // el toggle "Stage" de ViewPanel (ver RenderLiveTransport/dots) los
+        // pueda usar sin depender de una instancia de StageDisplayPanel.
+        int  monitorIndex = -1;    // -1 = sin elegir aun -> default a la pantalla secundaria
+        bool useLAN        = false;
+        int  lanPort        = 8080;
+
+        // Si esta activo, Stage ignora la grilla de celdas y muestra
+        // exactamente lo mismo que el operador ve en "Vista en Vivo"
+        // (fondo+overlay+texto) — ver UI::DrawStageContent.
+        bool mirrorPublicOutput = false;
+    };
+
+    // ── Sidebar de Biblioteca (Letra/Video/Imagen/Biblia/Doc/Audio) ──────
+    // Un color de identidad por categoria; el resto del look (fondo activo,
+    // barra lateral, tinte de icono/label) se deriva de este en tiempo real
+    // (ver LibrarySidebar.cpp). Los valores por defecto son los mismos tonos
+    // que ya se usaban hardcodeados, para no cambiar nada hasta que el
+    // usuario decida personalizar.
+    // Indices 6/7 (Red/Reloj) son un grupo aparte, separado por una linea de
+    // las 6 categorias de contenido de arriba — ver LibrarySidebar.cpp.
+    // Se mudaron desde ViewToolsSettings, mismos colores que tenian alli.
+    struct LibrarySidebarSettings {
+        float categoryColor[8][4] = {
+            { 0.31f, 0.55f, 1.00f, 1.0f }, // Letra
+            { 0.86f, 0.24f, 0.24f, 1.0f }, // Video
+            { 0.24f, 0.86f, 0.39f, 1.0f }, // Imagen
+            { 0.86f, 0.67f, 0.16f, 1.0f }, // Biblia
+            { 0.65f, 0.31f, 0.94f, 1.0f }, // Documentos
+            { 0.16f, 0.75f, 0.75f, 1.0f }, // Audio
+            { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
+            { 0.95f, 0.75f, 0.20f, 1.0f }, // Reloj
+        };
+    };
+
+    // ── Sidebar de Home (Home/Reloj/Anuncios/Notas/Captura/Transmision) ──
+    // Mismo mecanismo que LibrarySidebarSettings: un color de identidad por
+    // seccion, ver HomeSidebar.cpp.
+    struct HomeSidebarSettings {
+        float categoryColor[6][4] = {
+            { 0.55f, 0.60f, 0.68f, 1.0f }, // Home
+            { 0.95f, 0.75f, 0.20f, 1.0f }, // Reloj y Contadores
+            { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
+            { 0.35f, 0.80f, 0.55f, 1.0f }, // Notas Rapidas
+            { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura
+            { 0.30f, 0.80f, 0.85f, 1.0f }, // Transmision en Red
+        };
+    };
+
+    // ── Sidebar del hub de Control (Control/Stage Display) ───────────────
+    struct ControlHubSettings {
+        float categoryColor[2][4] = {
+            { 0.40f, 0.55f, 0.95f, 1.0f }, // Control
+            { 0.90f, 0.55f, 0.20f, 1.0f }, // Stage Display
+        };
+    };
+
+    // ── Sidebar del hub de Diseño (Fondos/Estilos/Overlays/Shaders/
+    //    Transiciones/Anuncios/Captura) ─────────────────────────────────
+    struct StylesHubSettings {
+        float categoryColor[7][4] = {
+            { 0.35f, 0.80f, 0.55f, 1.0f }, // Fondos
+            { 0.65f, 0.31f, 0.94f, 1.0f }, // Estilos
+            { 0.95f, 0.60f, 0.20f, 1.0f }, // Overlays
+            { 0.40f, 0.75f, 0.85f, 1.0f }, // Shaders
+            { 0.90f, 0.35f, 0.45f, 1.0f }, // Transiciones
+            { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
+            { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura
+        };
+    };
+
+    // ── Sidebar de Herramientas (debajo de Vista en Vivo): Control
+    //    Overlays / Notas / Chat / Pads ─────────────────────────────────────
+    // Red y Reloj se mudaron al sidebar de Biblioteca — ver
+    // LibrarySidebarSettings::categoryColor (indices 6 y 7).
+    struct ViewToolsSettings {
+        float categoryColor[4][4] = {
+            { 0.40f, 0.55f, 0.95f, 1.0f }, // Control Overlays
+            { 0.35f, 0.80f, 0.55f, 1.0f }, // Notas
+            { 0.75f, 0.40f, 0.90f, 1.0f }, // Chat
+            { 0.90f, 0.55f, 0.20f, 1.0f }, // Pads
+        };
+    };
+
+    // ── Escenas rápidas de Captura ────────────────────────────────────────
+    // 8 botones de color: cada uno guarda una configuración completa de
+    // captura (fuente + recuadro de posición libre + opacidad) para poder
+    // saltar entre "escenas" con un click en vivo -- ver
+    // CapturePanel::SaveCurrentAsScene/RecallScene. sourceType guarda el
+    // valor numérico de ProyecThor::UI::CaptureSourceType -- no se usa ese
+    // enum acá directo para no crear una dependencia de Settings (backend)
+    // hacia CapturePanel (frontend/UI).
+    struct CaptureSceneSettings {
+        bool        assigned     = false;
+        int         sourceType   = 0;
+        int         sourceIndex  = -1;
+        std::string sourceHandle;
+        std::string sourceName;
+        float       x0 = 0.25f, y0 = 0.25f, x1 = 0.75f, y1 = 0.75f;
+        float       opacity = 1.0f;
+    };
+    static constexpr int kCaptureSceneCount = 8;
+    struct CaptureSettings {
+        CaptureSceneSettings scenes[kCaptureSceneCount];
+    };
+
+    // ── Pads de ViewTools ─────────────────────────────────────────────────
+    // 8 botones tipo pad MIDI: cada uno guarda, de forma independiente,
+    // una disposicion de Captura (mismos campos que CaptureSceneSettings —
+    // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene), un
+    // estilo guardado + fondo, y el estado de Control Overlays (que macro
+    // y en que cue). Cualquiera de los tres puede faltar (hasCapture/
+    // hasStyle/hasMacro en false) — un pad no tiene por que tocar las tres
+    // cosas a la vez. Nunca guarda la letra/texto en pantalla.
+    struct PadSettings {
+        bool assigned  = false;
+        int  iconIndex = 0; // indice en la tabla fija de iconos, ver ViewToolsPanel.cpp
+
+        bool                  hasCapture = false;
+        CaptureSceneSettings  capture;
+
+        bool        hasStyle = false;
+        std::string styleName;
+        int         bgType = 0; // espeja PresentationCore::PresentationState::BackgroundType
+        std::string bgPath;
+        float       bgColor[3] = { 0.0f, 0.0f, 0.0f };
+
+        bool        hasMacro = false;
+        std::string macroName;
+        int         macroCueIndex    = -1;
+        bool        macroAutoAdvance = false;
+    };
+    static constexpr int kPadCount = 8;
+    struct PadsSettings {
+        PadSettings pads[kPadCount];
+    };
+
     struct AppSettings {
-        ProjectionSettings projection;
-        AudioSettings      audio;
-        GeneralSettings    general;
-        ThemeSettings      theme;
-        UpdatesSettings    updates;
+        ProjectionSettings     projection;
+        AudioSettings          audio;
+        GeneralSettings        general;
+        ThemeSettings          theme;
+        UpdatesSettings        updates;
+        FoudreVueSettings      foudrevue;
+        StageDisplaySettings   stageDisplay;
+        LibrarySidebarSettings librarySidebar;
+        HomeSidebarSettings    homeSidebar;
+        ControlHubSettings     controlHub;
+        StylesHubSettings      stylesHub;
+        ViewToolsSettings      viewTools;
+        CaptureSettings        capture;
+        PadsSettings           pads;
     };
 
     class SettingsManager {
@@ -161,6 +397,15 @@ namespace ProyecThor::Settings {
 
         void ApplyProjection();
 
+        // Pedido de reinicio (p.ej. tras elegir una fuente nueva -- ver
+        // CategoryTheme.cpp). NO reinicia nada por si solo: solo levanta la
+        // bandera; el loop principal en main.cpp la revisa cada frame y
+        // cierra la ventana normalmente (glfwSetWindowShouldClose), asi
+        // corre TODO el shutdown existente (VLC, GL, ImGui) antes de
+        // relanzar el proceso -- ver RestartApplication().
+        void RequestRestart()        { m_RestartRequested = true; }
+        bool IsRestartRequested() const { return m_RestartRequested; }
+
     private:
         SettingsManager()                                  = default;
         ~SettingsManager()                                 = default;
@@ -168,6 +413,14 @@ namespace ProyecThor::Settings {
         SettingsManager& operator=(const SettingsManager&) = delete;
 
         AppSettings m_Settings;
+        bool        m_RestartRequested = false;
     };
+
+    // Relanza el ejecutable actual como un proceso nuevo e independiente.
+    // Se debe llamar SOLO despues de que el proceso actual ya termino su
+    // shutdown limpio (ImGui/GLFW/VLC ya destruidos) -- ver el final de
+    // main(). En Linux usa fork()+exec() (el padre no hace exit() acá, eso
+    // lo hace el return normal de main()); en Windows, CreateProcess.
+    void RestartApplication();
 
 } // namespace ProyecThor::Settings

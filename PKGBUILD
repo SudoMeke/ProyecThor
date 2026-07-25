@@ -20,14 +20,15 @@
 # para clonar desde tu URL real en vez de usar $startdir directamente.
 
 pkgname=proyecthor
-pkgver=0.3.2
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Reproductor multimedia con VLC + OpenGL + ImGui"
 arch=('x86_64')
 url="https://github.com/tuusuario/proyecthor"
 license=('custom')
-depends=('vlc' 'glfw-x11' 'mesa' 'glibc' 'gcc-libs')
-optdepends=('yt-dlp: reproducir enlaces de YouTube directamente')
+depends=('vlc' 'glfw-x11' 'mesa' 'glibc' 'gcc-libs' 'curl')
+optdepends=('yt-dlp: reproducir enlaces de YouTube directamente'
+            'foudrevue: editor profesional de Overlays (app hermana, opcional)')
 makedepends=('cmake' 'ninja' 'git' 'pkgconf')
 options=('!lto')
 source=()
