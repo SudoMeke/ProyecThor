@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include "backend/core/PresentationCore.h"
 
 namespace ProyecThor::Settings { struct ThemeSettings; }
 
@@ -12,6 +13,7 @@ namespace ProyecThor::UI {
 class TabTypography;
 class TabAlignment;
 class TabMargins;
+class TabEffects;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Paleta de colores del editor — no son const: se recalculan en Sync() a
@@ -72,6 +74,11 @@ struct StyleData {
     int         songVAlignment     = 1;
     int         bibleTextAlignment = 1;
     int         bibleVAlignment    = 1;
+
+    // Fondo/borde/sombra/aberracion cromatica/glow/neon/subrayado sobre las
+    // letras (ver TextEffectsRenderer.h para el dibujo, PresentationCore.h
+    // para la definicion del struct).
+    ProyecThor::Core::TextEffectsData effects;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,8 +96,14 @@ public:
     void OpenNew(const StyleData& defaults = {});
     void OpenEdit(const std::string& existingName, const StyleData& existingData);
 
-    // Devuelve true el frame en que el usuario presiona Guardar
-    bool Render(OnSaveCallback onSave);
+    // Devuelve true el frame en que el usuario presiona Guardar.
+    // embedded=true: no abre su propia ventana flotante -- dibuja el
+    // contenido directo dentro de la ventana que ya este activa (pensado
+    // para que HomePanel lo llame desde adentro de su propio Begin("Home"),
+    // como si fuera "otra seccion de Library" en vez de un panel nuevo que
+    // aparece encima). embedded=false (default): comportamiento de siempre,
+    // ventana propia -- lo sigue usando LayersStyleTab (panel "Diseño").
+    bool Render(OnSaveCallback onSave, bool embedded = false);
 
     bool IsOpen() const { return m_IsOpen; }
 
@@ -115,6 +128,7 @@ private:
     std::unique_ptr<TabTypography> m_TabTypography;
     std::unique_ptr<TabAlignment>  m_TabAlignment;
     std::unique_ptr<TabMargins>    m_TabMargins;
+    std::unique_ptr<TabEffects>    m_TabEffects;
 
     std::vector<std::string>* m_FontList = nullptr;
 

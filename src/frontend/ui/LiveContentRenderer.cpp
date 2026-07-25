@@ -4,6 +4,7 @@
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/StageLayoutTemplates.h"
 #include "frontend/panels/capture/CapturePanel.h"
+#include "frontend/ui/TextEffectsRenderer.h"
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
@@ -152,8 +153,7 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
 
         dl->PushClipRect(p0, p1, true);
 
-        ImU32 shadowCol = IM_COL32(0, 0, 0, 180);
-        ImU32 textCol   = ImGui::ColorConvertFloat4ToU32(
+        ImU32 textCol = ImGui::ColorConvertFloat4ToU32(
             ImVec4(state.textColor[0], state.textColor[1],
                    state.textColor[2], state.textColor[3]));
 
@@ -184,11 +184,8 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
                         font->CalcTextSizeA(fontSize, FLT_MAX, boxW, line.c_str());
                     float lx = boxX + (boxW - lSize.x) * 0.5f;
 
-                    dl->AddText(font, fontSize,
-                        ImVec2(lx + 2.0f * scale, curY + 2.0f * scale),
-                        shadowCol, line.c_str());
-                    dl->AddText(font, fontSize,
-                        ImVec2(lx, curY), textCol, line.c_str());
+                    DrawStyledText(dl, font, fontSize, ImVec2(lx, curY), textCol,
+                                   line.c_str(), 0.0f, scale, state.effects);
                 }
 
                 curY += lineH;
@@ -199,12 +196,8 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
         }
         else
         {
-            dl->AddText(font, fontSize,
-                ImVec2(textX + 2.0f * scale, textY + 2.0f * scale),
-                shadowCol, state.currentText.c_str(), nullptr, boxW);
-            dl->AddText(font, fontSize,
-                ImVec2(textX, textY), textCol,
-                state.currentText.c_str(), nullptr, boxW);
+            DrawStyledText(dl, font, fontSize, ImVec2(textX, textY), textCol,
+                           state.currentText.c_str(), boxW, scale, state.effects);
         }
 
         dl->PopClipRect();

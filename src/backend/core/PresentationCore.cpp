@@ -11,6 +11,8 @@
 #include "backend/settings/SettingsManager.h"
 #include <filesystem>
 #include <algorithm>
+#include <sstream>
+#include <vector>
 #include "AppPaths.h"
 #include <fstream>
 #ifdef _WIN32
@@ -194,7 +196,11 @@ bool PresentationCore::GetGlobalMute() const {
     }
 
     void PresentationCore::SetFSREnabled(bool enabled) {
-        if (m_Impl) m_Impl->background.SetFSREnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->background.SetFSREnabled(enabled);
+        // Mutua exclusion: los dos son upscalers de la misma etapa, no
+        // tiene sentido correr ambos (ver PostProcessorNIS.h).
+        if (enabled) m_Impl->background.SetNISEnabled(false);
     }
 
     bool PresentationCore::GetFSREnabled() const {
@@ -207,6 +213,24 @@ bool PresentationCore::GetGlobalMute() const {
 
     float PresentationCore::GetFSRSharpness() const {
         return m_Impl ? m_Impl->background.GetFSRSharpness() : 0.2f;
+    }
+
+    void PresentationCore::SetNISEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->background.SetNISEnabled(enabled);
+        if (enabled) m_Impl->background.SetFSREnabled(false);
+    }
+
+    bool PresentationCore::GetNISEnabled() const {
+        return m_Impl ? m_Impl->background.GetNISEnabled() : false;
+    }
+
+    void PresentationCore::SetNISSharpness(float sharpness) {
+        if (m_Impl) m_Impl->background.SetNISSharpness(sharpness);
+    }
+
+    float PresentationCore::GetNISSharpness() const {
+        return m_Impl ? m_Impl->background.GetNISSharpness() : 0.5f;
     }
 
     void PresentationCore::SetVideoRenderEngine(int engine) {
@@ -273,6 +297,129 @@ bool PresentationCore::GetGlobalMute() const {
     }
     float PresentationCore::GetVignetteIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetVignetteIntensity() : 0.45f;
+    }
+
+    void PresentationCore::SetBlurEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetBlurEnabled(enabled);
+    }
+    bool PresentationCore::GetBlurEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetBlurEnabled() : false;
+    }
+    void PresentationCore::SetBlurIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetBlurIntensity(intensity);
+    }
+    float PresentationCore::GetBlurIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetBlurIntensity() : 0.35f;
+    }
+
+    void PresentationCore::SetSharpenEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetSharpenEnabled(enabled);
+    }
+    bool PresentationCore::GetSharpenEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetSharpenEnabled() : false;
+    }
+    void PresentationCore::SetSharpenIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetSharpenIntensity(intensity);
+    }
+    float PresentationCore::GetSharpenIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetSharpenIntensity() : 0.35f;
+    }
+
+    void PresentationCore::SetBloomEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetBloomEnabled(enabled);
+    }
+    bool PresentationCore::GetBloomEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetBloomEnabled() : false;
+    }
+    void PresentationCore::SetBloomIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetBloomIntensity(intensity);
+    }
+    float PresentationCore::GetBloomIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetBloomIntensity() : 0.35f;
+    }
+
+    void PresentationCore::SetChromaticAberrationEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetChromaticAberrationEnabled(enabled);
+    }
+    bool PresentationCore::GetChromaticAberrationEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetChromaticAberrationEnabled() : false;
+    }
+    void PresentationCore::SetChromaticAberrationIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetChromaticAberrationIntensity(intensity);
+    }
+    float PresentationCore::GetChromaticAberrationIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetChromaticAberrationIntensity() : 0.35f;
+    }
+
+    void PresentationCore::SetVHSEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetVHSEnabled(enabled);
+    }
+    bool PresentationCore::GetVHSEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetVHSEnabled() : false;
+    }
+    void PresentationCore::SetVHSIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetVHSIntensity(intensity);
+    }
+    float PresentationCore::GetVHSIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetVHSIntensity() : 0.5f;
+    }
+
+    void PresentationCore::SetCineEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetCineEnabled(enabled);
+    }
+    bool PresentationCore::GetCineEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetCineEnabled() : false;
+    }
+    void PresentationCore::SetCineIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetCineIntensity(intensity);
+    }
+    float PresentationCore::GetCineIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetCineIntensity() : 0.5f;
+    }
+    void PresentationCore::SetCineTint(int tint) {
+        if (m_Impl) m_Impl->compositeFX.SetCineTint(tint);
+    }
+    int PresentationCore::GetCineTint() const {
+        return m_Impl ? m_Impl->compositeFX.GetCineTint() : 0;
+    }
+
+    void PresentationCore::SetContrastEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetContrastEnabled(enabled);
+    }
+    bool PresentationCore::GetContrastEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetContrastEnabled() : false;
+    }
+    void PresentationCore::SetContrastAmount(float amount) {
+        if (m_Impl) m_Impl->compositeFX.SetContrastAmount(amount);
+    }
+    float PresentationCore::GetContrastAmount() const {
+        return m_Impl ? m_Impl->compositeFX.GetContrastAmount() : 1.3f;
+    }
+
+    void PresentationCore::SetLuminosityEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetLuminosityEnabled(enabled);
+    }
+    bool PresentationCore::GetLuminosityEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetLuminosityEnabled() : false;
+    }
+    void PresentationCore::SetLuminosityAmount(float amount) {
+        if (m_Impl) m_Impl->compositeFX.SetLuminosityAmount(amount);
+    }
+    float PresentationCore::GetLuminosityAmount() const {
+        return m_Impl ? m_Impl->compositeFX.GetLuminosityAmount() : 1.2f;
+    }
+
+    void PresentationCore::SetTAAEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetTAAEnabled(enabled);
+    }
+    bool PresentationCore::GetTAAEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetTAAEnabled() : false;
+    }
+    void PresentationCore::SetTAAIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetTAAIntensity(intensity);
+    }
+    float PresentationCore::GetTAAIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetTAAIntensity() : 0.5f;
     }
 
     void PresentationCore::SetProjectorPostFXViewportID(ImGuiID id) {
@@ -637,6 +784,17 @@ void PresentationCore::StopOverlayMedia() {
         m_State.songVAlignment    = vAlign;
     }
 
+    void PresentationCore::SetTextEffects(const TextEffectsData& effects) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_State.effects = effects;
+        ++m_StreamVersion;
+    }
+
+    TextEffectsData PresentationCore::GetTextEffects() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_State.effects;
+    }
+
 void PresentationCore::SetLayer2_Text(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = text;
@@ -917,6 +1075,70 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return dir.string();
     }
 
+    // Empaqueta/desempaqueta TextEffectsData como una sola linea CSV en el
+    // archivo .theme -- evita 7 bloques de bool/color/intensidad repetidos
+    // (uno por efecto) en el formato "key=value" de este archivo. Orden fijo:
+    // bg(enabled,r,g,b,a) border(enabled,r,g,b,a,width) shadow(enabled,r,g,b,a,intensity)
+    // chromaticAberration(enabled,intensity) glow(enabled,r,g,b,a,intensity)
+    // neon(enabled,r,g,b,a,intensity) underline(enabled,r,g,b,a,thickness)
+    std::string PackTextEffects(const TextEffectsData& e)
+    {
+        std::ostringstream ss;
+        auto put = [&](float v) { ss << v << ","; };
+        put(e.bgEnabled ? 1.0f : 0.0f);
+        for (float c : e.bgColor) put(c);
+        put(e.borderEnabled ? 1.0f : 0.0f);
+        for (float c : e.borderColor) put(c);
+        put(e.borderWidth);
+        put(e.shadowEnabled ? 1.0f : 0.0f);
+        for (float c : e.shadowColor) put(c);
+        put(e.shadowIntensity);
+        put(e.chromaticAberrationEnabled ? 1.0f : 0.0f);
+        put(e.chromaticAberrationIntensity);
+        put(e.glowEnabled ? 1.0f : 0.0f);
+        for (float c : e.glowColor) put(c);
+        put(e.glowIntensity);
+        put(e.neonEnabled ? 1.0f : 0.0f);
+        for (float c : e.neonColor) put(c);
+        put(e.neonIntensity);
+        put(e.underlineEnabled ? 1.0f : 0.0f);
+        for (float c : e.underlineColor) put(c);
+        ss << e.underlineThickness;
+        return ss.str();
+    }
+
+    void UnpackTextEffects(const std::string& v, TextEffectsData& e)
+    {
+        std::vector<float> f;
+        std::stringstream ss(v);
+        std::string tok;
+        while (std::getline(ss, tok, ',')) {
+            if (!tok.empty()) f.push_back(std::stof(tok));
+        }
+        if (f.size() < 37) return; // linea corrupta/vieja -- deja los defaults
+
+        size_t i = 0;
+        e.bgEnabled = f[i++] != 0.0f;
+        for (float& c : e.bgColor) c = f[i++];
+        e.borderEnabled = f[i++] != 0.0f;
+        for (float& c : e.borderColor) c = f[i++];
+        e.borderWidth = f[i++];
+        e.shadowEnabled = f[i++] != 0.0f;
+        for (float& c : e.shadowColor) c = f[i++];
+        e.shadowIntensity = f[i++];
+        e.chromaticAberrationEnabled = f[i++] != 0.0f;
+        e.chromaticAberrationIntensity = f[i++];
+        e.glowEnabled = f[i++] != 0.0f;
+        for (float& c : e.glowColor) c = f[i++];
+        e.glowIntensity = f[i++];
+        e.neonEnabled = f[i++] != 0.0f;
+        for (float& c : e.neonColor) c = f[i++];
+        e.neonIntensity = f[i++];
+        e.underlineEnabled = f[i++] != 0.0f;
+        for (float& c : e.underlineColor) c = f[i++];
+        e.underlineThickness = f[i++];
+    }
+
     static bool LoadThemeFromDisk(const std::string& themesDir,
                                    const std::string& name,
                                    SavedStyle& out)
@@ -950,6 +1172,8 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                 sscanf(v.c_str(), "%f,%f,%f,%f",
                        &out.margins[0], &out.margins[1],
                        &out.margins[2], &out.margins[3]);
+            else if (k == "textEffects")
+                UnpackTextEffects(v, out.effects);
         }
         return true;
     }
@@ -975,6 +1199,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         f << "songVAlign="     << style.vAlign       << "\n";
         f << "bibleTextAlign=" << style.hAlign       << "\n";
         f << "bibleVAlign="    << style.vAlign       << "\n";
+        f << "textEffects="    << PackTextEffects(style.effects) << "\n";
 
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_SavedStyles[style.name] = style;
@@ -1038,6 +1263,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         state.songVAlignment     = s.vAlign;
         state.bibleTextAlignment = s.hAlign;
         state.bibleVAlignment    = s.vAlign;
+        state.effects            = s.effects;
     }
 
     void PresentationCore::SetCategoryDefaultStyle(ItemType category, const std::string& styleName)
@@ -1200,6 +1426,13 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         SavedStyle style;
         if (!GetSavedStyle(styleName, style)) return;
 
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        ApplySavedStyleToState(style, m_State, m_ActiveFontName);
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::ApplyStyleSnapshot(const SavedStyle& style)
+    {
         std::lock_guard<std::mutex> lock(m_Mutex);
         ApplySavedStyleToState(style, m_State, m_ActiveFontName);
         ++m_StreamVersion;

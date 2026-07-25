@@ -2,7 +2,9 @@
 #include "styles/TabTypography.h"
 #include "styles/TabAlignment.h"
 #include "styles/TabMargins.h"
+#include "styles/TabEffects.h"
 #include "backend/core/PresentationCore.h"
+#include "frontend/ui/TextEffectsRenderer.h"
 #include "SettingsManager.h"
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -149,6 +151,7 @@ CanvaStyleEditor::CanvaStyleEditor(std::vector<std::string>* fontList,
     m_TabTypography = std::make_unique<TabTypography>(fontList, std::move(onFontImported));
     m_TabAlignment  = std::make_unique<TabAlignment>();
     m_TabMargins    = std::make_unique<TabMargins>();
+    m_TabEffects    = std::make_unique<TabEffects>();
 }
 
 CanvaStyleEditor::~CanvaStyleEditor() = default;
@@ -182,38 +185,51 @@ void CanvaStyleEditor::OpenEdit(const std::string& existingName, const StyleData
 //  Render principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-bool CanvaStyleEditor::Render(OnSaveCallback onSave) {
+bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
     if (!m_IsOpen) return false;
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(980.0f, 720.0f), ImGuiCond_Appearing);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(860.0f, 600.0f), ImVec2(1200.0f, 900.0f));
-
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, CanvaPalette::Surface0);
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.22f, 0.23f, 0.32f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 14.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(0.0f, 0.0f));
 
     bool open           = true;
     bool savedThisFrame = false;
 
-    constexpr ImGuiWindowFlags kEditorFlags =
-        ImGuiWindowFlags_NoCollapse        |
-        ImGuiWindowFlags_NoSavedSettings   |
-        ImGuiWindowFlags_NoScrollbar       |
-        ImGuiWindowFlags_NoScrollWithMouse;
+    // embedded=true: nada de ventana propia -- se dibuja adentro de la
+    // ventana que el caller ya tiene abierta (HomePanel llama esto desde
+    // dentro de su propio ImGui::Begin("Home"), asi el editor se siente
+    // "otra seccion de Library" en vez de un panel nuevo encima). El cierre
+    // sigue andando igual: el boton "Cancelar"/"Guardar" del footer pone
+    // m_IsOpen=false (ver RenderFooter), no depende de la X nativa de Begin.
+    if (!embedded) {
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(980.0f, 720.0f), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(860.0f, 600.0f), ImVec2(1200.0f, 900.0f));
 
-    bool windowVisible = ImGui::Begin("EditorDeEstilo##canvaWindow", &open, kEditorFlags);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, CanvaPalette::Surface0);
+        ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.22f, 0.23f, 0.32f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 14.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(0.0f, 0.0f));
 
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(2);
+        constexpr ImGuiWindowFlags kEditorFlags =
+            ImGuiWindowFlags_NoCollapse        |
+            ImGuiWindowFlags_NoSavedSettings   |
+            ImGuiWindowFlags_NoScrollbar       |
+            ImGuiWindowFlags_NoScrollWithMouse;
 
-    if (windowVisible)
+        bool windowVisible = ImGui::Begin("EditorDeEstilo##canvaWindow", &open, kEditorFlags);
+
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(2);
+
+        if (!windowVisible) {
+            ImGui::End();
+            if (!open) m_IsOpen = false;
+            return false;
+        }
+    }
+
     {
         ImDrawList* dl  = ImGui::GetWindowDrawList();
-        ImVec2 winPos   = ImGui::GetWindowPos();
-        ImVec2 winSize  = ImGui::GetWindowSize();
+        ImVec2 winPos   = embedded ? ImGui::GetCursorScreenPos() : ImGui::GetWindowPos();
+        ImVec2 winSize  = embedded ? ImGui::GetContentRegionAvail() : ImGui::GetWindowSize();
 
         RenderHeader(dl, winPos, winSize);
 
@@ -227,20 +243,21 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave) {
         const float tabH     = 32.0f;
 
         // ── Columna izquierda ────────────────────────────────────────────
-        ImGui::SetCursorPos(ImVec2(kPadH, kHeaderH + kPadH));
+        ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
-            const char* tabLabels[] = { "Tipografia", "Alineacion", "Margenes" };
+            const char* tabLabels[] = { "Tipografia", "Alineacion", "Margenes", "Efectos" };
             const ImVec4 tabColors[] = {
                 CanvaPalette::Accent,
                 CanvaPalette::Green,
-                CanvaPalette::Gold
+                CanvaPalette::Gold,
+                CanvaPalette::Pink
             };
 
-            for (int t = 0; t < 3; t++) {
+            for (int t = 0; t < 4; t++) {
                 if (t > 0) ImGui::SameLine(0.0f, 4.0f);
                 bool active = (m_ActiveTab == t);
-                float tW    = (kColLeft - 8.0f) / 3.0f;
+                float tW    = (kColLeft - 4.0f * 3.0f) / 4.0f;
 
                 ImVec4 bgActive = ImVec4(
                     tabColors[t].x * 0.20f,
@@ -276,8 +293,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave) {
 
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 10.0f));
             ImGui::BeginChild("##tabContent",
-                ImVec2(kColLeft, contentH - tabH - 14.0f),
-                false, ImGuiWindowFlags_NoScrollbar);
+                ImVec2(kColLeft, contentH - tabH - 14.0f));
 
             RenderActiveTab(kColLeft, contentH, tabH, dl);
 
@@ -287,7 +303,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave) {
         ImGui::EndGroup();
 
         // ── Columna derecha: preview ─────────────────────────────────────
-        ImGui::SetCursorPos(ImVec2(kPadH + kColLeft + kColGap, kHeaderH + kPadH));
+        ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH + kColLeft + kColGap, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
             Badge("PREVIEW EN VIVO", CanvaPalette::Pink);
@@ -317,9 +333,10 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave) {
         RenderFooter(winPos, winSize, onSave, savedThisFrame);
     }
 
-    ImGui::End();
-
-    if (!open) m_IsOpen = false;
+    if (!embedded) {
+        ImGui::End();
+        if (!open) m_IsOpen = false;
+    }
 
     return savedThisFrame;
 }
@@ -334,6 +351,7 @@ void CanvaStyleEditor::RenderActiveTab(float colWidth, float /*contentH*/,
         case 0: m_TabTypography->Render(m_Data, colWidth); break;
         case 1: m_TabAlignment->Render(m_Data, colWidth, dl); break;
         case 2: m_TabMargins->Render(m_Data, colWidth, dl); break;
+        case 3: m_TabEffects->Render(m_Data, colWidth); break;
         default: break;
     }
 }
@@ -368,13 +386,13 @@ void CanvaStyleEditor::RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSiz
         CanvaPalette::ToU32(CanvaPalette::Text),
         title.c_str());
 
-    const ImVec4 tabColors[] = { CanvaPalette::Accent, CanvaPalette::Green, CanvaPalette::Gold };
-    const char*  tabNames[]  = { "Tipografia", "Alineacion", "Margenes" };
-    float indicatorX         = winSize.x - 320.0f;
+    const ImVec4 tabColors[] = { CanvaPalette::Accent, CanvaPalette::Green, CanvaPalette::Gold, CanvaPalette::Pink };
+    const char*  tabNames[]  = { "Tipografia", "Alineacion", "Margenes", "Efectos" };
+    float indicatorX         = winSize.x - 400.0f;
 
-    for (int t = 0; t < 3; t++) {
+    for (int t = 0; t < 4; t++) {
         bool  active = (m_ActiveTab == t);
-        float cx     = winPos.x + indicatorX + t * 100.0f + 50.0f;
+        float cx     = winPos.x + indicatorX + t * 90.0f + 50.0f;
         float cy     = dotY;
 
         dl->AddCircleFilled(ImVec2(cx - 22.0f, cy),
@@ -464,12 +482,9 @@ void CanvaStyleEditor::RenderPreview(ImVec2 pos, ImVec2 sz, ImDrawList* dl) {
         static_cast<int>(m_Data.textColor[1] * 255),
         static_cast<int>(m_Data.textColor[2] * 255),
         static_cast<int>(m_Data.textColor[3] * 255));
-    ImU32 shadowCol = IM_COL32(0, 0, 0, 200);
 
-    dl->AddText(previewFont, displaySize, ImVec2(tx + 1.5f, ty + 1.5f),
-        shadowCol, testText, nullptr, bw);
-    dl->AddText(previewFont, displaySize, ImVec2(tx, ty),
-        textCol, testText, nullptr, bw);
+    DrawStyledText(dl, previewFont, displaySize, ImVec2(tx, ty), textCol,
+                   testText, bw, sc, m_Data.effects);
 
     dl->AddText(ImGui::GetFont(), 10.0f,
         ImVec2(pos.x + 6.0f, pos.y + sz.y - 14.0f),
@@ -498,7 +513,8 @@ void CanvaStyleEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
         CanvaPalette::ToU32(ImVec4(0.08f, 0.08f, 0.10f, 1.0f)),
         0.0f, ImDrawFlags_RoundCornersBottom);
 
-    ImGui::SetCursorPos(ImVec2(20.0f, footerY + (kFooterH - 36.0f) * 0.5f));
+    float rowY = winPos.y + footerY + (kFooterH - 36.0f) * 0.5f;
+    ImGui::SetCursorScreenPos(ImVec2(winPos.x + 20.0f, rowY));
 
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::AlignTextToFramePadding();
@@ -534,7 +550,7 @@ void CanvaStyleEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
     }
 
     float btnGroupW = 110.0f + 8.0f + 160.0f;
-    ImGui::SameLine(winSize.x - btnGroupW - 20.0f);
+    ImGui::SetCursorScreenPos(ImVec2(winPos.x + winSize.x - btnGroupW - 20.0f, rowY));
 
     if (GhostButton("  Cancelar  ", ImVec2(110.0f, 36.0f)))
         m_IsOpen = false;

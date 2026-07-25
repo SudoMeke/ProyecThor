@@ -4,6 +4,15 @@
 #include "PostProcessorFXAA.h"
 #include "PostProcessorSaturation.h"
 #include "PostProcessorVignette.h"
+#include "PostProcessorBlur.h"
+#include "PostProcessorSharpen.h"
+#include "PostProcessorBloom.h"
+#include "PostProcessorChromaticAberration.h"
+#include "PostProcessorVHS.h"
+#include "PostProcessorCine.h"
+#include "PostProcessorContrast.h"
+#include "PostProcessorLuminosity.h"
+#include "PostProcessorTAA.h"
 #include <imgui.h>
 
 namespace ProyecThor::Shaders {
@@ -49,9 +58,60 @@ public:
     void SetVignetteIntensity(float v)      { m_Vignette.SetIntensity(v); }
     float GetVignetteIntensity() const      { return m_Vignette.GetIntensity(); }
 
+    void SetBlurEnabled(bool e)             { m_Blur.SetEnabled(e); }
+    bool GetBlurEnabled() const             { return m_Blur.IsEnabled(); }
+    void SetBlurIntensity(float v)          { m_Blur.SetIntensity(v); }
+    float GetBlurIntensity() const          { return m_Blur.GetIntensity(); }
+
+    void SetSharpenEnabled(bool e)          { m_Sharpen.SetEnabled(e); }
+    bool GetSharpenEnabled() const          { return m_Sharpen.IsEnabled(); }
+    void SetSharpenIntensity(float v)       { m_Sharpen.SetIntensity(v); }
+    float GetSharpenIntensity() const       { return m_Sharpen.GetIntensity(); }
+
+    void SetBloomEnabled(bool e)            { m_Bloom.SetEnabled(e); }
+    bool GetBloomEnabled() const            { return m_Bloom.IsEnabled(); }
+    void SetBloomIntensity(float v)         { m_Bloom.SetIntensity(v); }
+    float GetBloomIntensity() const         { return m_Bloom.GetIntensity(); }
+
+    void SetChromaticAberrationEnabled(bool e)    { m_ChromaticAberration.SetEnabled(e); }
+    bool GetChromaticAberrationEnabled() const    { return m_ChromaticAberration.IsEnabled(); }
+    void SetChromaticAberrationIntensity(float v) { m_ChromaticAberration.SetIntensity(v); }
+    float GetChromaticAberrationIntensity() const { return m_ChromaticAberration.GetIntensity(); }
+
+    void SetVHSEnabled(bool e)              { m_VHS.SetEnabled(e); }
+    bool GetVHSEnabled() const              { return m_VHS.IsEnabled(); }
+    void SetVHSIntensity(float v)           { m_VHS.SetIntensity(v); }
+    float GetVHSIntensity() const           { return m_VHS.GetIntensity(); }
+
+    void SetCineEnabled(bool e)             { m_Cine.SetEnabled(e); }
+    bool GetCineEnabled() const             { return m_Cine.IsEnabled(); }
+    void SetCineIntensity(float v)          { m_Cine.SetIntensity(v); }
+    float GetCineIntensity() const          { return m_Cine.GetIntensity(); }
+    void SetCineTint(int t)                 { m_Cine.SetTintInt(t); }
+    int  GetCineTint() const                { return m_Cine.GetTintInt(); }
+
+    void SetContrastEnabled(bool e)         { m_Contrast.SetEnabled(e); }
+    bool GetContrastEnabled() const         { return m_Contrast.IsEnabled(); }
+    void SetContrastAmount(float v)         { m_Contrast.SetAmount(v); }
+    float GetContrastAmount() const         { return m_Contrast.GetAmount(); }
+
+    void SetLuminosityEnabled(bool e)       { m_Luminosity.SetEnabled(e); }
+    bool GetLuminosityEnabled() const       { return m_Luminosity.IsEnabled(); }
+    void SetLuminosityAmount(float v)       { m_Luminosity.SetAmount(v); }
+    float GetLuminosityAmount() const       { return m_Luminosity.GetAmount(); }
+
+    void SetTAAEnabled(bool e)              { m_TAA.SetEnabled(e); }
+    bool GetTAAEnabled() const              { return m_TAA.IsEnabled(); }
+    void SetTAAIntensity(float v)           { m_TAA.SetIntensity(v); }
+    float GetTAAIntensity() const           { return m_TAA.GetIntensity(); }
+
     bool AnyEnabled() const {
         return m_CRT.IsEnabled() || m_Grain.IsEnabled() || m_FXAA.IsEnabled() ||
-               m_Saturation.IsEnabled() || m_Vignette.IsEnabled();
+               m_Saturation.IsEnabled() || m_Vignette.IsEnabled() ||
+               m_Blur.IsEnabled() || m_Sharpen.IsEnabled() || m_Bloom.IsEnabled() ||
+               m_ChromaticAberration.IsEnabled() ||
+               m_VHS.IsEnabled() || m_Cine.IsEnabled() || m_Contrast.IsEnabled() ||
+               m_Luminosity.IsEnabled() || m_TAA.IsEnabled();
     }
 
     // Aplica la MISMA cadena de efectos (mismo habilitado/intensidad que
@@ -90,14 +150,32 @@ private:
     PostProcessorFXAA       m_FXAA;
     PostProcessorSaturation m_Saturation;
     PostProcessorVignette   m_Vignette;
+    PostProcessorBlur       m_Blur;
+    PostProcessorSharpen    m_Sharpen;
+    PostProcessorBloom      m_Bloom;
+    PostProcessorChromaticAberration m_ChromaticAberration;
+    PostProcessorVHS         m_VHS;
+    PostProcessorCine        m_Cine;
+    PostProcessorContrast    m_Contrast;
+    PostProcessorLuminosity  m_Luminosity;
+    PostProcessorTAA         m_TAA;
 
-    // Segundo juego de las mismas 5, a resolucion de PREVIEW -- ver
+    // Segundo juego de las mismas, a resolucion de PREVIEW -- ver
     // ProcessBackgroundForPreview().
     PostProcessorCRT        m_PreviewCRT;
     PostProcessorGrain      m_PreviewGrain;
     PostProcessorFXAA       m_PreviewFXAA;
     PostProcessorSaturation m_PreviewSaturation;
     PostProcessorVignette   m_PreviewVignette;
+    PostProcessorBlur       m_PreviewBlur;
+    PostProcessorSharpen    m_PreviewSharpen;
+    PostProcessorBloom      m_PreviewBloom;
+    PostProcessorChromaticAberration m_PreviewChromaticAberration;
+    PostProcessorVHS         m_PreviewVHS;
+    PostProcessorCine        m_PreviewCine;
+    PostProcessorContrast    m_PreviewContrast;
+    PostProcessorLuminosity  m_PreviewLuminosity;
+    PostProcessorTAA         m_PreviewTAA;
     int  m_PreviewW = 0, m_PreviewH = 0;
     bool m_PreviewInitialized = false;
 

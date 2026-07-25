@@ -217,6 +217,25 @@ void BibleView::HandleQuickNavConfirm() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Confirmacion del buscador por palabras (biblia/BibleWordSearch)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void BibleView::HandleWordSearchConfirm() {
+    const WordSearchHit& hit = m_WordSearch.GetResolution();
+    if (hit.bookIdx < 0) return;
+
+    m_SelectedBook    = hit.bookIdx;
+    m_SelectedChapter = hit.chapIdx;
+    m_SelectedVerse   = hit.verseIdx;
+    m_ScrollToVerse   = hit.verseIdx;
+    m_LiveSearch[0]   = '\0';
+    m_FilteredBook    = -1;
+    m_FilteredChapter = -1;
+
+    ProjectVerse(m_SelectedBook, m_SelectedChapter, m_SelectedVerse);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  RenderTopBar
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -370,6 +389,52 @@ void BibleView::RenderTopBar() {
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
 
+    // ── Boton del buscador por palabras (lupa + "Aa": busca DENTRO del
+    // texto de los versiculos, para cuando el usuario recuerda palabras
+    // sueltas pero no la cita -- distinto del buscador rapido de arriba,
+    // que resuelve una referencia exacta) ─────────────────────────────
+    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::SetCursorPosY(centerY);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,
+        m_WordSearch.IsOpen() ? ToVec4(ColA(DS::AccentColor, 90)) : ToVec4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4(DS::BtnHoverFill));
+
+    bool wordSearchClicked = ImGui::Button("##wordsearch", ImVec2(iconBtnSize, iconBtnSize));
+
+    {
+        ImVec2 wMin = ImGui::GetItemRectMin();
+        ImU32  tint = m_WordSearch.IsOpen() ? DS::AccentColor : DS::TextSecondary;
+        auto itSearch = StyleGeneralApp::Icons.find("search");
+        if (itSearch != StyleGeneralApp::Icons.end() && itSearch->second.textureID) {
+            float iconSize = ImGui::GetFontSize() * 0.72f;
+            ImVec2 iconPos = ImVec2(wMin.x + 4.0f, wMin.y + 4.0f);
+            ImGui::GetWindowDrawList()->AddImage(
+                itSearch->second.textureID,
+                iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                ImVec2(0, 0), ImVec2(1, 1), tint);
+        }
+        // Insignia "Aa" superpuesta abajo a la derecha -- distingue este
+        // buscador (por texto) del de arriba (por referencia), mismo
+        // espiritu que la insignia "+" de favoritos (ver DrawPlusBadge).
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2(wMin.x + iconBtnSize * 0.40f, wMin.y + iconBtnSize * 0.42f),
+            tint, "Aa");
+    }
+
+    if (wordSearchClicked && m_BibleLoaded)
+        m_WordSearch.Open();
+
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Buscar versiculos por palabras del texto");
+
+    m_WordSearchBtnPos  = ImGui::GetItemRectMin();
+    m_WordSearchBtnSize = ImGui::GetItemRectSize();
+
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+
     // ── Boton de favoritos (abre la lista de versiculos marcados) ─────
     ImGui::SameLine(0.0f, 10.0f);
     ImGui::SetCursorPosY(centerY);
@@ -415,6 +480,12 @@ void BibleView::RenderTopBar() {
         RenderHistoryPopup();
     if (m_ShowFavorites)
         RenderFavoritesPopup();
+
+    if (m_WordSearch.IsOpen()) {
+        m_WordSearch.Update(m_CurrentBible);
+        if (m_WordSearch.Render(m_CurrentBible, m_WordSearchBtnPos, m_WordSearchBtnSize))
+            HandleWordSearchConfirm();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1146,7 +1217,7 @@ void BibleView::Render() {
     }
 
     // Navegacion con flechas (deshabilitada si el buscador o el buscador rapido tienen foco)
-    if (!m_SearchFocused && !m_QuickNav.IsOpen() && m_BibleLoaded) {
+    if (!m_SearchFocused && !m_QuickNav.IsOpen() && !m_WordSearch.IsOpen() && m_BibleLoaded) {
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  false)) NavigateVerse(-1);
         if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) NavigateVerse(+1);
     }
@@ -1217,7 +1288,7 @@ void BibleView::UpdateModifierTaps() {
     // No disparamos taps si no hay Biblia, si se esta editando un
     // versiculo, o si el buscador grande (Ctrl+F) esta abierto — evita
     // que se pisen los overlays.
-    bool overlaysBlocked = !m_BibleLoaded || m_ShowEditModal || m_QuickNav.IsOpen();
+    bool overlaysBlocked = !m_BibleLoaded || m_ShowEditModal || m_QuickNav.IsOpen() || m_WordSearch.IsOpen();
 
     ImGuiIO& io  = ImGui::GetIO();
     double   now = ImGui::GetTime();

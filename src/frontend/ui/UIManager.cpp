@@ -1,6 +1,7 @@
 #include <GL/glew.h>
 #include "UIManager.h"
 #include "backend/core/PresentationCore.h"
+#include "frontend/ui/TextEffectsRenderer.h"
 #include "backend/core/PerformanceGovernor.h"
 #include "../toolbar/ConfigPanel.h"
 #include "panels/HomePanel.h"
@@ -604,8 +605,6 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             ImVec4(state.textColor[0], state.textColor[1],
                                    state.textColor[2], state.textColor[3] * alphaMult));
 
-                        ImU32 shadowCol = IM_COL32(0, 0, 0, static_cast<int>(220.0f * alphaMult));
-
                         bool isSong = (Core::PresentationCore::Get().PeekSelection().type
                                        == Core::ItemType::Song);
 
@@ -638,10 +637,9 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                                         targetFontSize, FLT_MAX, boxW, line.c_str());
                                     float lineX = boxX + (boxW - lineSize.x) * 0.5f;
 
-                                    drawList->AddText(activeFont, targetFontSize,
-                                        ImVec2(lineX + 3, currentY + 3), shadowCol, line.c_str());
-                                    drawList->AddText(activeFont, targetFontSize,
-                                        ImVec2(lineX, currentY), col, line.c_str());
+                                    DrawStyledText(drawList, activeFont, targetFontSize,
+                                        ImVec2(lineX, currentY), col, line.c_str(),
+                                        0.0f, screenScale, state.effects, alphaMult);
                                 }
 
                                 currentY += lineHeight;
@@ -664,12 +662,9 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             else if (state.vAlignment == 2)
                                 textY += (boxH - finalBlockSize.y);
 
-                            drawList->AddText(activeFont, targetFontSize,
-                                ImVec2(textX + 3, textY + 3), shadowCol,
-                                text.c_str(), nullptr, boxW);
-                            drawList->AddText(activeFont, targetFontSize,
-                                ImVec2(textX, textY), col,
-                                text.c_str(), nullptr, boxW);
+                            DrawStyledText(drawList, activeFont, targetFontSize,
+                                ImVec2(textX, textY), col, text.c_str(),
+                                boxW, screenScale, state.effects, alphaMult);
                         }
 
                         drawList->PopClipRect();

@@ -398,6 +398,27 @@ void main() {
                 if (upscaled != 0)
                     finalTex = upscaled;
             }
+        } else if (m_NISEnabled) {
+            bool needReinit = (!m_NIS.IsInitialized() ||
+                               m_NIS.GetOutputW() != viewW ||
+                               m_NIS.GetOutputH() != viewH);
+
+            if (needReinit) {
+                bool ok = m_NIS.Init(viewW, viewH);
+                if (ok) {
+                    m_NIS.SetSharpness(m_NISSharpness);
+                    m_NIS.SetEnabled(true);
+                } else {
+                    m_NISEnabled = false;
+                    std::cout << "[BG] NIS no disponible, usando blit directo.\n";
+                }
+            }
+
+            if (m_NISEnabled && m_NIS.IsInitialized() && (srcW < viewW || srcH < viewH)) {
+                GLuint upscaled = m_NIS.Process(rawTex, srcW, srcH);
+                if (upscaled != 0)
+                    finalTex = upscaled;
+            }
         }
 
         if (m_SwapPending && Standby().HasVideoFrame())
@@ -484,6 +505,28 @@ void main() {
     float BackgroundLayer::GetFSRSharpness() const
     {
         return m_FSRSharpness;
+    }
+
+    void BackgroundLayer::SetNISEnabled(bool enabled)
+    {
+        m_NISEnabled = enabled;
+        m_NIS.SetEnabled(enabled);
+    }
+
+    bool BackgroundLayer::GetNISEnabled() const
+    {
+        return m_NISEnabled;
+    }
+
+    void BackgroundLayer::SetNISSharpness(float sharpness)
+    {
+        m_NISSharpness = sharpness;
+        m_NIS.SetSharpness(sharpness);
+    }
+
+    float BackgroundLayer::GetNISSharpness() const
+    {
+        return m_NISSharpness;
     }
 
     void* BackgroundLayer::GetTextureID()
@@ -833,7 +876,7 @@ void main() {
         if (rawTex == 0 || targetW <= 0 || targetH <= 0)
             return nullptr;
 
-        if (!m_FSREnabled)
+        if (!m_FSREnabled && !m_NISEnabled)
             return (void*)(uintptr_t)rawTex;
 
         int srcW = 0, srcH = 0;
@@ -842,21 +885,41 @@ void main() {
         if (srcW <= 0 || srcH <= 0 || (srcW >= targetW && srcH >= targetH))
             return (void*)(uintptr_t)rawTex;
 
-        bool needReinit = (!m_FSR.IsInitialized() ||
-                           m_FSR.GetOutputW() != targetW ||
-                           m_FSR.GetOutputH() != targetH);
+        if (m_FSREnabled) {
+            bool needReinit = (!m_FSR.IsInitialized() ||
+                               m_FSR.GetOutputW() != targetW ||
+                               m_FSR.GetOutputH() != targetH);
+
+            if (needReinit) {
+                if (m_FSR.Init(targetW, targetH)) {
+                    m_FSR.SetSharpness(m_FSRSharpness);
+                    m_FSR.SetEnabled(true);
+                } else {
+                    m_FSREnabled = false;
+                    return (void*)(uintptr_t)rawTex;
+                }
+            }
+
+            GLuint upscaled = m_FSR.Process(rawTex, srcW, srcH);
+            return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
+        }
+
+        // m_NISEnabled
+        bool needReinit = (!m_NIS.IsInitialized() ||
+                           m_NIS.GetOutputW() != targetW ||
+                           m_NIS.GetOutputH() != targetH);
 
         if (needReinit) {
-            if (m_FSR.Init(targetW, targetH)) {
-                m_FSR.SetSharpness(m_FSRSharpness);
-                m_FSR.SetEnabled(true);
+            if (m_NIS.Init(targetW, targetH)) {
+                m_NIS.SetSharpness(m_NISSharpness);
+                m_NIS.SetEnabled(true);
             } else {
-                m_FSREnabled = false;
+                m_NISEnabled = false;
                 return (void*)(uintptr_t)rawTex;
             }
         }
 
-        GLuint upscaled = m_FSR.Process(rawTex, srcW, srcH);
+        GLuint upscaled = m_NIS.Process(rawTex, srcW, srcH);
         return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
     }
 

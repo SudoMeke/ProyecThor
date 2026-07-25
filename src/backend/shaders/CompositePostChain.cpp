@@ -133,6 +133,15 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_FXAA.ForgetGLResources();
         m_Saturation.ForgetGLResources();
         m_Vignette.ForgetGLResources();
+        m_Blur.ForgetGLResources();
+        m_Sharpen.ForgetGLResources();
+        m_Bloom.ForgetGLResources();
+        m_ChromaticAberration.ForgetGLResources();
+        m_VHS.ForgetGLResources();
+        m_Cine.ForgetGLResources();
+        m_Contrast.ForgetGLResources();
+        m_Luminosity.ForgetGLResources();
+        m_TAA.ForgetGLResources();
         m_SubEffectsInitialized = false;
     } else {
         // Mismo contexto: el resize normal, con glDelete* real, es seguro.
@@ -152,6 +161,15 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_FXAA.Init(w, h);
         m_Saturation.Init(w, h);
         m_Vignette.Init(w, h);
+        m_Blur.Init(w, h);
+        m_Sharpen.Init(w, h);
+        m_Bloom.Init(w, h);
+        m_ChromaticAberration.Init(w, h);
+        m_VHS.Init(w, h);
+        m_Cine.Init(w, h);
+        m_Contrast.Init(w, h);
+        m_Luminosity.Init(w, h);
+        m_TAA.Init(w, h);
         m_SubEffectsInitialized = true;
     } else {
         m_CRT.Resize(w, h);
@@ -159,6 +177,15 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_FXAA.Resize(w, h);
         m_Saturation.Resize(w, h);
         m_Vignette.Resize(w, h);
+        m_Blur.Resize(w, h);
+        m_Sharpen.Resize(w, h);
+        m_Bloom.Resize(w, h);
+        m_ChromaticAberration.Resize(w, h);
+        m_VHS.Resize(w, h);
+        m_Cine.Resize(w, h);
+        m_Contrast.Resize(w, h);
+        m_Luminosity.Resize(w, h);
+        m_TAA.Resize(w, h);
     }
 }
 
@@ -196,16 +223,29 @@ void CompositePostChain::RenderViewport(ImGuiViewport* viewport,
     ImGui_ImplOpenGL3_RenderDrawData(viewport->DrawData);
 
     // 2) Cadena de efectos sobre el composite ya capturado. Orden: primero
-    //    el grado de color (Saturación), después los efectos "de estilo"
-    //    (CRT, Grano, Viñeta), y FXAA al final porque suaviza los bordes
-    //    que dejo todo lo anterior (incluido el propio degradado del
-    //    viñetado).
+    //    el grado de color (Saturación, Contraste, Luminosidad, Cine),
+    //    despues Bloom (necesita los brillos originales antes de que otros
+    //    efectos los toquen), Sharpen/Blur (nitidez/desenfoque de
+    //    contenido), VHS y los efectos "de estilo" (CRT, Grano, Viñeta),
+    //    Aberracion Cromatica (tipo distorsion de lente), TAA (mezcla
+    //    temporal, va cerca del final porque tiene que suavizar TODO lo de
+    //    arriba), y FXAA al final porque suaviza los bordes que dejo todo
+    //    lo anterior (incluido el propio degradado del viñetado).
     GLuint tex = m_CaptureTex;
-    if (m_Saturation.IsEnabled()) tex = m_Saturation.Process(tex);
-    if (m_CRT.IsEnabled())        tex = m_CRT.Process(tex, m_W, m_H);
-    if (m_Grain.IsEnabled())      tex = m_Grain.Process(tex, glfwGetTime());
-    if (m_Vignette.IsEnabled())   tex = m_Vignette.Process(tex);
-    if (m_FXAA.IsEnabled())       tex = m_FXAA.Process(tex, m_W, m_H);
+    if (m_Saturation.IsEnabled())          tex = m_Saturation.Process(tex);
+    if (m_Contrast.IsEnabled())            tex = m_Contrast.Process(tex);
+    if (m_Luminosity.IsEnabled())          tex = m_Luminosity.Process(tex);
+    if (m_Cine.IsEnabled())                tex = m_Cine.Process(tex);
+    if (m_Bloom.IsEnabled())               tex = m_Bloom.Process(tex, m_W, m_H);
+    if (m_Sharpen.IsEnabled())             tex = m_Sharpen.Process(tex, m_W, m_H);
+    if (m_Blur.IsEnabled())                tex = m_Blur.Process(tex);
+    if (m_VHS.IsEnabled())                 tex = m_VHS.Process(tex, m_W, m_H, glfwGetTime());
+    if (m_CRT.IsEnabled())                 tex = m_CRT.Process(tex, m_W, m_H);
+    if (m_Grain.IsEnabled())                tex = m_Grain.Process(tex, glfwGetTime());
+    if (m_Vignette.IsEnabled())            tex = m_Vignette.Process(tex);
+    if (m_ChromaticAberration.IsEnabled()) tex = m_ChromaticAberration.Process(tex);
+    if (m_TAA.IsEnabled())                 tex = m_TAA.Process(tex, m_W, m_H);
+    if (m_FXAA.IsEnabled())                tex = m_FXAA.Process(tex, m_W, m_H);
 
     // 3) Blit final al framebuffer real de la ventana.
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFBO));
@@ -224,6 +264,15 @@ void CompositePostChain::Destroy() {
     m_FXAA.Destroy();
     m_Saturation.Destroy();
     m_Vignette.Destroy();
+    m_Blur.Destroy();
+    m_Sharpen.Destroy();
+    m_Bloom.Destroy();
+    m_ChromaticAberration.Destroy();
+    m_VHS.Destroy();
+    m_Cine.Destroy();
+    m_Contrast.Destroy();
+    m_Luminosity.Destroy();
+    m_TAA.Destroy();
     m_SubEffectsInitialized = false;
 
     m_PreviewCRT.Destroy();
@@ -231,6 +280,15 @@ void CompositePostChain::Destroy() {
     m_PreviewFXAA.Destroy();
     m_PreviewSaturation.Destroy();
     m_PreviewVignette.Destroy();
+    m_PreviewBlur.Destroy();
+    m_PreviewSharpen.Destroy();
+    m_PreviewBloom.Destroy();
+    m_PreviewChromaticAberration.Destroy();
+    m_PreviewVHS.Destroy();
+    m_PreviewCine.Destroy();
+    m_PreviewContrast.Destroy();
+    m_PreviewLuminosity.Destroy();
+    m_PreviewTAA.Destroy();
     m_PreviewInitialized = false;
 }
 
@@ -244,6 +302,15 @@ GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int
         m_PreviewFXAA.Destroy();       m_PreviewFXAA.Init(w, h);
         m_PreviewSaturation.Destroy(); m_PreviewSaturation.Init(w, h);
         m_PreviewVignette.Destroy();   m_PreviewVignette.Init(w, h);
+        m_PreviewBlur.Destroy();       m_PreviewBlur.Init(w, h);
+        m_PreviewSharpen.Destroy();    m_PreviewSharpen.Init(w, h);
+        m_PreviewBloom.Destroy();      m_PreviewBloom.Init(w, h);
+        m_PreviewChromaticAberration.Destroy(); m_PreviewChromaticAberration.Init(w, h);
+        m_PreviewVHS.Destroy();         m_PreviewVHS.Init(w, h);
+        m_PreviewCine.Destroy();        m_PreviewCine.Init(w, h);
+        m_PreviewContrast.Destroy();    m_PreviewContrast.Init(w, h);
+        m_PreviewLuminosity.Destroy();  m_PreviewLuminosity.Init(w, h);
+        m_PreviewTAA.Destroy();         m_PreviewTAA.Init(w, h);
         m_PreviewW = w;
         m_PreviewH = h;
         m_PreviewInitialized = true;
@@ -260,14 +327,42 @@ GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int
     m_PreviewSaturation.SetAmount(m_Saturation.GetAmount());
     m_PreviewVignette.SetEnabled(m_Vignette.IsEnabled());
     m_PreviewVignette.SetIntensity(m_Vignette.GetIntensity());
+    m_PreviewBlur.SetEnabled(m_Blur.IsEnabled());
+    m_PreviewBlur.SetIntensity(m_Blur.GetIntensity());
+    m_PreviewSharpen.SetEnabled(m_Sharpen.IsEnabled());
+    m_PreviewSharpen.SetIntensity(m_Sharpen.GetIntensity());
+    m_PreviewBloom.SetEnabled(m_Bloom.IsEnabled());
+    m_PreviewBloom.SetIntensity(m_Bloom.GetIntensity());
+    m_PreviewChromaticAberration.SetEnabled(m_ChromaticAberration.IsEnabled());
+    m_PreviewChromaticAberration.SetIntensity(m_ChromaticAberration.GetIntensity());
+    m_PreviewVHS.SetEnabled(m_VHS.IsEnabled());
+    m_PreviewVHS.SetIntensity(m_VHS.GetIntensity());
+    m_PreviewCine.SetEnabled(m_Cine.IsEnabled());
+    m_PreviewCine.SetIntensity(m_Cine.GetIntensity());
+    m_PreviewCine.SetTintInt(m_Cine.GetTintInt());
+    m_PreviewContrast.SetEnabled(m_Contrast.IsEnabled());
+    m_PreviewContrast.SetAmount(m_Contrast.GetAmount());
+    m_PreviewLuminosity.SetEnabled(m_Luminosity.IsEnabled());
+    m_PreviewLuminosity.SetAmount(m_Luminosity.GetAmount());
+    m_PreviewTAA.SetEnabled(m_TAA.IsEnabled());
+    m_PreviewTAA.SetIntensity(m_TAA.GetIntensity());
 
     // Mismo orden que RenderViewport().
     GLuint tex = srcTex;
-    if (m_PreviewSaturation.IsEnabled()) tex = m_PreviewSaturation.Process(tex);
-    if (m_PreviewCRT.IsEnabled())        tex = m_PreviewCRT.Process(tex, w, h);
-    if (m_PreviewGrain.IsEnabled())      tex = m_PreviewGrain.Process(tex, glfwGetTime());
-    if (m_PreviewVignette.IsEnabled())   tex = m_PreviewVignette.Process(tex);
-    if (m_PreviewFXAA.IsEnabled())       tex = m_PreviewFXAA.Process(tex, w, h);
+    if (m_PreviewSaturation.IsEnabled())          tex = m_PreviewSaturation.Process(tex);
+    if (m_PreviewContrast.IsEnabled())            tex = m_PreviewContrast.Process(tex);
+    if (m_PreviewLuminosity.IsEnabled())          tex = m_PreviewLuminosity.Process(tex);
+    if (m_PreviewCine.IsEnabled())                tex = m_PreviewCine.Process(tex);
+    if (m_PreviewBloom.IsEnabled())               tex = m_PreviewBloom.Process(tex, w, h);
+    if (m_PreviewSharpen.IsEnabled())             tex = m_PreviewSharpen.Process(tex, w, h);
+    if (m_PreviewBlur.IsEnabled())                tex = m_PreviewBlur.Process(tex);
+    if (m_PreviewVHS.IsEnabled())                 tex = m_PreviewVHS.Process(tex, w, h, glfwGetTime());
+    if (m_PreviewCRT.IsEnabled())                 tex = m_PreviewCRT.Process(tex, w, h);
+    if (m_PreviewGrain.IsEnabled())               tex = m_PreviewGrain.Process(tex, glfwGetTime());
+    if (m_PreviewVignette.IsEnabled())            tex = m_PreviewVignette.Process(tex);
+    if (m_PreviewChromaticAberration.IsEnabled()) tex = m_PreviewChromaticAberration.Process(tex);
+    if (m_PreviewTAA.IsEnabled())                 tex = m_PreviewTAA.Process(tex, w, h);
+    if (m_PreviewFXAA.IsEnabled())                tex = m_PreviewFXAA.Process(tex, w, h);
 
     return tex;
 }

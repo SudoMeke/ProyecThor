@@ -147,7 +147,7 @@ bool RenderPadIconGrid(int& iconIndex)
 // ─────────────────────────────────────────────────────────────────────────────
 using PadSettings = ProyecThor::Settings::PadSettings;
 
-void SavePad(PadSettings& pad, const std::string& styleChoice)
+void SavePad(PadSettings& pad)
 {
     auto& core = Core::PresentationCore::Get();
 
@@ -156,14 +156,22 @@ void SavePad(PadSettings& pad, const std::string& styleChoice)
     else
         pad.hasCapture = false;
 
-    pad.hasStyle = !styleChoice.empty();
-    if (pad.hasStyle) {
-        pad.styleName = styleChoice;
-        auto state = core.GetState();
-        pad.bgType = (int)state.bgType;
-        pad.bgPath = state.bgPath;
-        for (int c = 0; c < 3; c++) pad.bgColor[c] = state.bgColor[c];
-    }
+    // Snapshot directo de lo que hay en pantalla ahora mismo -- no una
+    // referencia por nombre a un estilo guardado (eso obligaba a elegirlo
+    // a mano en un combo aparte y hacia que "Guardar aqui" no guardara
+    // nada si no se tocaba ese combo).
+    auto state = core.GetState();
+    pad.hasStyle       = true;
+    pad.styleSize      = state.textSize;
+    for (int c = 0; c < 4; c++) pad.styleColor[c] = state.textColor[c];
+    pad.styleHAlign    = state.textAlignment;
+    pad.styleVAlign    = state.vAlignment;
+    for (int c = 0; c < 4; c++) pad.styleMargins[c] = state.margins[c];
+    pad.styleAutoScale = state.autoScale;
+    pad.styleFontName  = state.selectedFont;
+    pad.bgType = (int)state.bgType;
+    pad.bgPath = state.bgPath;
+    for (int c = 0; c < 3; c++) pad.bgColor[c] = state.bgColor[c];
 
     pad.hasMacro = core.IsMacroPlaying();
     if (pad.hasMacro) {
@@ -187,7 +195,16 @@ void ApplyPad(const PadSettings& pad)
     }
 
     if (pad.hasStyle) {
-        core.ApplyStyleByName(pad.styleName);
+        Core::SavedStyle snap;
+        snap.size      = pad.styleSize;
+        for (int c = 0; c < 4; c++) snap.color[c] = pad.styleColor[c];
+        snap.hAlign    = pad.styleHAlign;
+        snap.vAlign    = pad.styleVAlign;
+        for (int c = 0; c < 4; c++) snap.margins[c] = pad.styleMargins[c];
+        snap.autoScale = pad.styleAutoScale;
+        snap.fontName  = pad.styleFontName;
+        core.ApplyStyleSnapshot(snap);
+
         switch ((BgType)pad.bgType) {
             case BgType::SolidColor:
                 core.SetLayer0_Color(pad.bgColor[0], pad.bgColor[1], pad.bgColor[2]);
@@ -353,13 +370,13 @@ void ViewToolsPanel::RenderPads(float w, float h)
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   MT::k_R);
 
-    ImGui::BeginChild("##viewPads", { w, h }, true, ImGuiWindowFlags_NoScrollbar);
+    ImGui::BeginChild("##viewPads", { w, h }, true);
 
     const float innerW = w - MT::k_PadLg * 2.0f;
 
     ImGui::SetCursorPosX(MT::k_PadLg);
     ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextSecondary);
-    ImGui::TextUnformatted("PADS");
+    ImGui::TextUnformatted("GENERAL");
     ImGui::PopStyleColor();
 
     DrawAccentLine(innerW, MT::k_PrevAccentDim, 1.0f);
@@ -371,15 +388,11 @@ void ViewToolsPanel::RenderPads(float w, float h)
     ImGui::Spacing();
     ImGui::Spacing();
 
-    auto& core       = Core::PresentationCore::Get();
     auto& padsArr    = ProyecThor::Settings::SettingsManager::Get().GetSettings().pads.pads;
-    const auto styleNames = core.GetSavedStyleNames();
 
     const int   cols    = 4;
     const float btnSize = 56.0f;
     const float spacing = 10.0f;
-
-    static std::string s_styleChoice[ProyecThor::Settings::kPadCount];
 
     for (int i = 0; i < ProyecThor::Settings::kPadCount; i++)
     {
@@ -414,24 +427,8 @@ void ViewToolsPanel::RenderPads(float w, float h)
         if (clicked && pad.assigned) ApplyPad(pad);
 
         if (ImGui::BeginPopupContextItem("##padCtx")) {
-            if (ImGui::IsWindowAppearing())
-                s_styleChoice[i] = pad.hasStyle ? pad.styleName : std::string();
-
-            ImGui::TextUnformatted("Estilo + fondo a guardar:");
-            ImGui::SetNextItemWidth(200.0f);
-            if (ImGui::BeginCombo("##padStyle", s_styleChoice[i].empty() ? "(ninguno)" : s_styleChoice[i].c_str())) {
-                bool noneSel = s_styleChoice[i].empty();
-                if (ImGui::Selectable("(ninguno)", noneSel)) s_styleChoice[i].clear();
-                for (const auto& name : styleNames) {
-                    bool sel = (s_styleChoice[i] == name);
-                    if (ImGui::Selectable(name.c_str(), sel)) s_styleChoice[i] = name;
-                    if (sel) ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-
             if (ImGui::MenuItem(pad.assigned ? "Guardar aqui (reemplazar)" : "Guardar aqui"))
-                SavePad(pad, s_styleChoice[i]);
+                SavePad(pad);
 
             if (ImGui::BeginMenu("Elegir icono")) {
                 if (RenderPadIconGrid(pad.iconIndex))
@@ -452,13 +449,20 @@ void ViewToolsPanel::RenderPads(float w, float h)
         if (pad.assigned && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
             std::string tip = "Pad " + std::to_string(i + 1);
             if (pad.hasCapture) tip += "\n- Captura";
-            if (pad.hasStyle)   tip += "\n- Estilo: " + pad.styleName;
+            if (pad.hasStyle)   tip += "\n- Estilo y fondo";
             if (pad.hasMacro)   tip += "\n- Overlay: " + pad.macroName;
             ImGui::SetTooltip("%s", tip.c_str());
         }
 
         ImGui::PopID();
     }
+
+    // ── Captura — mismas 8 escenas rapidas del panel Captura, no una
+    // copia: se dibujan llamando directo a CapturePanel::RenderSceneButtons
+    // (opera sobre Settings::CaptureSettings::scenes, el mismo dato de
+    // fondo), asi quedan siempre sincronizadas entre las dos pantallas.
+    if (auto* cap = Core::PresentationCore::Get().GetCapturePanelRef())
+        cap->RenderSceneButtons();
 
     ImGui::EndChild();
     ImGui::PopStyleVar(3);

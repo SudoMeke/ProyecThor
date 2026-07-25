@@ -76,6 +76,13 @@ public:
     bool        SnapshotCurrentCapture(::ProyecThor::Settings::CaptureSceneSettings& out) const;
     void        ApplyCaptureScene(const ::ProyecThor::Settings::CaptureSceneSettings& scene);
 
+    // Dibuja la grilla de "Escenas rápidas" (los mismos 8 slots de
+    // Settings::CaptureSettings::scenes que usa este panel). Publico para
+    // que ViewToolsPanel > Pads pueda mostrarla tal cual debajo de sus
+    // propios pads "General" -- son las mismas escenas, sincronizadas
+    // (un solo dato de fondo), no una copia aparte.
+    void        RenderSceneButtons();
+
 private:
     // ── Enumeración de fuentes ───────────────────────────────────────────────
     void EnumerateCameras();
@@ -127,8 +134,7 @@ private:
     // slot (fuente + recuadro + opacidad, ver SettingsManager::
     // CaptureSceneSettings), click derecho abre un menú para guardar la
     // posición libre actual ahí o borrarla. Persisten en Settings, no en
-    // memoria de sesión.
-    void RenderSceneButtons();
+    // memoria de sesión. (RenderSceneButtons es publico, ver mas arriba.)
     void SaveCurrentAsScene(int slot);
     void RecallScene(int slot);
     void ClearScene(int slot);

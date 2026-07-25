@@ -370,11 +370,18 @@ void SettingsManager::ApplyProjection() {
 
     core.UpdateTextStyle(p.textSize, tc, p.textAlignment, p.vAlignment,
                           margins, p.autoScale, p.selectedFont);
+    {
+        Core::TextEffectsData fx;
+        Core::UnpackTextEffects(p.textEffectsPacked, fx);
+        core.SetTextEffects(fx);
+    }
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
     core.SetLoadingLogoPath(p.loadingLogoPath);
 
     core.SetFSREnabled(p.fsrEnabled);
     core.SetFSRSharpness(p.fsrSharpness);
+    core.SetNISEnabled(p.nisEnabled);
+    core.SetNISSharpness(p.nisSharpness);
     core.SetCRTEnabled(p.crtEnabled);
     core.SetCRTScanlineIntensity(p.crtScanlineIntensity);
     core.SetGrainEnabled(p.grainEnabled);
@@ -384,6 +391,25 @@ void SettingsManager::ApplyProjection() {
     core.SetSaturationAmount(p.saturationAmount);
     core.SetVignetteEnabled(p.vignetteEnabled);
     core.SetVignetteIntensity(p.vignetteIntensity);
+    core.SetBlurEnabled(p.blurEnabled);
+    core.SetBlurIntensity(p.blurIntensity);
+    core.SetSharpenEnabled(p.sharpenEnabled);
+    core.SetSharpenIntensity(p.sharpenIntensity);
+    core.SetBloomEnabled(p.bloomEnabled);
+    core.SetBloomIntensity(p.bloomIntensity);
+    core.SetChromaticAberrationEnabled(p.chromaticAberrationEnabled);
+    core.SetChromaticAberrationIntensity(p.chromaticAberrationIntensity);
+    core.SetVHSEnabled(p.vhsEnabled);
+    core.SetVHSIntensity(p.vhsIntensity);
+    core.SetCineEnabled(p.cineEnabled);
+    core.SetCineIntensity(p.cineIntensity);
+    core.SetCineTint(p.cineTint);
+    core.SetContrastEnabled(p.contrastEnabled);
+    core.SetContrastAmount(p.contrastAmount);
+    core.SetLuminosityEnabled(p.luminosityEnabled);
+    core.SetLuminosityAmount(p.luminosityAmount);
+    core.SetTAAEnabled(p.taaEnabled);
+    core.SetTAAIntensity(p.taaIntensity);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetVideoRenderEngine(p.videoRenderEngine);
@@ -514,6 +540,7 @@ void SettingsManager::SaveSettings() {
     j["projection"]["marginRight"]   = p.marginRight;
     j["projection"]["autoScale"]     = p.autoScale;
     j["projection"]["selectedFont"]  = p.selectedFont;
+    j["projection"]["textEffectsPacked"] = p.textEffectsPacked;
     j["projection"]["defaultBgR"]    = p.defaultBgR;
     j["projection"]["defaultBgG"]    = p.defaultBgG;
     j["projection"]["defaultBgB"]    = p.defaultBgB;
@@ -525,6 +552,8 @@ void SettingsManager::SaveSettings() {
     j["projection"]["loadingLogoPath"]    = p.loadingLogoPath;
     j["projection"]["fsrEnabled"]           = p.fsrEnabled;
     j["projection"]["fsrSharpness"]         = p.fsrSharpness;
+    j["projection"]["nisEnabled"]           = p.nisEnabled;
+    j["projection"]["nisSharpness"]         = p.nisSharpness;
     j["projection"]["crtEnabled"]           = p.crtEnabled;
     j["projection"]["crtScanlineIntensity"] = p.crtScanlineIntensity;
     j["projection"]["grainEnabled"]         = p.grainEnabled;
@@ -534,6 +563,25 @@ void SettingsManager::SaveSettings() {
     j["projection"]["saturationAmount"]     = p.saturationAmount;
     j["projection"]["vignetteEnabled"]      = p.vignetteEnabled;
     j["projection"]["vignetteIntensity"]    = p.vignetteIntensity;
+    j["projection"]["blurEnabled"]          = p.blurEnabled;
+    j["projection"]["blurIntensity"]        = p.blurIntensity;
+    j["projection"]["sharpenEnabled"]       = p.sharpenEnabled;
+    j["projection"]["sharpenIntensity"]     = p.sharpenIntensity;
+    j["projection"]["bloomEnabled"]         = p.bloomEnabled;
+    j["projection"]["bloomIntensity"]       = p.bloomIntensity;
+    j["projection"]["chromaticAberrationEnabled"]   = p.chromaticAberrationEnabled;
+    j["projection"]["chromaticAberrationIntensity"] = p.chromaticAberrationIntensity;
+    j["projection"]["vhsEnabled"]           = p.vhsEnabled;
+    j["projection"]["vhsIntensity"]         = p.vhsIntensity;
+    j["projection"]["cineEnabled"]          = p.cineEnabled;
+    j["projection"]["cineIntensity"]        = p.cineIntensity;
+    j["projection"]["cineTint"]             = p.cineTint;
+    j["projection"]["contrastEnabled"]      = p.contrastEnabled;
+    j["projection"]["contrastAmount"]       = p.contrastAmount;
+    j["projection"]["luminosityEnabled"]    = p.luminosityEnabled;
+    j["projection"]["luminosityAmount"]     = p.luminosityAmount;
+    j["projection"]["taaEnabled"]           = p.taaEnabled;
+    j["projection"]["taaIntensity"]         = p.taaIntensity;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
@@ -597,8 +645,14 @@ void SettingsManager::SaveSettings() {
         jc["x1"] = p.capture.x1; jc["y1"] = p.capture.y1;
         jc["opacity"] = p.capture.opacity;
 
-        jp["hasStyle"]  = p.hasStyle;
-        jp["styleName"] = p.styleName;
+        jp["hasStyle"]       = p.hasStyle;
+        jp["styleSize"]      = p.styleSize;
+        for (int c = 0; c < 4; c++) jp["styleColor"][c] = p.styleColor[c];
+        jp["styleHAlign"]    = p.styleHAlign;
+        jp["styleVAlign"]    = p.styleVAlign;
+        for (int c = 0; c < 4; c++) jp["styleMargins"][c] = p.styleMargins[c];
+        jp["styleAutoScale"] = p.styleAutoScale;
+        jp["styleFontName"]  = p.styleFontName;
         jp["bgType"]    = p.bgType;
         jp["bgPath"]    = p.bgPath;
         for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
@@ -694,6 +748,7 @@ void SettingsManager::LoadSettings() {
             p.marginRight   = jp.value("marginRight",   50.0f);
             p.autoScale     = jp.value("autoScale",     true);
             p.selectedFont  = jp.value("selectedFont",  "default");
+            p.textEffectsPacked = jp.value("textEffectsPacked", "");
             p.defaultBgR    = jp.value("defaultBgR",    0.0f);
             p.defaultBgG    = jp.value("defaultBgG",    0.0f);
             p.defaultBgB    = jp.value("defaultBgB",    0.0f);
@@ -705,6 +760,8 @@ void SettingsManager::LoadSettings() {
             p.loadingLogoPath    = jp.value("loadingLogoPath",    "");
             p.fsrEnabled            = jp.value("fsrEnabled",            true);
             p.fsrSharpness          = jp.value("fsrSharpness",          0.2f);
+            p.nisEnabled            = jp.value("nisEnabled",            false);
+            p.nisSharpness          = jp.value("nisSharpness",          0.5f);
             p.crtEnabled            = jp.value("crtEnabled",            false);
             p.crtScanlineIntensity  = jp.value("crtScanlineIntensity",  0.5f);
             p.grainEnabled          = jp.value("grainEnabled",          false);
@@ -714,6 +771,25 @@ void SettingsManager::LoadSettings() {
             p.saturationAmount      = jp.value("saturationAmount",      1.3f);
             p.vignetteEnabled       = jp.value("vignetteEnabled",       false);
             p.vignetteIntensity     = jp.value("vignetteIntensity",     0.45f);
+            p.blurEnabled           = jp.value("blurEnabled",           false);
+            p.blurIntensity         = jp.value("blurIntensity",         0.35f);
+            p.sharpenEnabled        = jp.value("sharpenEnabled",        false);
+            p.sharpenIntensity      = jp.value("sharpenIntensity",      0.35f);
+            p.bloomEnabled          = jp.value("bloomEnabled",          false);
+            p.bloomIntensity        = jp.value("bloomIntensity",        0.35f);
+            p.chromaticAberrationEnabled   = jp.value("chromaticAberrationEnabled",   false);
+            p.chromaticAberrationIntensity = jp.value("chromaticAberrationIntensity", 0.35f);
+            p.vhsEnabled            = jp.value("vhsEnabled",            false);
+            p.vhsIntensity          = jp.value("vhsIntensity",          0.5f);
+            p.cineEnabled           = jp.value("cineEnabled",           false);
+            p.cineIntensity         = jp.value("cineIntensity",         0.5f);
+            p.cineTint              = jp.value("cineTint",              0);
+            p.contrastEnabled       = jp.value("contrastEnabled",       false);
+            p.contrastAmount        = jp.value("contrastAmount",        1.3f);
+            p.luminosityEnabled     = jp.value("luminosityEnabled",     false);
+            p.luminosityAmount      = jp.value("luminosityAmount",      1.2f);
+            p.taaEnabled            = jp.value("taaEnabled",            false);
+            p.taaIntensity          = jp.value("taaIntensity",          0.5f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
@@ -823,7 +899,21 @@ void SettingsManager::LoadSettings() {
                 }
 
                 p.hasStyle  = jp.value("hasStyle",  false);
-                p.styleName = jp.value("styleName", "");
+                p.styleSize = jp.value("styleSize", 60.0f);
+                if (jp.contains("styleColor") && jp["styleColor"].is_array()) {
+                    const auto& sc = jp["styleColor"];
+                    for (int c = 0; c < 4 && c < (int)sc.size(); c++)
+                        p.styleColor[c] = sc[c].get<float>();
+                }
+                p.styleHAlign = jp.value("styleHAlign", 1);
+                p.styleVAlign = jp.value("styleVAlign", 1);
+                if (jp.contains("styleMargins") && jp["styleMargins"].is_array()) {
+                    const auto& sm = jp["styleMargins"];
+                    for (int c = 0; c < 4 && c < (int)sm.size(); c++)
+                        p.styleMargins[c] = sm[c].get<float>();
+                }
+                p.styleAutoScale = jp.value("styleAutoScale", true);
+                p.styleFontName  = jp.value("styleFontName", "Predeterminada");
                 p.bgType    = jp.value("bgType",    0);
                 p.bgPath    = jp.value("bgPath",    "");
                 if (jp.contains("bgColor") && jp["bgColor"].is_array()) {

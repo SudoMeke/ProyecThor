@@ -70,6 +70,25 @@ LayersStyleTab::LayersStyleTab() {
         LoadFontsList();
     };
     m_StyleEditor = std::make_unique<CanvaStyleEditor>(&m_AvailableFonts, onFontImported);
+
+    // Puente para que HomePanel muestre el editor "acoplado" dentro de su
+    // propia ventana (ver CanvaStyleEditor::Render(embedded=true) y
+    // PresentationCore::SetStyleEditorHook) en vez de una ventana flotante
+    // nueva -- LayersStyleTab sigue siendo el dueño real del editor
+    // (OpenNew/OpenEdit se llaman desde aca, ver RenderThemeGrid), solo que
+    // ahora quien lo DIBUJA es HomePanel a traves de este hook.
+    Core::PresentationCore::Get().SetStyleEditorHook([this]() -> bool {
+        if (!m_StyleEditor || !m_StyleEditor->IsOpen()) return false;
+        m_StyleEditor->Render([this](const std::string& name, const StyleData& data) {
+            if (SaveTheme(name, data)) {
+                LoadThemeList();
+                m_CurrentStyle  = data;
+                m_SelectedTheme = name;
+                ApplyCurrentStyleToCore();
+            }
+        }, /*embedded=*/true);
+        return true;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,6 +150,7 @@ bool LayersStyleTab::SaveTheme(const std::string& name, const StyleData& data) {
     f << "songVAlign="     << data.songVAlignment    << "\n";
     f << "bibleTextAlign=" << data.bibleTextAlignment << "\n";
     f << "bibleVAlign="    << data.bibleVAlignment   << "\n";
+    f << "textEffects="    << Core::PackTextEffects(data.effects) << "\n";
     return true;
 }
 
@@ -167,6 +187,8 @@ bool LayersStyleTab::LoadThemeData(const std::string& name, StyleData& out) {
             sscanf(v.c_str(), "%f,%f,%f,%f",
                 &out.margins[0], &out.margins[1],
                 &out.margins[2], &out.margins[3]);
+        else if (k == "textEffects")
+            Core::UnpackTextEffects(v, out.effects);
     }
     return true;
 }
@@ -210,6 +232,8 @@ void LayersStyleTab::ApplyCurrentStyleToCore() {
     core.UpdateSongStyle(
         m_CurrentStyle.songTextAlignment,
         m_CurrentStyle.songVAlignment);
+
+    core.SetTextEffects(m_CurrentStyle.effects);
 
     // FIXED: Notify projector that something changed so it re-draws.
     // Only do this if we're already projecting — don't start projection
@@ -588,21 +612,6 @@ void LayersStyleTab::RenderQuickAdjustPopup() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Modal del editor de estilos (Se mantiene igual)
-// ─────────────────────────────────────────────────────────────────────────────
-void LayersStyleTab::RenderStyleEditorModal() {
-    if (!m_StyleEditor) return;
-    m_StyleEditor->Render([this](const std::string& name, const StyleData& data) {
-        if (SaveTheme(name, data)) {
-            LoadThemeList();
-            m_CurrentStyle  = data;
-            m_SelectedTheme = name;
-            ApplyCurrentStyleToCore();
-        }
-    });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  Render principal del tab (AHORA CON LAYOUT DE 2 COLUMNAS)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::Render() {
@@ -616,8 +625,10 @@ void LayersStyleTab::Render() {
 
     RenderQuickAdjustPopup();
 
-    // Modal del editor (siempre al final, fuera de children)
-    RenderStyleEditorModal();
+    // El editor de estilos ya no se dibuja aca: ahora se muestra "acoplado"
+    // dentro de HomePanel (ver PresentationCore::SetStyleEditorHook,
+    // registrado en el constructor de esta clase) en vez de una ventana
+    // flotante nueva encima de todo.
 }
 
 } // namespace ProyecThor::UI

@@ -5,6 +5,7 @@
 #include <mutex>
 #include <atomic>
 #include <unordered_map>
+#include <functional>
 #include <imgui.h>
 
 #include "NetworkStreamServer.h"
@@ -33,6 +34,42 @@ namespace ProyecThor::Core {
         std::vector<std::string> contentData;
     };
 
+    // Efectos visuales sobre el texto proyectado (Layer2) -- dibujados a
+    // mano en capas con ImDrawList (sin FBO/shader, ver TextEffectsRenderer.h):
+    // fondo detras del bloque, borde = copias offset en anillo antes del
+    // texto, sombra = una copia offset, aberracion cromatica = copias R/G/B
+    // desfasadas, glow/neon = varias copias a radios crecientes y alpha
+    // decreciente (mismo truco que el halo de los pads MIDI de ViewPanel),
+    // subrayado = una linea bajo el bloque de texto. Cada uno con un solo
+    // slider de intensidad, mismo criterio "un control" que Grain/Vignette.
+    struct TextEffectsData {
+        bool  bgEnabled = false;
+        float bgColor[4] = { 0.0f, 0.0f, 0.0f, 0.55f };
+
+        bool  borderEnabled = false;
+        float borderColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        float borderWidth = 0.4f; // 0..1
+
+        bool  shadowEnabled = true; // default: mismo comportamiento que antes
+        float shadowColor[4] = { 0.0f, 0.0f, 0.0f, 0.7f };
+        float shadowIntensity = 0.4f; // 0..1
+
+        bool  chromaticAberrationEnabled = false;
+        float chromaticAberrationIntensity = 0.4f; // 0..1
+
+        bool  glowEnabled = false; // "bloom"
+        float glowColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        float glowIntensity = 0.5f; // 0..1
+
+        bool  neonEnabled = false;
+        float neonColor[4] = { 0.15f, 0.9f, 1.0f, 1.0f };
+        float neonIntensity = 0.6f; // 0..1
+
+        bool  underlineEnabled = false;
+        float underlineColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        float underlineThickness = 0.3f; // 0..1
+    };
+
     struct SavedStyle {
         std::string name;
         float       size          = 60.0f;
@@ -42,7 +79,17 @@ namespace ProyecThor::Core {
         float       margins[4]    = { 50.0f, 50.0f, 50.0f, 50.0f };
         bool        autoScale     = true;
         std::string fontName      = "Predeterminada";
+        TextEffectsData effects;
     };
+
+    // Empaqueta/desempaqueta TextEffectsData como una sola linea CSV para el
+    // formato "key=value" de los archivos .theme -- usado tanto por
+    // PresentationCore::SaveStyle/GetSavedStyle (el catalogo de estilos) como
+    // por LayersStyleTab::SaveTheme/LoadThemeData (el editor real), que leen
+    // y escriben los MISMOS archivos con parsers independientes. Ver
+    // implementacion en PresentationCore.cpp.
+    std::string PackTextEffects(const TextEffectsData& e);
+    void        UnpackTextEffects(const std::string& v, TextEffectsData& e);
 
     struct PresentationState {
         // Audio: "now playing" (disco + caratula + ondas) — ver
@@ -90,6 +137,7 @@ namespace ProyecThor::Core {
         float margins[4]        = { 50.0f, 50.0f, 50.0f, 50.0f };
         bool  autoScale         = true;
         std::string selectedFont = "Predeterminada";
+        TextEffectsData effects;
 
         float refTextSize   = 28.0f;
         float verseTextSize = 60.0f;
@@ -139,6 +187,7 @@ void SetGlobalMute(bool mute);
         void RenderProjectorWindow(); // dibuja background+overlay (contenido, no la ventana en si)
         PresentationState GetState();
         void ApplyStyleByName(const std::string& styleName);
+        void ApplyStyleSnapshot(const SavedStyle& style); // aplica un snapshot directo (ver ViewToolsPanel::ApplyPad), sin pasar por el catalogo de estilos guardados
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
@@ -182,6 +231,16 @@ void SetGlobalMute(bool mute);
         void  SetFSRSharpness(float sharpness);
         float GetFSRSharpness() const;
 
+        // Escalador alternativo exclusivo de NVIDIA (ver PostProcessorNIS.h
+        // para la justificacion de por que es un fragment shader propio en
+        // vez del compute shader original de NVIDIA). Mutuamente excluyente
+        // con FSR (arriba): SetNISEnabled(true) apaga FSR y viceversa, no
+        // tiene sentido correr los dos upscalers de la misma etapa a la vez.
+        void  SetNISEnabled(bool enabled);
+        bool  GetNISEnabled() const;
+        void  SetNISSharpness(float sharpness);
+        float GetNISSharpness() const;
+
         // Motor de renderizado del fondo de video (Ajustes > Proyeccion):
         // 0 = OpenGL compuesto (default, con overlays/texto encima), 1 =
         // VLC en ventana nativa (sin overlays/texto, ver BackgroundLayer::
@@ -216,6 +275,56 @@ void SetGlobalMute(bool mute);
         bool  GetVignetteEnabled() const;
         void  SetVignetteIntensity(float intensity);
         float GetVignetteIntensity() const;
+
+        void  SetBlurEnabled(bool enabled);
+        bool  GetBlurEnabled() const;
+        void  SetBlurIntensity(float intensity);
+        float GetBlurIntensity() const;
+
+        void  SetSharpenEnabled(bool enabled);
+        bool  GetSharpenEnabled() const;
+        void  SetSharpenIntensity(float intensity);
+        float GetSharpenIntensity() const;
+
+        void  SetBloomEnabled(bool enabled);
+        bool  GetBloomEnabled() const;
+        void  SetBloomIntensity(float intensity);
+        float GetBloomIntensity() const;
+
+        void  SetChromaticAberrationEnabled(bool enabled);
+        bool  GetChromaticAberrationEnabled() const;
+        void  SetChromaticAberrationIntensity(float intensity);
+        float GetChromaticAberrationIntensity() const;
+
+        void  SetVHSEnabled(bool enabled);
+        bool  GetVHSEnabled() const;
+        void  SetVHSIntensity(float intensity);
+        float GetVHSIntensity() const;
+
+        // tint: 0=rojo, 1=verde, 2=azul (ver PostProcessorCine::Tint).
+        void  SetCineEnabled(bool enabled);
+        bool  GetCineEnabled() const;
+        void  SetCineIntensity(float intensity);
+        float GetCineIntensity() const;
+        void  SetCineTint(int tint);
+        int   GetCineTint() const;
+
+        void  SetContrastEnabled(bool enabled);
+        bool  GetContrastEnabled() const;
+        void  SetContrastAmount(float amount);
+        float GetContrastAmount() const;
+
+        void  SetLuminosityEnabled(bool enabled);
+        bool  GetLuminosityEnabled() const;
+        void  SetLuminosityAmount(float amount);
+        float GetLuminosityAmount() const;
+
+        // TAA (Temporal Anti-Aliasing simplificado, ver PostProcessorTAA.h):
+        // mezcla el frame actual con el resultado del frame anterior.
+        void  SetTAAEnabled(bool enabled);
+        bool  GetTAAEnabled() const;
+        void  SetTAAIntensity(float intensity);
+        float GetTAAIntensity() const;
 
         // Usado por UIManager (justo tras ImGui::Begin("ProjectorLive",...))
         // para informar, cada frame, cual ImGuiID es esa viewport, y por el
@@ -312,6 +421,11 @@ void SetGlobalMute(bool mute);
 
         void UpdateBibleStyle(float refSize, float verseSize, int hAlign, int vAlign);
         void UpdateSongStyle(int hAlign, int vAlign);
+
+        // Efectos visuales del texto proyectado (ver TextEffectsData arriba
+        // y TextEffectsRenderer.h para el dibujo).
+        void SetTextEffects(const TextEffectsData& effects);
+        TextEffectsData GetTextEffects() const;
 
         void        SetProjecting(bool projecting);
         bool        IsProjecting() const;
@@ -453,6 +567,16 @@ void SetGlobalMute(bool mute);
         void                       SetCapturePanelRef(ProyecThor::UI::CapturePanel* c) { m_CapturePanelRef = c; }
         ProyecThor::UI::CapturePanel* GetCapturePanelRef() const { return m_CapturePanelRef; }
 
+        // Puente para que HomePanel pueda dibujar el editor de estilos
+        // "acoplado" dentro de su propia ventana (ver CanvaStyleEditor::Render
+        // con embedded=true) sin que HomePanel necesite conocer LayersStyleTab
+        // (quien realmente es dueño del CanvaStyleEditor). LayersStyleTab
+        // registra el hook una vez en su constructor; HomePanel lo llama todos
+        // los frames y, si devuelve true (el editor estaba abierto y se
+        // dibujo), muestra eso en vez de su contenido normal de biblioteca.
+        void SetStyleEditorHook(std::function<bool()> hook) { m_StyleEditorHook = std::move(hook); }
+        bool RenderStyleEditorIfOpen() const { return m_StyleEditorHook ? m_StyleEditorHook() : false; }
+
         // ── Preload adelantado (ver BackgroundLayer::Prefetch/CommitPrefetch) ──
         // Usado por la cola del Monitor para cargar el SIGUIENTE clip en
         // segundo plano mientras el actual sigue reproduciendose, sin
@@ -576,6 +700,7 @@ bool m_GlobalMuted = false;
         ProyecThor::UI::Announcements* m_AnnouncementsRef = nullptr;
         ProyecThor::UI::OClock*        m_OClockRef        = nullptr;
         ProyecThor::UI::CapturePanel*  m_CapturePanelRef  = nullptr;
+        std::function<bool()>         m_StyleEditorHook;
 
         // Unico lugar que escribe m_State.bgType: si se esta dejando Audio
         // por otra cosa, apaga el boton "En vivo" del panel de audio. Debe

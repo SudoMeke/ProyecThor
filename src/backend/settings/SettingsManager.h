@@ -45,6 +45,12 @@ namespace ProyecThor::Settings {
 
         std::string selectedFont = "Arial.ttf";
 
+        // Efectos visuales del texto proyectado (fondo/borde/sombra/
+        // aberracion cromatica/glow/neon/subrayado) -- empaquetados como una
+        // sola linea CSV, ver Core::PackTextEffects/UnpackTextEffects
+        // (PresentationCore.h) y TextEffectsRenderer.h para el dibujo.
+        std::string textEffectsPacked;
+
         float lineSpacing  = 1.2f;
         bool  fadeEnabled  = true;
         float fadeDuration = 0.3f;
@@ -73,6 +79,11 @@ namespace ProyecThor::Settings {
         // upscale.
         bool  fsrEnabled            = true;
         float fsrSharpness          = 0.2f;
+        // Escalador alternativo exclusivo de NVIDIA (ver PostProcessorNIS.h).
+        // Mutuamente excluyente con FSR -- activar uno apaga el otro (ver
+        // PresentationCore::SetFSREnabled/SetNISEnabled).
+        bool  nisEnabled            = false;
+        float nisSharpness          = 0.5f;
         bool  crtEnabled            = false;
         float crtScanlineIntensity  = 0.5f;
         bool  grainEnabled          = false;
@@ -82,6 +93,25 @@ namespace ProyecThor::Settings {
         float saturationAmount      = 1.3f;
         bool  vignetteEnabled       = false;
         float vignetteIntensity     = 0.45f;
+        bool  blurEnabled           = false;
+        float blurIntensity         = 0.35f;
+        bool  sharpenEnabled        = false;
+        float sharpenIntensity      = 0.35f;
+        bool  bloomEnabled          = false;
+        float bloomIntensity        = 0.35f;
+        bool  chromaticAberrationEnabled   = false;
+        float chromaticAberrationIntensity = 0.35f;
+        bool  vhsEnabled            = false;
+        float vhsIntensity          = 0.5f;
+        bool  cineEnabled           = false;
+        float cineIntensity         = 0.5f;
+        int   cineTint              = 0; // 0=rojo, 1=verde, 2=azul
+        bool  contrastEnabled       = false;
+        float contrastAmount        = 1.3f;
+        bool  luminosityEnabled     = false;
+        float luminosityAmount      = 1.2f;
+        bool  taaEnabled            = false;
+        float taaIntensity          = 0.5f;
         // "Rellenado": llena las barras de letterbox/pillarbox con el
         // mismo fondo estirado y muy desenfocado en vez de negro. Ver
         // BackgroundLayer::GetBlurredFillTexture / UIManager.cpp.
@@ -326,10 +356,11 @@ namespace ProyecThor::Settings {
     // 8 botones tipo pad MIDI: cada uno guarda, de forma independiente,
     // una disposicion de Captura (mismos campos que CaptureSceneSettings —
     // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene), un
-    // estilo guardado + fondo, y el estado de Control Overlays (que macro
-    // y en que cue). Cualquiera de los tres puede faltar (hasCapture/
-    // hasStyle/hasMacro en false) — un pad no tiene por que tocar las tres
-    // cosas a la vez. Nunca guarda la letra/texto en pantalla.
+    // snapshot directo del estilo+fondo que esta en pantalla en ese momento
+    // (no una referencia por nombre a un estilo guardado), y el estado de
+    // Control Overlays (que macro y en que cue). hasCapture/hasMacro
+    // pueden faltar -- un pad no tiene por que tocar las tres cosas a la
+    // vez. Nunca guarda la letra/texto en pantalla.
     struct PadSettings {
         bool assigned  = false;
         int  iconIndex = 0; // indice en la tabla fija de iconos, ver ViewToolsPanel.cpp
@@ -338,7 +369,13 @@ namespace ProyecThor::Settings {
         CaptureSceneSettings  capture;
 
         bool        hasStyle = false;
-        std::string styleName;
+        float       styleSize       = 60.0f;
+        float       styleColor[4]   = { 1.0f, 1.0f, 1.0f, 1.0f };
+        int         styleHAlign     = 1;
+        int         styleVAlign     = 1;
+        float       styleMargins[4] = { 50.0f, 50.0f, 50.0f, 50.0f };
+        bool        styleAutoScale  = true;
+        std::string styleFontName   = "Predeterminada";
         int         bgType = 0; // espeja PresentationCore::PresentationState::BackgroundType
         std::string bgPath;
         float       bgColor[3] = { 0.0f, 0.0f, 0.0f };

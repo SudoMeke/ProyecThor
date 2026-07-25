@@ -67,6 +67,17 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        9, "0.4.2",
+        "ACTUALIZACION", "ACTUALIZACION",
+        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
+        "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
+        "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
+        "fuentes en grilla y nuevos efectos de texto (fondo, borde, sombra, glow, neon, "
+        "subrayado), y un monton de efectos nuevos en Shaders: NIS (NVIDIA), VHS, Cine, "
+        "Contraste, Luminosidad, Blur, Sharpen, Bloom, Aberracion cromatica y TAA."
+    },
+    {
         8, "0.4.1",
         "ACTUALIZACION", "ACTUALIZACION",
         "splash_bg4.png",
@@ -540,7 +551,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 8; // id de kUpdateRegistry (8 = v0.4.1, la mas reciente)
+    static int    selectedUpdateVer = 9; // id de kUpdateRegistry (9 = v0.4.2, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -1081,12 +1092,43 @@ void Hub::RenderMainContent(float w, float h) {
             };
 
             // ── Bloque de contenido condicional por versión ──────────────────
-            // Cuatro entradas: la 0.4.1 (mas reciente, todavia sin publicar),
-            // la 0.4.0, la 0.3.5 (estable, con TODO lo acumulado desde la
-            // 0.3.1 hasta la 0.3.5, incluidas las betas) y la 0.3.0 original.
-            // Cualquier otro id cae en el bloque "else" de la 0.3.0 por
-            // seguridad.
-            if (selectedUpdateVer == 8) { // v0.4.1
+            // Cinco entradas: la 0.4.2 (mas reciente, todavia sin publicar),
+            // la 0.4.1, la 0.4.0, la 0.3.5 (estable, con TODO lo acumulado
+            // desde la 0.3.1 hasta la 0.3.5, incluidas las betas) y la 0.3.0
+            // original. Cualquier otro id cae en el bloque "else" de la
+            // 0.3.0 por seguridad.
+            if (selectedUpdateVer == 9) { // v0.4.2
+                Cat("Pads de Vista en Vivo");
+                Bul("Corregido el problema por el cual guardar un pad (click derecho > Guardar aqui) podia no aplicar nada al presionarlo despues: ahora siempre captura estilo, fondo y captura de pantalla tal cual estan en pantalla.");
+                Bul("El panel de Pads se reorganizo en dos secciones: \"General\" (los pads de siempre) y \"Captura\", que ahora muestra las mismas escenas rapidas del panel Captura, sincronizadas — guardar o aplicar una desde cualquiera de los dos lados es lo mismo.");
+                Bul("El texto de ayuda de \"Escenas rapidas\" se reemplazo por un icono de informacion, para no saturar el panel de letra.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Transporte y volumen de Vista en Vivo");
+                Bul("Los botones de Play/Pausa, Retroceder, Avanzar y Detener ahora son pads de colores tipo controlador MIDI, con el boton de reproduccion iluminado en rojo mientras esta en vivo.");
+                Bul("El control de volumen pasa a ser un fader horizontal estilo consola de sonido en vez del slider de siempre.");
+                Bul("Corregido un icono roto en el boton de silenciar (mute) de Vista en Vivo.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblia: buscador por palabras");
+                Bul("Nuevo boton (lupa + \"Aa\") junto al buscador rapido: permite escribir una o mas palabras y muestra todos los versiculos de la Biblia activa que las contienen, para cuando no te acordas la cita exacta.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Estilos renovado");
+                Bul("El editor de un estilo ya no abre una ventana flotante encima de todo: ahora se muestra acoplado dentro de Home, ocupando todo ese espacio, como una seccion mas de la Biblioteca.");
+                Bul("El selector de fuente pasa de una lista de texto a una grilla con la vista previa real de cada tipografia.");
+                Bul("Nueva pestaña \"Efectos\": fondo, borde, sombra, aberracion cromatica, glow (bloom), neon y subrayado, todo configurable por separado para el texto proyectado.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Shaders: muchos efectos nuevos");
+                Bul("NIS: escalador alternativo a FSR, exclusivo para placas NVIDIA (se detecta automaticamente).");
+                Bul("VHS: sangrado de color, scanlines, bamboleo y ruido de estatica, como una cinta de video vieja.");
+                Bul("Cine: gradacion de color tipo cine, con tinte a elegir entre rojo, verde o azul.");
+                Bul("Contraste y Luminosidad: ajuste directo de contraste y brillo de la salida en vivo.");
+                Bul("Blur, Sharpen, Bloom y Aberracion cromatica: desenfoque, nitidez, resplandor de brillos y desfase de color, respectivamente.");
+                Bul("TAA (antialiasing temporal): suaviza bordes mezclando con el frame anterior, a costa de un poco de desenfoque de movimiento.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 8) { // v0.4.1
                 Cat("Editor de canciones (rediseño total)");
                 Bul("Editar una cancion ya no abre una ventana flotante encima: el mismo panel de Canciones pasa a modo edicion, con letra a la izquierda (mucho mas grande) y preview de las diapositivas a la derecha.");
                 Bul("Titulo y Autor quedan siempre a la vista; Nota, Derechos de autor y Extra se movieron detras de un boton de informacion para no restarle espacio a la letra.");

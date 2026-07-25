@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include "biblia/BibleTypes.h"
 #include "biblia/BibleQuickNav.h"
+#include "biblia/BibleWordSearch.h"
 
 namespace ProyecThor::UI {
 
@@ -59,6 +60,8 @@ double m_AltDownSince   = -1.0;
 bool   m_AltComboFired  = false;
     // Aplica la seleccion confirmada del buscador rapido (biblia/BibleQuickNav)
     void HandleQuickNavConfirm();
+    // Aplica la seleccion confirmada del buscador por palabras (biblia/BibleWordSearch)
+    void HandleWordSearchConfirm();
 
     // Datos de la Biblia activa
     BibleData   m_CurrentBible;
@@ -102,6 +105,12 @@ bool   m_AltComboFired  = false;
     BibleQuickNav m_QuickNav;
     ImVec2        m_QuickNavBtnPos  = {};
     ImVec2        m_QuickNavBtnSize = {};
+
+    // Buscador por palabras del texto (lupa + "Aa"): para cuando el
+    // usuario recuerda palabras del versiculo pero no la cita exacta.
+    BibleWordSearch m_WordSearch;
+    ImVec2          m_WordSearchBtnPos  = {};
+    ImVec2          m_WordSearchBtnSize = {};
 
     // Edicion de versiculo
     bool        m_ShowEditModal    = false;
