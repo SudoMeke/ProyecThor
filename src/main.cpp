@@ -102,6 +102,32 @@ std::string GetAppDataFilePath(const std::string& filename) {
     return (dirPath / filename).string();
 }
 
+// Contador de builds — a pedido, cuenta cada vez que se abre la app (no solo
+// cada recompilada real), asi que en la practica funciona como "cuantas
+// veces se probo/corrio este build". Mismo patron que splash_state.txt mas
+// abajo: un archivo chico en AppData, leer -> incrementar -> guardar.
+int GetAndIncrementBuildCount()
+{
+    std::string countFile = GetAppDataFilePath("build_count.txt");
+    int count = 0;
+
+    std::ifstream inFile(countFile);
+    if (inFile.is_open()) {
+        inFile >> count;
+        inFile.close();
+    }
+
+    count += 1;
+
+    std::ofstream outFile(countFile);
+    if (outFile.is_open()) {
+        outFile << count;
+        outFile.close();
+    }
+
+    return count;
+}
+
 GLuint LoadTextureFromFile(const char* filename)
 {
     int w = 0, h = 0, ch = 0;
@@ -235,7 +261,8 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     if (smallFont) ImGui::PushFont(smallFont);
     ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", status.c_str());
 
-    const std::string versionLine = "Version " PROYECTHOR_VERSION_STRING "  |  Build " PROYECTHOR_BUILD_NUMBER;
+    static const std::string versionLine =
+        "Version " PROYECTHOR_VERSION_STRING "  |  Build " + std::to_string(GetAndIncrementBuildCount());
     const std::string copyLine    = "\xC2\xA9 2026 ProyecThor Team";
     const float vW = ImGui::CalcTextSize(versionLine.c_str()).x;
     const float cW = ImGui::CalcTextSize(copyLine.c_str()).x;

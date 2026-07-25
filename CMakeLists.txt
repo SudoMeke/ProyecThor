@@ -22,12 +22,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
-# PROYECTHOR_BUILD_NUMBER: "local" en builds de desarrollo (scripts/build.sh);
-# CI (.github/workflows/build.yml) lo pisa con -DPROYECTHOR_BUILD_NUMBER=<github.run_number>,
-# un numero que aumenta solo con cada build de GitHub Actions. Se muestra en
-# el splash (ver src/main.cpp) junto a la version.
-set(PROYECTHOR_BUILD_NUMBER "local" CACHE STRING "Numero de build (lo inyecta CI)")
-
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"
     "${CMAKE_BINARY_DIR}/generated/Version.h"
