@@ -159,6 +159,32 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->background.GetProcessedTexture(targetW, targetH) : nullptr;
     }
 
+    void* PresentationCore::GetPreviewBackgroundTexture(int targetW, int targetH) {
+        if (!m_Impl) return nullptr;
+        void* rawTex = m_Impl->background.GetProcessedTexture(targetW, targetH);
+        if (!rawTex) return nullptr;
+
+        GLuint raw = static_cast<GLuint>(reinterpret_cast<uintptr_t>(rawTex));
+        GLuint processed = m_Impl->compositeFX.ProcessBackgroundForPreview(raw, targetW, targetH);
+        return (void*)(uintptr_t)processed;
+    }
+
+    void* PresentationCore::GetBackgroundFillTexture(int workW, int workH) {
+        return m_Impl ? m_Impl->background.GetBlurredFillTexture(workW, workH) : nullptr;
+    }
+    void PresentationCore::SetFillBlurEnabled(bool enabled) {
+        if (m_Impl) m_Impl->background.SetFillBlurEnabled(enabled);
+    }
+    bool PresentationCore::GetFillBlurEnabled() const {
+        return m_Impl ? m_Impl->background.GetFillBlurEnabled() : false;
+    }
+    void PresentationCore::SetFillBlurBrightness(float v) {
+        if (m_Impl) m_Impl->background.SetFillBlurBrightness(v);
+    }
+    float PresentationCore::GetFillBlurBrightness() const {
+        return m_Impl ? m_Impl->background.GetFillBlurBrightness() : 0.6f;
+    }
+
     void* PresentationCore::GetOverlayTexture() {
         return m_Impl ? m_Impl->overlay.GetTextureID() : nullptr;
     }
@@ -221,6 +247,32 @@ bool PresentationCore::GetGlobalMute() const {
     }
     bool PresentationCore::GetFXAAEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetFXAAEnabled() : false;
+    }
+
+    void PresentationCore::SetSaturationEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetSaturationEnabled(enabled);
+    }
+    bool PresentationCore::GetSaturationEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetSaturationEnabled() : false;
+    }
+    void PresentationCore::SetSaturationAmount(float amount) {
+        if (m_Impl) m_Impl->compositeFX.SetSaturationAmount(amount);
+    }
+    float PresentationCore::GetSaturationAmount() const {
+        return m_Impl ? m_Impl->compositeFX.GetSaturationAmount() : 1.3f;
+    }
+
+    void PresentationCore::SetVignetteEnabled(bool enabled) {
+        if (m_Impl) m_Impl->compositeFX.SetVignetteEnabled(enabled);
+    }
+    bool PresentationCore::GetVignetteEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetVignetteEnabled() : false;
+    }
+    void PresentationCore::SetVignetteIntensity(float intensity) {
+        if (m_Impl) m_Impl->compositeFX.SetVignetteIntensity(intensity);
+    }
+    float PresentationCore::GetVignetteIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetVignetteIntensity() : 0.45f;
     }
 
     void PresentationCore::SetProjectorPostFXViewportID(ImGuiID id) {
@@ -631,6 +683,20 @@ bool PresentationCore::ConsumePendingTransitionOverride(std::string& outName, fl
     return true;
 }
 
+void PresentationCore::RequestSongEditorOpen(const std::string& filename) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_PendingSongEditorOpenFile = filename;
+    m_HasSongEditorOpenRequest  = true;
+}
+
+bool PresentationCore::ConsumeSongEditorOpenRequest(std::string& outFilename) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (!m_HasSongEditorOpenRequest) return false;
+    m_HasSongEditorOpenRequest = false;
+    outFilename = m_PendingSongEditorOpenFile;
+    return true;
+}
+
 // ── Macros ───────────────────────────────────────────────────────────────
 void PresentationCore::PlayMacro(const std::string& name, bool autoAdvance) {
     Macro m;
@@ -644,6 +710,7 @@ void PresentationCore::PlayMacro(const std::string& name, bool autoAdvance) {
 void PresentationCore::StopMacro()               { m_MacroPlayer.Stop(); }
 void PresentationCore::NextMacroCue()            { m_MacroPlayer.Next(); }
 void PresentationCore::PrevMacroCue()            { m_MacroPlayer.Previous(); }
+void PresentationCore::SetMacroCueIndex(int index) { m_MacroPlayer.GoToCue(index); }
 void PresentationCore::SetMacroAutoAdvance(bool a) { m_MacroPlayer.SetAutoAdvance(a); }
 bool PresentationCore::GetMacroAutoAdvance() const { return m_MacroPlayer.IsAutoAdvance(); }
 bool PresentationCore::IsMacroPlaying() const      { return m_MacroPlayer.IsPlaying(); }

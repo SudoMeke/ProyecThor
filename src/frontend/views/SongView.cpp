@@ -2,6 +2,7 @@
 #include "backend/core/PresentationCore.h"
 #include "UIStrings.h"
 #include "LibrarySongs.h"
+#include "SongBackgroundPicker.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -13,416 +14,23 @@
 #include "frontend/ui/SongPlayStats.h"
 #include "frontend/ui/DesignSystem.h"
 
-// Windows headers para SHGetKnownFolderPath
-#ifdef _WIN32
-// Windows headers para SHGetKnownFolderPath
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <shlobj.h>
-#endif
-#ifdef _WIN32
-#include <winerror.h>
-#endif
-
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helper: devuelve %APPDATA%\ProyecThor\assets\songs como std::filesystem::path
-//  Usa SHGetKnownFolderPath (no requiere admin, funciona con rutas Unicode).
-// ─────────────────────────────────────────────────────────────────────────────
-static std::filesystem::path GetSongsDirectory()
-{
-    std::filesystem::path result;
-
-#ifdef _WIN32
-    PWSTR pszPath = nullptr;
-    HRESULT hr = SHGetKnownFolderPath(FOLDERID_RoamingAppData, KF_FLAG_CREATE, nullptr, &pszPath);
-
-    if (SUCCEEDED(hr) && pszPath)
-    {
-        result = std::filesystem::path(pszPath) / L"ProyecThor" / L"assets" / L"songs";
-        CoTaskMemFree(pszPath);
-    }
-    else
-    {
-        const char* appdata = std::getenv("APPDATA");
-        if (appdata)
-            result = std::filesystem::path(appdata) / "ProyecThor" / "assets" / "songs";
-        else
-            result = std::filesystem::current_path() / "ProyecThor" / "assets" / "songs";
-    }
-#else
-    const char* home = std::getenv("HOME");
-    if (home)
-        result = std::filesystem::path(home) / ".local" / "share" / "ProyecThor" / "assets" / "songs";
-    else
-        result = std::filesystem::current_path() / "ProyecThor" / "assets" / "songs";
-#endif
-
-    std::error_code ec;
-    std::filesystem::create_directories(result, ec);
-
-    return result;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helper: ruta del antiguo archivo sidecar de autor (nombre + ".autor.txt").
-//  Ya no se usa para guardar, solo se conserva para migrar y borrar los
-//  sidecars viejos que quedaron creados por versiones anteriores, evitando
-//  que sigan apareciendo como canciones fantasma en el listado.
-// ─────────────────────────────────────────────────────────────────────────────
-static std::filesystem::path GetLegacyAuthorFilePath(const std::filesystem::path& songFile)
-{
-    std::filesystem::path authorFile = songFile;
-    authorFile.replace_extension(".autor.txt");
-    return authorFile;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  Constructor
+//
+//  El editor de letra/autor con buffers fijos (m_EditBuffer/m_AuthorBuffer),
+//  la migracion de sidecars viejos ".autor.txt" y el editor popup flotante
+//  (RenderEditorModal/EditorFocusCallback/OpenEditorForSong/SaveBufferToFile)
+//  se retiraron con el rework del editor: ahora viven, respectivamente, en
+//  SongEditView (buffers std::string dinamicos) y en SongEditView::Open
+//  (migracion de ".autor.txt", movida ahi para no perder ese comportamiento).
 // ─────────────────────────────────────────────────────────────────────────────
 SongView::SongView()
     : m_CurrentSongTitle("")
     , m_ActiveStanzaIndex(-1)
     , m_HasRecordedCurrentSongProjection(false)
-    , m_ShowEditor(false)
-    , m_OpenEditorPopup(false)
-    , m_EditingFilePath("")
-    , m_SaveSuccess(false)
-    , m_FocusStanzaPending(false)
-    , m_FocusStanzaCharStart(0)
-    , m_FocusStanzaCharEnd(0)
 {
-    std::memset(m_EditBuffer, 0, sizeof(m_EditBuffer));
-    std::memset(m_AuthorBuffer, 0, sizeof(m_AuthorBuffer));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  SaveBufferToFile
-//  Garantiza que el directorio padre exista antes de escribir.
-// ─────────────────────────────────────────────────────────────────────────────
-bool SongView::SaveBufferToFile()
-{
-    if (m_EditingFilePath.empty())
-    {
-        printf("[SongView] SaveBufferToFile: ruta vacia, abortando.\n");
-        return false;
-    }
-
-    std::filesystem::path filePath(m_EditingFilePath);
-
-    std::error_code ec;
-    std::filesystem::create_directories(filePath.parent_path(), ec);
-    if (ec)
-    {
-        printf("[SongView] Error creando directorios: %s\n", ec.message().c_str());
-        return false;
-    }
-
-    std::ofstream file(filePath, std::ios::out | std::ios::trunc);
-    if (!file.is_open())
-    {
-        printf("[SongView] No se pudo abrir para escritura: %s\n", m_EditingFilePath.c_str());
-        return false;
-    }
-
-    file << m_EditBuffer;
-    bool ok = file.good();
-    file.close();
-
-    if (ok)
-        printf("[SongView] Guardado correctamente: %s\n", m_EditingFilePath.c_str());
-    else
-        printf("[SongView] Error al escribir en: %s\n", m_EditingFilePath.c_str());
-
-    return ok;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  OpenEditorForSong
-//  Centraliza la carga del archivo de letra y del autor para el editor.
-//  El autor se lee desde songs_authors.ini (mismo origen que usa la
-//  biblioteca), no desde un sidecar propio. Si detecta un sidecar viejo
-//  (".autor.txt") de una version anterior, migra ese valor al .ini y borra
-//  el sidecar para que deje de aparecer como cancion fantasma en el listado.
-//  Si focusStanza es true, busca el texto de esa estrofa dentro del
-//  contenido cargado y deja marcado el rango de caracteres para que
-//  RenderEditorModal seleccione ese fragmento apenas se abra el editor.
-// ─────────────────────────────────────────────────────────────────────────────
-void SongView::OpenEditorForSong(const std::string& songTitle, const std::string& stanzaText, bool focusStanza)
-{
-    std::filesystem::path songsDir = GetSongsDirectory();
-
-    std::filesystem::path songFile = songsDir / songTitle;
-    if (songFile.extension() != ".txt")
-        songFile.replace_extension(".txt");
-
-    printf("[SongView] Intentando abrir: %s\n", songFile.string().c_str());
-
-    if (!std::filesystem::exists(songFile))
-    {
-        std::error_code ec;
-        std::filesystem::create_directories(songFile.parent_path(), ec);
-        std::ofstream touch(songFile);
-        touch.close();
-        printf("[SongView] Archivo creado (era nuevo): %s\n", songFile.string().c_str());
-    }
-
-    std::ifstream file(songFile);
-    if (!file.is_open())
-    {
-        printf("[SongView] ERROR: no se pudo abrir el archivo: %s\n", songFile.string().c_str());
-        return;
-    }
-
-    std::string content(
-        (std::istreambuf_iterator<char>(file)),
-         std::istreambuf_iterator<char>()
-    );
-    file.close();
-
-    content.erase(std::remove(content.begin(), content.end(), '\r'), content.end());
-
-    strncpy(m_EditBuffer, content.c_str(), sizeof(m_EditBuffer) - 1);
-    m_EditBuffer[sizeof(m_EditBuffer) - 1] = '\0';
-
-    m_EditingFilePath = songFile.string();
-
-    std::string authorContent = ProyecThor::Library::GetSongAuthor(songFile.filename().string());
-
-    if (authorContent.empty())
-    {
-        std::filesystem::path legacyAuthorFile = GetLegacyAuthorFilePath(songFile);
-        std::ifstream legacyStream(legacyAuthorFile);
-        if (legacyStream.is_open())
-        {
-            std::string legacyContent(
-                (std::istreambuf_iterator<char>(legacyStream)),
-                 std::istreambuf_iterator<char>()
-            );
-            legacyStream.close();
-
-            legacyContent.erase(std::remove(legacyContent.begin(), legacyContent.end(), '\r'), legacyContent.end());
-            legacyContent.erase(std::remove(legacyContent.begin(), legacyContent.end(), '\n'), legacyContent.end());
-
-            if (!legacyContent.empty())
-            {
-                authorContent = legacyContent;
-                ProyecThor::Library::SetSongAuthor(songFile.filename().string(), authorContent);
-            }
-
-            std::error_code ec;
-            std::filesystem::remove(legacyAuthorFile, ec);
-        }
-    }
-
-    strncpy(m_AuthorBuffer, authorContent.c_str(), sizeof(m_AuthorBuffer) - 1);
-    m_AuthorBuffer[sizeof(m_AuthorBuffer) - 1] = '\0';
-
-    m_FocusStanzaPending   = false;
-    m_FocusStanzaCharStart = 0;
-    m_FocusStanzaCharEnd   = 0;
-
-    if (focusStanza && !stanzaText.empty())
-    {
-        std::string normalizedStanza = stanzaText;
-        normalizedStanza.erase(std::remove(normalizedStanza.begin(), normalizedStanza.end(), '\r'), normalizedStanza.end());
-
-        size_t pos = std::string(m_EditBuffer).find(normalizedStanza);
-        if (pos != std::string::npos)
-        {
-            m_FocusStanzaPending   = true;
-            m_FocusStanzaCharStart = (int)pos;
-            m_FocusStanzaCharEnd   = (int)(pos + normalizedStanza.length());
-        }
-    }
-
-    m_SaveSuccess = false;
-    m_ShowEditor  = true;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  EditorFocusCallback
-//  Callback de ImGui invocado en cada frame mientras el InputTextMultiline
-//  esta activo. Si hay una estrofa pendiente de foco, fija cursor y
-//  seleccion sobre el rango calculado en OpenEditorForSong y consume el
-//  flag para no repetirlo en frames posteriores.
-// ─────────────────────────────────────────────────────────────────────────────
-int SongView::EditorFocusCallback(ImGuiInputTextCallbackData* data)
-{
-    SongView* self = static_cast<SongView*>(data->UserData);
-    if (self && self->m_FocusStanzaPending)
-    {
-        data->CursorPos      = self->m_FocusStanzaCharEnd;
-        data->SelectionStart = self->m_FocusStanzaCharStart;
-        data->SelectionEnd   = self->m_FocusStanzaCharEnd;
-        self->m_FocusStanzaPending = false;
-    }
-    return 0;
-}
-
-// =============================================================================
-//  RenderEditorModal
-// =============================================================================
-void SongView::RenderEditorModal()
-{
-    const auto& str = ProyecThor::UI::GetUIStrings();
-
-    if (!m_ShowEditor)
-    {
-        m_SaveSuccess = false;
-        return;
-    }
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
-    ImGui::SetNextWindowSize({ 660.f, 600.f }, ImGuiCond_Appearing);
-    ImGui::SetNextWindowSizeConstraints({ 420.f, 360.f }, { FLT_MAX, FLT_MAX });
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   14.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    { 22.0f, 20.0f });
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,  1.0f);
-
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,      { 0.039f, 0.043f, 0.063f, 0.980f });
-    ImGui::PushStyleColor(ImGuiCol_Border,         { 1.000f, 1.000f, 1.000f, 0.080f });
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive,  { 0.028f, 0.031f, 0.047f, 1.000f });
-
-    bool windowOpen = true;
-    ImGui::Begin("Editor de Cancion##songWin",
-                 &windowOpen,
-                 ImGuiWindowFlags_NoSavedSettings |
-                 ImGuiWindowFlags_NoCollapse);
-
-    ImGui::PopStyleColor(3);
-    ImGui::PopStyleVar(3);
-
-    if (!windowOpen)
-    {
-        m_ShowEditor  = false;
-        m_SaveSuccess = false;
-        ImGui::End();
-        return;
-    }
-
-    // ── Cabecera ──────────────────────────────────────────────────────────────
-    std::filesystem::path fp(m_EditingFilePath);
-    std::string fileName = fp.filename().string();
-
-    ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 1.0f, 1.0f, 0.40f });
-    ImGui::TextUnformatted("Editando:");
-    ImGui::PopStyleColor();
-
-    ImGui::SameLine();
-    ImGui::TextUnformatted(fileName.c_str());
-
-    ImGui::Spacing();
-
-    // ── Campo de autor ────────────────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 1.0f, 1.0f, 0.40f });
-    ImGui::TextUnformatted("Autor:");
-    ImGui::PopStyleColor();
-
-    ImGui::SameLine();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        { 1.0f, 1.0f, 1.0f, 0.040f });
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, { 1.0f, 1.0f, 1.0f, 0.070f });
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  { 1.0f, 1.0f, 1.0f, 0.100f });
-    ImGui::SetNextItemWidth(-1.0f);
-    ImGui::InputTextWithHint("##authorInput", "Nombre del autor / compositor", m_AuthorBuffer, sizeof(m_AuthorBuffer));
-    ImGui::PopStyleColor(3);
-    ImGui::PopStyleVar();
-
-    ImGui::Spacing();
-    ImGui::PushStyleColor(ImGuiCol_Separator, { 1.0f, 1.0f, 1.0f, 0.060f });
-    ImGui::Separator();
-    ImGui::PopStyleColor();
-    ImGui::Spacing();
-
-    // ── Area de texto adaptativa ──────────────────────────────────────────────
-    constexpr float k_ButtonAreaHeight = 74.0f;
-    ImVec2 availSize = ImGui::GetContentRegionAvail();
-    ImVec2 inputSize = { -1.0f, availSize.y - k_ButtonAreaHeight };
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  { 12.0f, 10.0f });
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        { 1.0f, 1.0f, 1.0f, 0.040f });
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, { 1.0f, 1.0f, 1.0f, 0.070f });
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  { 1.0f, 1.0f, 1.0f, 0.100f });
-
-    if (m_FocusStanzaPending)
-        ImGui::SetKeyboardFocusHere();
-
-    ImGui::InputTextMultiline(
-        "##editBuffer",
-        m_EditBuffer,
-        sizeof(m_EditBuffer),
-        inputSize,
-        ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_CallbackAlways,
-        &SongView::EditorFocusCallback,
-        this
-    );
-
-    ImGui::PopStyleColor(3);
-    ImGui::PopStyleVar(2);
-
-    ImGui::Spacing();
-
-    // ── Contador de caracteres ───────────────────────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_Text, { 1.0f, 1.0f, 1.0f, 0.30f });
-    ImGui::Text("%d caracteres", (int)strlen(m_EditBuffer));
-    ImGui::PopStyleColor();
-
-    if (m_SaveSuccess)
-    {
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, { 0.20f, 0.85f, 0.40f, 1.0f });
-        ImGui::TextUnformatted("  Guardado correctamente");
-        ImGui::PopStyleColor();
-    }
-
-    // ── Fila de botones ───────────────────────────────────────────────────────
-    ImVec2 buttonSize = { 130.f, 36.f };
-
-    float rightAlign = ImGui::GetWindowWidth()
-                     - (buttonSize.x * 2.0f)
-                     - ImGui::GetStyle().ItemSpacing.x
-                     - 22.0f;
-
-    if (rightAlign > ImGui::GetCursorPosX())
-        ImGui::SameLine(rightAlign);
-    else
-        ImGui::NewLine();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-
-    ImGui::PushStyleColor(ImGuiCol_Button,        { 1.0f, 1.0f, 1.0f, 0.050f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 1.0f, 1.0f, 1.0f, 0.090f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  { 1.0f, 1.0f, 1.0f, 0.130f });
-    if (ImGui::Button(str.cancel, buttonSize))
-    {
-        m_ShowEditor  = false;
-        m_SaveSuccess = false;
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-
-    ImGui::PushStyleColor(ImGuiCol_Button,        { 0.369f, 0.420f, 1.000f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.500f, 0.550f, 1.000f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  { 0.280f, 0.330f, 0.860f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_Text,          { 1.0f,   1.0f,   1.0f,   1.0f });
-    if (ImGui::Button(str.save, buttonSize))
-    {
-        bool savedLyrics = SaveBufferToFile();
-        ProyecThor::Library::SetSongAuthor(fileName, std::string(m_AuthorBuffer));
-        m_SaveSuccess = savedLyrics;
-    }
-    ImGui::PopStyleColor(4);
-
-    ImGui::PopStyleVar();
-
-    ImGui::End();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -476,76 +84,9 @@ void SongView::RenderSettingsCard(const std::string& songFilename, ImVec2 p_min,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Fondos disponibles para el combo de "Fondo" del popup de ajustes — misma
-//  carpeta que usa el tab "Fondos" (ver LayersBgTab::BgRootDir/ReloadList),
-//  duplicada aca liviana (sin miniaturas ni cache de texturas, solo la lista
-//  de archivos) para no encadenar SongView con esa clase.
-// ─────────────────────────────────────────────────────────────────────────────
-struct SongBgEntry { std::string fullPath; std::string label; bool isImage = false; };
-
-static std::filesystem::path SongBgRootDir()
-{
-    std::filesystem::path dir;
-#ifdef _WIN32
-    wchar_t buf[MAX_PATH] = {};
-    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
-    dir = std::filesystem::path(buf) / "ProyecThor";
-#else
-    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
-    std::filesystem::path base;
-    if (xdgConfig && *xdgConfig)
-        base = std::filesystem::path(xdgConfig);
-    else
-        base = std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / ".config";
-    dir = base / "ProyecThor";
-#endif
-    return dir / "assets" / "backgrounds";
-}
-
-static std::vector<SongBgEntry> ListSongBackgrounds()
-{
-    auto isMedia = [](const std::string& ext) {
-        return ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov"
-            || ext == ".jpg" || ext == ".jpeg" || ext == ".png";
-    };
-    auto isImageExt = [](const std::string& ext) {
-        return ext == ".jpg" || ext == ".jpeg" || ext == ".png";
-    };
-    auto addFile = [&](const std::filesystem::directory_entry& f, const std::string& folder,
-                        std::vector<SongBgEntry>& out) {
-        std::string ext = f.path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        if (!isMedia(ext)) return;
-        SongBgEntry entry;
-        entry.fullPath = f.path().string();
-        entry.label    = folder.empty() ? f.path().stem().string() : (folder + "/" + f.path().stem().string());
-        entry.isImage  = isImageExt(ext);
-        out.push_back(std::move(entry));
-    };
-
-    std::vector<SongBgEntry> out;
-    std::error_code ec;
-    std::filesystem::path root = SongBgRootDir();
-    if (!std::filesystem::exists(root, ec)) return out;
-
-    for (const auto& e : std::filesystem::directory_iterator(root, ec))
-    {
-        if (e.is_directory())
-        {
-            std::string folder = e.path().filename().string();
-            std::error_code subEc;
-            for (const auto& sub : std::filesystem::directory_iterator(e.path(), subEc))
-                if (sub.is_regular_file()) addFile(sub, folder, out);
-        }
-        else if (e.is_regular_file())
-        {
-            addFile(e, "", out);
-        }
-    }
-    std::sort(out.begin(), out.end(), [](const SongBgEntry& a, const SongBgEntry& b) { return a.label < b.label; });
-    return out;
-}
-
+//  SongBgEntry/ListSongBackgrounds ahora viven en SongBackgroundPicker.h/.cpp
+//  (extraidos de aca) para que SongEditView tambien pueda ofrecer el mismo
+//  picker de fondos, pero por LINEA en vez de por cancion completa.
 // ─────────────────────────────────────────────────────────────────────────────
 //  RenderSongSettingsPopup — contenido del popup que abre la tarjeta de
 //  ajustes: elegir estilo (de los guardados) y fondo (de la biblioteca de
@@ -669,7 +210,11 @@ void SongView::RenderStanzaColorBar(const std::string& songFilename, int stanzaI
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Render
+//  Render — punto de entrada. Hace el swap in-place Browse<->Edit: nunca
+//  ambos a la vez, y nunca en una ventana flotante (ver comentario de la
+//  clase en SongView.h). El editor unificado (m_EditView) devuelve false
+//  cuando el usuario aprieta "Volver", momento en el que tambien ya hizo
+//  flush de cualquier autoguardado pendiente.
 // ─────────────────────────────────────────────────────────────────────────────
 void SongView::Render()
 {
@@ -683,9 +228,39 @@ void SongView::Render()
     {
         m_CurrentSongTitle  = selection.title;
         m_ActiveStanzaIndex = -1;
-        m_SaveSuccess       = false;
         m_HasRecordedCurrentSongProjection = false;
     }
+
+    // Cue "consumir una vez" de PresentationCore: una cancion recien creada
+    // (ver Library::CreateNewSong) pide entrar directo al editor unificado,
+    // sin popup, apenas la seleccion actual coincide con el archivo nuevo.
+    {
+        std::string pendingOpenFile;
+        if (core.ConsumeSongEditorOpenRequest(pendingOpenFile) && pendingOpenFile == selection.title)
+        {
+            m_EditView.Open(pendingOpenFile);
+            m_ShowEditor = true;
+        }
+    }
+
+    if (m_ShowEditor)
+    {
+        if (!m_EditView.Render())
+            m_ShowEditor = false;
+        return;
+    }
+
+    RenderBrowseGrid();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderBrowseGrid — grilla de estrofas (antes era el cuerpo entero de
+//  Render(), separada para poder alternarla con m_EditView.Render()).
+// ─────────────────────────────────────────────────────────────────────────────
+void SongView::RenderBrowseGrid()
+{
+    auto& core      = Core::PresentationCore::Get();
+    auto  selection = core.PeekSelection();
 
     // Estilo de preview fijo (no el estilo que el usuario eligio para la
     // proyeccion real): los estilos de proyeccion estan pensados para una
@@ -764,7 +339,10 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
     // al lado del slider abre el editor completo de la cancion.
     ImGui::SameLine();
     if (DS::GlassButton("Editar", { 90.f, DS::ButtonHeight }, DS::TextSecondary))
-        OpenEditorForSong(selection.title, "", false);
+    {
+        m_EditView.Open(selection.title);
+        m_ShowEditor = true;
+    }
 
     ImGui::SameLine();
     float titleMaxW = std::max(20.0f, ImGui::GetContentRegionAvail().x - 8.0f);
@@ -1017,8 +595,6 @@ RenderStanzaColorBar(selection.title, (int)i, p_min, p_max, barH);
 
         ImGui::EndPopup();
     }
-
-    RenderEditorModal();
 }
 
 } // namespace ProyecThor::UI

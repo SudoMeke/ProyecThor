@@ -12,6 +12,10 @@ struct LibraryContext
 {
     // ── Categoria y lista ─────────────────────────────────────────────────
     int&                      currentCategoryInt;
+    // Modo de vista del grupo aparte "Red"/"Reloj" (ver UI::LibrarySideMode
+    // en LibraryPanel.h) — 0=Categorias, 1=Red, 2=Reloj. Independiente de
+    // currentCategoryInt.
+    int&                      sideModeInt;
     std::vector<std::string>& items;
     int&                      selectedIndex;
     char*                     searchBuffer;

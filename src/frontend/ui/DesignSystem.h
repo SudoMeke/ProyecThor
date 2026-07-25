@@ -60,6 +60,19 @@ bool BeginGlassPanel(const char* name, GlassRenderer& glass, bool* open = nullpt
                      ImGuiWindowFlags flags = 0, ImVec2 windowPadding = ImVec2(14.0f, 12.0f));
 void EndGlassPanel();
 bool GlassButton(const char* label, const ImVec2& size = ImVec2(0.0f, ButtonHeight), ImU32 accent = AccentColor);
+
+// Boton con icono de StyleGeneralApp (fallback a glifo corto si el icono no
+// esta cargado). Extraido de LibrarySongs.cpp (donde vivia duplicado junto a
+// variantes locales en LibraryVideos.cpp/LibraryDocuments.cpp) para que el
+// editor de canciones (SongEditView) tambien pueda usarlo, ej. para
+// Undo/Redo. El icono se recorta como cuadrado centrado a partir del lado
+// menor del boton, para no estirarse en botones anchos y bajos.
+bool GlassIconButton(const char* id,
+                     const char* iconKey,
+                     const char* fallbackGlyph,
+                     const char* tooltip,
+                     ImVec2      size,
+                     ImVec4      tint = ImGui::ColorConvertU32ToFloat4(TextPrimary));
 bool GlassListRow(const char* label, bool selected, float indent = 14.0f, float height = RowHeight);
 void GlassSeparator(float thickness = 1.0f);
 void GlassSectionHeader(const char* label);

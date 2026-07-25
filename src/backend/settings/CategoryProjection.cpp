@@ -219,19 +219,25 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
         //      con todas las llaves balanceadas.
         ImGui::SeparatorText("FSR Upscaling");
 
-        bool fsrEnabled = Core::PresentationCore::Get().GetFSREnabled();
-        if (ImGui::Checkbox("Activar FSR 1.0", &fsrEnabled)) {
-            Core::PresentationCore::Get().SetFSREnabled(fsrEnabled);
+        // OJO: la fuente de verdad es p.fsrEnabled/p.fsrSharpness (el mismo
+        // ProjectionSettings que usa Ajustes > Diseño > Shaders), no el
+        // estado en vivo de PresentationCore directamente -- leer/escribir
+        // solo el getter/setter en vivo (como hacía esto antes) dejaba a
+        // este control y al de Shaders mostrando/guardando cosas distintas
+        // (uno mostraba el valor viejo, y Guardar terminaba pisando el
+        // cambio hecho acá con ese valor viejo). Mismo patrón que
+        // ShadersPanel::RenderContent().
+        if (ImGui::Checkbox("Activar FSR 1.0", &p.fsrEnabled)) {
+            Core::PresentationCore::Get().SetFSREnabled(p.fsrEnabled);
             changed = true;
         }
         ImGui::SameLine();
         ImGui::TextDisabled("(Mejora calidad de video de baja resolucion)");
 
-        if (fsrEnabled) {
-            float sharpness = Core::PresentationCore::Get().GetFSRSharpness();
+        if (p.fsrEnabled) {
             ImGui::SetNextItemWidth(200.0f);
-            if (ImGui::SliderFloat("Nitidez FSR", &sharpness, 0.0f, 2.0f, "%.2f")) {
-                Core::PresentationCore::Get().SetFSRSharpness(sharpness);
+            if (ImGui::SliderFloat("Nitidez FSR", &p.fsrSharpness, 0.0f, 2.0f, "%.2f")) {
+                Core::PresentationCore::Get().SetFSRSharpness(p.fsrSharpness);
                 changed = true;
             }
             ImGui::SameLine();

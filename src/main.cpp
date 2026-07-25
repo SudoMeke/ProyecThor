@@ -235,7 +235,7 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     if (smallFont) ImGui::PushFont(smallFont);
     ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", status.c_str());
 
-    const std::string versionLine = "Version " PROYECTHOR_VERSION_STRING "  |  Build 2026";
+    const std::string versionLine = "Version " PROYECTHOR_VERSION_STRING "  |  Build " PROYECTHOR_BUILD_NUMBER;
     const std::string copyLine    = "\xC2\xA9 2026 ProyecThor Team";
     const float vW = ImGui::CalcTextSize(versionLine.c_str()).x;
     const float cW = ImGui::CalcTextSize(copyLine.c_str()).x;
@@ -464,10 +464,31 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
     ImGuiIO& splashIO   = ImGui::GetIO();
     splashIO.IniFilename = nullptr;
 
-    const char* fontPath  = "bin/assets/fonts/OpenSans-Regular.ttf";
-    ImFont* titleFont   = splashIO.Fonts->AddFontFromFileTTF(fontPath, 46.0f);
-    ImFont* regularFont = splashIO.Fonts->AddFontFromFileTTF(fontPath, 20.0f);
-    ImFont* smallFont   = splashIO.Fonts->AddFontFromFileTTF(fontPath, 16.0f);
+    // Misma fuente elegida en Ajustes > Apariencia (si hay una y sigue
+    // siendo válida), para que la pantalla de carga no "desentone" con el
+    // resto de la app apenas termine de cargar -- ver la carga equivalente
+    // de la fuente de la UI principal mas abajo, cerca de
+    // ImGui_ImplGlfw_InitForOpenGL. Se valida ANTES de llamar
+    // AddFontFromFileTTF (no despues): esa función usa IM_ASSERT ante un
+    // archivo invalido/corrupto, que en build Debug aborta el proceso
+    // entero -- no alcanza con revisar el ImFont* devuelto.
+    std::string fontPath;
+    {
+        const std::string& customFontPath =
+            ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.customFontPath;
+        const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
+
+        if (!customFontPath.empty() && ProyecThor::Settings::IsValidFontFile(customFontPath))
+            fontPath = customFontPath;
+        else if (ProyecThor::Settings::IsValidFontFile(defaultFontPath))
+            fontPath = defaultFontPath;
+        // si ninguna valida, fontPath queda vacio -- se omite el
+        // AddFontFromFileTTF de abajo y ImGui usa su fuente embebida.
+    }
+
+    ImFont* titleFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 46.0f);
+    ImFont* regularFont = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 20.0f);
+    ImFont* smallFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f);
 
     if (!titleFont || !regularFont || !smallFont)
         std::cerr << "[DIAG] ADVERTENCIA: no se pudo cargar la fuente en '"
@@ -646,7 +667,28 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.IniFilename  = "proyecthor_ui.ini";
 
-    io.Fonts->AddFontFromFileTTF("bin/assets/fonts/OpenSans-Regular.ttf", 16.0f);
+    // Fuente de la interfaz: si el usuario eligio una propia en Ajustes >
+    // Apariencia, se intenta esa primero -- validada con IsValidFontFile
+    // (misma libreria stb_truetype que usa AddFontFromFileTTF por debajo,
+    // pero sin el IM_ASSERT fatal ante un archivo invalido). Si no hay
+    // ninguna elegida, o la elegida ya no sirve (se movio/borro/corrompio),
+    // se cae a la fuente por defecto del repo; y si esa TAMBIEN fallara,
+    // simplemente no se agrega ninguna -- ImGui usa su fuente embebida
+    // (ProggyClean) en vez de abortar el proceso.
+    {
+        using namespace ProyecThor::Settings;
+        const std::string& customFontPath = SettingsManager::Get().GetSettings().theme.customFontPath;
+        const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
+
+        std::string fontToLoad;
+        if (!customFontPath.empty() && IsValidFontFile(customFontPath))
+            fontToLoad = customFontPath;
+        else if (IsValidFontFile(defaultFontPath))
+            fontToLoad = defaultFontPath;
+
+        if (!fontToLoad.empty())
+            io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f);
+    }
     ProyecThor::Core::PresentationCore::Get().LoadFontsIntoImGui();
 
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
@@ -816,6 +858,13 @@ homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
             core.ClearLayer2();
         }
 
+        // Ajustes > Apariencia pidio reiniciar (p.ej. tras elegir una fuente
+        // nueva). Se cierra la ventana de la forma normal para que el
+        // shutdown de mas abajo (VLC/GL/ImGui) corra completo antes de
+        // relanzar el proceso -- ver RestartApplication().
+        if (ProyecThor::Settings::SettingsManager::Get().IsRestartRequested())
+            glfwSetWindowShouldClose(mainWindow, GLFW_TRUE);
+
         auto t1 = Clock::now();
         core.Update();
         FrameProfiler::Add(FrameProfiler::s_CoreUpdate, FrameProfiler::ElapsedMs(t1));
@@ -896,6 +945,11 @@ core.RenderAllSecondaryWindows();
 
     glfwDestroyWindow(mainWindow);
     glfwTerminate();
+
+    // Recien aca, con todo ya destruido (VLC/GL/ImGui/GLFW), es seguro
+    // relanzar el proceso si Ajustes > Apariencia lo pidio.
+    if (ProyecThor::Settings::SettingsManager::Get().IsRestartRequested())
+        ProyecThor::Settings::RestartApplication();
 
     return 0;
 }

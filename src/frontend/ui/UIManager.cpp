@@ -21,6 +21,7 @@
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/ProjectionQualityPresets.h"
 #include "LiveContentRenderer.h"
+#include "LibrarySongs.h"
 #include <ctime>
 
 namespace ProyecThor::UI {
@@ -219,6 +220,10 @@ void UIManager::RenderAll()
         // Alt + F4 — cerrar ProyecThor
         if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_F4, false))
             glfwSetWindowShouldClose(m_Window, true);
+
+        // F11 — pantalla completa (menu Ventana > Pantalla completa)
+        if (ImGui::IsKeyPressed(ImGuiKey_F11, false))
+            ToggleFullscreen();
     }
     // ── Hub de inicio ────────────────────────────────────────────────────────
 if (m_HubMode)
@@ -463,6 +468,35 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         qualityW, qualityH);
 
                     if (texID) {
+                        // "Rellenado": si el contenido no llena la pantalla
+                        // (quedarian barras negras arriba/abajo o a los
+                        // costados), se dibuja primero una copia del MISMO
+                        // fondo, muy desenfocada, estirada a pantalla
+                        // completa -- después el contenido nítido encima,
+                        // en su rect real. El rect negro de más arriba
+                        // (linea ~418) sigue ahi como base/fallback, asi que
+                        // si el blur no esta listo todavia el primer frame
+                        // simplemente se ve negro como antes, sin parpadeo.
+                        bool hasBars = (destW < (float)mode->width - 0.5f) ||
+                                       (destH < (float)mode->height - 0.5f);
+                        if (hasBars && Core::PresentationCore::Get().GetFillBlurEnabled()) {
+                            void* fillTex = Core::PresentationCore::Get().GetBackgroundFillTexture(
+                                qualityW, qualityH);
+                            if (fillTex) {
+                                // Brillo del relleno (0=negro, 1=el brillo real
+                                // del blur) -- ver Ajustes > Shaders >
+                                // Rellenado. Tint multiplicativo, no toca el
+                                // shader de blur en si.
+                                float b = std::clamp(
+                                    Core::PresentationCore::Get().GetFillBlurBrightness(), 0.0f, 1.0f);
+                                ImU32 fillTint = IM_COL32((int)(b * 255.0f), (int)(b * 255.0f), (int)(b * 255.0f), 255);
+                                drawList->AddImage(fillTex,
+                                    ImVec2((float)mx, (float)my),
+                                    ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                                    ImVec2(0, 0), ImVec2(1, 1), fillTint);
+                            }
+                        }
+
                         drawList->AddImage(texID,
                             ImVec2(destX, destY),
                             ImVec2(destX + destW, destY + destH),
@@ -905,6 +939,30 @@ static void RenderSocialQrMenu(const char* url)
 }
 
 // ---------------------------------------------------------------------------
+// ToggleFullscreen — menu Ventana > Pantalla completa. glfwSetWindowMonitor
+// no recuerda la geometria "windowed" previa, asi que se guarda a mano en
+// m_WindowedX/Y/W/H antes de pasar a pantalla completa, para poder
+// restaurarla al volver a modo ventana.
+// ---------------------------------------------------------------------------
+void UIManager::ToggleFullscreen()
+{
+    if (!m_Window) return;
+
+    if (glfwGetWindowMonitor(m_Window) != nullptr) {
+        glfwSetWindowMonitor(m_Window, nullptr, m_WindowedX, m_WindowedY, m_WindowedW, m_WindowedH, 0);
+    } else {
+        glfwGetWindowPos(m_Window, &m_WindowedX, &m_WindowedY);
+        glfwGetWindowSize(m_Window, &m_WindowedW, &m_WindowedH);
+
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        if (!monitor) return;
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        if (!mode) return;
+        glfwSetWindowMonitor(m_Window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // RenderMainMenuBar
 // ---------------------------------------------------------------------------
 void UIManager::RenderMainMenuBar()
@@ -919,21 +977,22 @@ void UIManager::RenderMainMenuBar()
 
     if (ImGui::BeginMainMenuBar())
     {
-        if (ImGui::BeginMenu(str.menuFile))
+        // ── Menu "ProyecThor" (nombre de la app, siempre primero) ───────────────
+        // Preferencias (movida desde Editar, que se elimino por quedar con
+        // un solo item) y Salir (movida desde Archivo).
+        if (ImGui::BeginMenu("ProyecThor"))
         {
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
-            if (ImGui::MenuItem("Base de datos"))
-    m_DatabasePanel.Open();
+            if (ImGui::MenuItem(str.menuPrefs, "Ctrl+P"))
+                m_ShowConfig = true;
 
-if (ImGui::MenuItem("Wiki"))
-    ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/wiki");
-    
-ImGui::Spacing();
-ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
-ImGui::Separator();
-ImGui::PopStyleColor();
-ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
             if (ImGui::MenuItem(str.menuExit, "Alt+F4"))
                 glfwSetWindowShouldClose(m_Window, true);
             ImGui::PopStyleColor();
@@ -941,11 +1000,24 @@ ImGui::Spacing();
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu(str.menuEdit))
+        if (ImGui::BeginMenu(str.menuFile))
         {
             ImGui::Spacing();
-            if (ImGui::MenuItem(str.menuPrefs, "Ctrl+P"))
-                m_ShowConfig = true;
+
+            // "Base de datos"/"Wiki" se mudaron a Ayuda y "Salir" al menu
+            // "ProyecThor" de arriba — Archivo ahora es solo la categoria
+            // Importar.
+            if (ImGui::BeginMenu(str.importLabel))
+            {
+                if (ImGui::MenuItem("Importar cancion desde portapapeles"))
+                {
+                    const char* clip = ImGui::GetClipboardText();
+                    if (clip && clip[0] != '\0')
+                        ProyecThor::Library::CreateNewSongFromClipboard(clip);
+                }
+                ImGui::EndMenu();
+            }
+
             ImGui::Spacing();
             ImGui::EndMenu();
         }
@@ -997,6 +1069,19 @@ ImGui::Spacing();
         {
             ImGui::Spacing();
 
+            // Movidos aca desde Archivo (reorganizacion del menu).
+            if (ImGui::MenuItem("Base de datos"))
+                m_DatabasePanel.Open();
+
+            if (ImGui::MenuItem("Wiki"))
+                ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/wiki");
+
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+
             if (ImGui::MenuItem(str.menuDocs, "F1"))
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
 
@@ -1030,6 +1115,16 @@ ImGui::Spacing();
                 RenderSocialQrMenu(whatsappUrl);
                 ImGui::EndMenu();
             }
+
+            // --- Canal de YouTube ---
+            // TODO: falta el link real del canal de YouTube — queda
+            // deshabilitado (visible pero sin accion) hasta tenerlo, para no
+            // inventar una URL. Una vez que se pase el link, cambiar por el
+            // mismo patron BeginMenu+RenderSocialQrMenu que Discord/WhatsApp
+            // arriba (o un MenuItem+OpenURL simple si no hace falta QR).
+            ImGui::BeginDisabled(true);
+            ImGui::MenuItem("Canal de YouTube");
+            ImGui::EndDisabled();
             // ==========================================
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
@@ -1046,6 +1141,16 @@ ImGui::Spacing();
             if (ImGui::MenuItem(str.menuAbout))
                 g_ShowAbout = true;
 
+            ImGui::Spacing();
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Ventana"))
+        {
+            ImGui::Spacing();
+            bool isFullscreen = (glfwGetWindowMonitor(m_Window) != nullptr);
+            if (ImGui::MenuItem("Pantalla completa", "F11", isFullscreen))
+                ToggleFullscreen();
             ImGui::Spacing();
             ImGui::EndMenu();
         }

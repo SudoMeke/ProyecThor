@@ -1,4 +1,5 @@
 #include "LibrarySongs.h"
+#include "LibrarySongMeta.h"
 #include "LibraryModals.h"
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
@@ -41,60 +42,11 @@ static void SelectLibraryItem(LibraryContext& ctx,
                               const std::vector<std::string>& filteredItems,
                               int n);
 
-// =============================================================================
-//  GlassIconButton — boton con icono de StyleGeneralApp (fallback a glifo corto)
-//  Mismo helper que en LibraryVideos.cpp / LibraryDocuments.cpp, replicado
-//  aqui para que el footer de "Letra" (canciones) tambien use iconos en vez
-//  de texto, igual que Video y Documentos.
-//
-//  FIX (tamaños): el icono se recorta como un cuadrado centrado a partir
-//  del lado MENOR del boton, para no estirarse en botones anchos y bajos.
-// =============================================================================
-static bool GlassIconButton(const char* id,
-                             const char* iconKey,
-                             const char* fallbackGlyph,
-                             const char* tooltip,
-                             ImVec2      size,
-                             ImVec4      tint = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary))
-{
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
-    ImGui::PushStyleColor(ImGuiCol_Text,          tint);
-
-    auto it = StyleGeneralApp::Icons.find(iconKey);
-    bool hasIcon = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
-    std::string label = (hasIcon ? "" : std::string(fallbackGlyph)) + "##" + id;
-
-    bool clicked = ImGui::Button(label.c_str(), size);
-
-    if (hasIcon) {
-        ImVec2 bMin = ImGui::GetItemRectMin();
-        ImVec2 bMax = ImGui::GetItemRectMax();
-
-        // Cuadrado centrado, basado en el lado MENOR del boton (no estira).
-        const float minSide  = std::min(size.x, size.y);
-        const float iconSide = minSide * 0.48f;
-        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
-        const ImVec2 pMin    = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
-        const ImVec2 pMax    = { center.x + iconSide * 0.5f, center.y + iconSide * 0.5f };
-
-        ImGui::GetWindowDrawList()->AddImage(
-            it->second.textureID,
-            pMin, pMax,
-            ImVec2(0, 0), ImVec2(1, 1),
-            ImGui::ColorConvertFloat4ToU32(tint));
-    }
-
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar();
-
-    if (tooltip && ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", tooltip);
-
-    return clicked;
-}
+// GlassIconButton ahora vive en DesignSystem.h/.cpp (DS::GlassIconButton) para
+// que el editor de canciones (SongEditView) tambien pueda usarlo — mismo
+// comportamiento exacto, solo se movio de lugar. Este `using` evita tocar
+// cada uno de los call-sites de este archivo.
+using DS::GlassIconButton;
 
 // =============================================================================
 //  ApplyDefaultStyleIfSet
@@ -134,7 +86,60 @@ static void ApplyDefaultStyleIfSet(LibraryContext& ctx)
 
 // =============================================================================
 //  LoadSongVerses
+//
+//  Paso 1 (sin cambios respecto de siempre): separa la letra en parrafos por
+//  linea en blanco.
+//  Paso 2 (nuevo, rework del editor): si la cancion tiene configurado
+//  linesPerSlide (1/2/3, via GetSongMeta/SetSongMeta — LibrarySongMeta.h),
+//  cada parrafo se subdivide ademas en grupos de esa cantidad de lineas
+//  fisicas, SIN cruzar nunca el limite de parrafo (un parrafo de 5 lineas
+//  con linesPerSlide=2 da diapositivas de [2,2,1], nunca se funde con el
+//  siguiente). linesPerSlide=0 (centinela: cancion sin sidecar todavia, o
+//  con sidecar pero sin este campo configurado) preserva el comportamiento
+//  de siempre — un parrafo completo es una sola diapositiva — para no
+//  romper canciones existentes al actualizar.
 // =============================================================================
+std::vector<std::string> GroupLyricsIntoSlides(const std::string& normalizedContent, int linesPerSlide)
+{
+    std::vector<std::string> verses;
+    if (normalizedContent.empty()) return verses;
+
+    std::vector<std::vector<std::string>> paragraphs;
+    std::vector<std::string> currentParagraph;
+    std::string line;
+    std::istringstream stream(normalizedContent);
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) {
+            if (!currentParagraph.empty()) {
+                paragraphs.push_back(currentParagraph);
+                currentParagraph.clear();
+            }
+        } else {
+            currentParagraph.push_back(line);
+        }
+    }
+    if (!currentParagraph.empty()) paragraphs.push_back(currentParagraph);
+
+    for (const auto& para : paragraphs) {
+        if (linesPerSlide <= 0) {
+            std::string joined;
+            for (const auto& l : para) joined += l + '\n';
+            verses.push_back(joined);
+            continue;
+        }
+
+        for (size_t i = 0; i < para.size(); i += (size_t)linesPerSlide) {
+            size_t end = std::min(para.size(), i + (size_t)linesPerSlide);
+            std::string joined;
+            for (size_t k = i; k < end; ++k) joined += para[k] + '\n';
+            verses.push_back(joined);
+        }
+    }
+
+    return verses;
+}
+
 std::vector<std::string> LoadSongVerses(const std::string& filename)
 {
     std::vector<std::string> verses;
@@ -152,18 +157,8 @@ std::vector<std::string> LoadSongVerses(const std::string& filename)
     if (raw.empty()) return verses;
 
     std::string content = NormalizeToUtf8(raw);
-    std::string line, verse;
-    std::istringstream stream(content);
-    while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.empty()) {
-            if (!verse.empty()) { verses.push_back(verse); verse.clear(); }
-        } else {
-            verse += line + '\n';
-        }
-    }
-    if (!verse.empty()) verses.push_back(verse);
-    return verses;
+    const int linesPerSlide = GetSongMeta(filename).linesPerSlide;
+    return GroupLyricsIntoSlides(content, linesPerSlide);
 }
 
 // =============================================================================
@@ -783,15 +778,49 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
    // ── Modal agregar canciones ───────────────────────────────────────────
     static char addSongsSearchBuffer[256] = {};
-
-    if (showAddSongsModal) {
+    // Detecta la transicion cerrado->abierto: antes esto disparaba
+    // OpenPopup()+memset() en CADA frame mientras el modal seguia abierto
+    // (showAddSongsModal se queda en true todo ese tiempo), no solo al
+    // abrirlo. Mientras el buscador tenia el foco, ImGui "autocuraba" el
+    // texto visible cada frame -- pero al hacer click en un resultado (el
+    // buscador pierde el foco, justo el momento de agregar la cancion), el
+    // buffer quedaba vacio de nuevo y la lista volvia a mostrar TODAS las
+    // canciones sin filtrar, asi que el click siguiente caia en la fila
+    // equivocada. El llamado repetido a OpenPopup() con el popup ya abierto
+    // tambien interfiere con el estado interno de "recien aparecio" de
+    // ImGui, que es probablemente la causa del tamano roto (1x1px) reportado.
+    static bool addSongsModalWasOpen = false;
+    if (showAddSongsModal && !addSongsModalWasOpen) {
         ImGui::OpenPopup("AgregarCancionesModal##lib");
         memset(addSongsSearchBuffer, 0, sizeof(addSongsSearchBuffer));
     }
+    addSongsModalWasOpen = showAddSongsModal;
+
+    // Mismo tratamiento visual que RenderRenameModal (LibraryModals.cpp) --
+    // este modal no tenia NINGUN estilo propio (fondo/borde/redondeo por
+    // defecto de ImGui puro), por eso se veia completamente distinto al
+    // resto de los popups de la Biblioteca.
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
+
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.078f, 0.078f, 0.082f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultBord));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(20.f, 16.f));
+
     if (ImGui::BeginPopupModal("AgregarCancionesModal##lib", &showAddSongsModal,
                                ImGuiWindowFlags_NoSavedSettings))
     {
-        ImGui::SetWindowSize({ 420.f, 520.f }, ImGuiCond_Appearing);
+        // Antes 420x520 -- se sentia chico para algo que se usa seguido y
+        // se beneficia de tener espacio (buscar + ver la lista completa de
+        // resultados). Mismo tamano que el panel de Ajustes.
+        ImGui::SetWindowSize({ 900.f, 650.f }, ImGuiCond_Appearing);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
+        ImGui::TextUnformatted("Agregar canciones");
+        ImGui::PopStyleColor();
+        AccentSep(ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
+        ImGui::Spacing();
 
         // ── Buscador ─────────────────────────────────────────────────────
         ImGui::SetNextItemWidth(-1.0f);
@@ -803,44 +832,139 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         ImGui::Spacing();
         ImGui::Separator();
 
-        // ── Lista filtrada ───────────────────────────────────────────────
+        // ── Lista filtrada, ordenada alfabeticamente ──────────────────────
+        // Antes recorria ctx.items en el orden del disco (practicamente
+        // aleatorio para el operador) y cada fila era un ImGui::Selectable
+        // de una sola linea de texto -- sin separacion visual entre filas,
+        // sin autor visible salvo que matcheara la busqueda, y "ya agregada"
+        // se notaba solo por un tono de verde en el propio titulo. Ahora las
+        // filas usan el mismo lenguaje visual que el resto de Biblioteca
+        // (hover/borde sutil, radio chico) y una zona de accion fija a la
+        // derecha: boton "+" para agregar, o insignia verde si ya esta.
         std::string q(addSongsSearchBuffer);
         std::transform(q.begin(), q.end(), q.begin(), [](unsigned char c){ return (char)::tolower(c); });
 
-        if (ImGui::BeginChild("AddSongsList", { 0.f, -50.f }))
+        auto currentSongs = ctx.loadPlaylistSongs(openPlaylist);
+
+        std::vector<std::string> matches;
+        matches.reserve(ctx.items.size());
+        for (const auto& item : ctx.items)
         {
-            auto currentSongs = ctx.loadPlaylistSongs(openPlaylist);
-            int shown = 0;
-
-            for (const auto& item : ctx.items)
+            if (!q.empty())
             {
-                if (!q.empty())
-                {
-                    std::string title = StripExtension(item);
-                    std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
+                std::string title = StripExtension(item);
+                std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
 
-                    bool match = title.find(q) != std::string::npos;
+                bool match = title.find(q) != std::string::npos;
 
-                    if (!match) {
-                        std::string author = GetSongAuthor(item);
-                        std::transform(author.begin(), author.end(), author.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                        match = author.find(q) != std::string::npos;
-                    }
-
-                    if (!match) continue;
+                if (!match) {
+                    std::string author = GetSongAuthor(item);
+                    std::transform(author.begin(), author.end(), author.begin(), [](unsigned char c){ return (char)::tolower(c); });
+                    match = author.find(q) != std::string::npos;
                 }
 
+                if (!match) continue;
+            }
+            matches.push_back(item);
+        }
+        std::sort(matches.begin(), matches.end(), [](const std::string& a, const std::string& b) {
+            std::string ta = StripExtension(a), tb = StripExtension(b);
+            std::transform(ta.begin(), ta.end(), ta.begin(), [](unsigned char c){ return (char)::tolower(c); });
+            std::transform(tb.begin(), tb.end(), tb.begin(), [](unsigned char c){ return (char)::tolower(c); });
+            return ta < tb;
+        });
+
+        {
+            std::string countLabel = std::to_string(matches.size()) +
+                (matches.size() == 1 ? " cancion encontrada" : " canciones encontradas");
+            ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
+            ImGui::TextUnformatted(countLabel.c_str());
+            ImGui::PopStyleColor();
+        }
+        ImGui::Spacing();
+
+        if (ImGui::BeginChild("AddSongsList", { 0.f, -50.f }))
+        {
+            const float rowH        = 38.0f;
+            const float actionZoneW = 96.0f;
+            const ImVec2 addBtnSize(26.f, 26.f);
+            const float lineH       = ImGui::GetTextLineHeight();
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 3.f));
+
+            for (const auto& item : matches)
+            {
+                ImGui::PushID(item.c_str());
+
                 bool already = std::find(currentSongs.begin(), currentSongs.end(), item) != currentSongs.end();
-                ImGui::PushStyleColor(ImGuiCol_Text, already
-                    ? ImVec4(0.4f, 0.7f, 0.4f, 1.0f) : ImVec4(0.85f, 0.87f, 0.95f, 1.0f));
-                std::string label = StripExtension(item) + (already ? "  (ya agregada)" : "");
-                if (ImGui::Selectable((label + "##add_" + item).c_str()) && !already)
+
+                ImVec2 p_min  = ImGui::GetCursorScreenPos();
+                float  rowW   = ImGui::GetContentRegionAvail().x;
+                ImVec2 p_max  = { p_min.x + rowW, p_min.y + rowH };
+                float  clickW = std::max(rowW - actionZoneW, rowW * 0.5f);
+
+                ImGui::SetCursorScreenPos(p_min);
+                ImGui::InvisibleButton("##row", { clickW, rowH });
+                bool rowClicked = !already && ImGui::IsItemClicked();
+                bool isHovered  = !already && ImGui::IsItemHovered();
+
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImU32 bg = already ? IM_COL32(82, 224, 160, 16)
+                         : isHovered ? DS::RowHoverFill
+                         : IM_COL32(0, 0, 0, 0);
+                dl->AddRectFilled(p_min, p_max, bg, DS::RadiusSmall);
+                if (isHovered)
+                    dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 18), DS::RadiusSmall, 0, 0.5f);
+
+                std::string title  = StripExtension(item);
+                std::string author = GetSongAuthor(item);
+
+                dl->PushClipRect(p_min, { p_min.x + clickW - 8.f, p_max.y }, true);
+                if (author.empty())
+                {
+                    ImVec2 titleSz = ImGui::CalcTextSize(title.c_str());
+                    dl->AddText({ p_min.x + 12.f, p_min.y + (rowH - titleSz.y) * 0.5f },
+                                DS::TextPrimary, title.c_str());
+                }
+                else
+                {
+                    dl->AddText({ p_min.x + 12.f, p_min.y + rowH * 0.5f - lineH - 1.0f },
+                                DS::TextPrimary, title.c_str());
+                    dl->AddText({ p_min.x + 12.f, p_min.y + rowH * 0.5f + 1.0f },
+                                DS::TextSecondary, author.c_str());
+                }
+                dl->PopClipRect();
+
+                // ── Zona de accion: agregar, o insignia si ya esta ────────
+                ImGui::SetCursorScreenPos({ p_max.x - actionZoneW, p_min.y });
+                ImGui::BeginGroup();
+                if (already)
+                {
+                    const char* badge = "Agregada";
+                    ImVec2 badgeSz = ImGui::CalcTextSize(badge);
+                    ImVec2 badgePos = { p_max.x - 10.f - badgeSz.x, p_min.y + (rowH - badgeSz.y) * 0.5f };
+                    dl->AddText(badgePos, DS::SuccessColor, badge);
+                }
+                else
+                {
+                    ImGui::SetCursorScreenPos({ p_max.x - addBtnSize.x - 10.f, p_min.y + (rowH - addBtnSize.y) * 0.5f });
+                    if (GlassIconButton("addone", "add", "+", "Agregar a la playlist", addBtnSize,
+                                        ImGui::ColorConvertU32ToFloat4(DS::AccentLight)))
+                        ctx.addSongToPlaylist(openPlaylist, item);
+                }
+                ImGui::EndGroup();
+
+                if (rowClicked)
                     ctx.addSongToPlaylist(openPlaylist, item);
-                ImGui::PopStyleColor();
-                shown++;
+
+                ImGui::SetCursorScreenPos({ p_min.x, p_max.y });
+                ImGui::PopID();
             }
 
-            if (shown == 0) {
+            ImGui::PopStyleVar();
+
+            if (matches.empty()) {
+                ImGui::Spacing();
                 ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
                 ImGui::TextUnformatted("Sin resultados");
                 ImGui::PopStyleColor();
@@ -854,6 +978,8 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         }
         ImGui::EndPopup();
     }
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 }
 // =============================================================================
 //  RenderItemsListPane
@@ -1175,32 +1301,76 @@ static void RenderSongsAndPlaylistsGrid(LibraryContext& ctx)
     ImGui::PopStyleVar();
 }
 // =============================================================================
-//  CreateNewSong / SaveSong
+//  CreateNewSong
+//
+//  Rework del editor: ya no abre un popup pidiendo titulo/autor/contenido
+//  antes de crear el archivo (RenderSongEditor, retirado). Crea de una un
+//  archivo vacio con nombre unico, lo selecciona, y pide (cue "consumir una
+//  vez" de PresentationCore) que SongView entre directo al editor unificado
+//  apenas la seleccion coincida — el titulo visible se cambia desde ahi.
 // =============================================================================
 void CreateNewSong(LibraryContext& ctx)
 {
-    memset(ctx.editTitle,   0, 256);
-    memset(ctx.editContent, 0, 8192);
-    memset(ctx.editAuthor,  0, 256);
-    ctx.showSongEditor = true;
+    const std::string base = "Nueva cancion";
+    std::string filename = base + ".txt";
+    int suffix = 2;
+    while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
+        filename = base + " (" + std::to_string(suffix) + ").txt";
+        ++suffix;
+    }
+
+    std::ofstream f(U8Path(GetAssetsPath() + "/songs/" + filename));
+    if (f.is_open())
+        f << "\xEF\xBB\xBF";
+    f.close();
+
+    ctx.refreshList();
+
+    Core::LibrarySelection s;
+    s.title       = filename;
+    s.type        = Core::ItemType::Song;
+    s.contentData = ctx.loadSongVerses(filename);
+    Core::PresentationCore::Get().SetSelection(s);
+
+    auto it = std::find(ctx.items.begin(), ctx.items.end(), filename);
+    if (it != ctx.items.end())
+        ctx.selectedIndex = (int)std::distance(ctx.items.begin(), it);
+
+    Core::PresentationCore::Get().RequestSongEditorOpen(filename);
 }
 
-void SaveSong(LibraryContext& ctx,
-              const std::string& title,
-              const std::string& content,
-              const std::string& author)
+// =============================================================================
+//  CreateNewSongFromClipboard — ver comentario en LibrarySongs.h. Mismo
+//  patron que CreateNewSong, pero con el texto del portapapeles como letra
+//  inicial y sin LibraryContext (se llama desde el menu Archivo, que no
+//  tiene una instancia a mano).
+// =============================================================================
+void CreateNewSongFromClipboard(const std::string& clipboardText)
 {
-    if (title.empty()) return;
-    std::string filename = title;
-    if (filename.find(".txt") == std::string::npos) filename += ".txt";
+    const std::string base = "Cancion pegada";
+    std::string filename = base + ".txt";
+    int suffix = 2;
+    while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
+        filename = base + " (" + std::to_string(suffix) + ").txt";
+        ++suffix;
+    }
 
     std::ofstream f(U8Path(GetAssetsPath() + "/songs/" + filename));
     if (f.is_open()) {
         f << "\xEF\xBB\xBF";
-        f << content;
-        SetSongAuthor(filename, author);
-        ctx.refreshList();
+        f << clipboardText;
     }
+    f.close();
+
+    ForceListUpdate() = true;
+
+    Core::LibrarySelection s;
+    s.title       = filename;
+    s.type        = Core::ItemType::Song;
+    s.contentData = LoadSongVerses(filename);
+    Core::PresentationCore::Get().SetSelection(s);
+
+    Core::PresentationCore::Get().RequestSongEditorOpen(filename);
 }
 
 // =============================================================================
@@ -1325,131 +1495,4 @@ static void SelectLibraryItem(LibraryContext& ctx,
     ApplyDefaultStyleIfSet(ctx);
 }
 
-// =============================================================================
-//  RenderSongEditor
-// =============================================================================
-// =============================================================================
-//  RenderSongEditor
-// =============================================================================
-void RenderSongEditor(LibraryContext& ctx)
-{
-    const auto& str = ProyecThor::UI::GetUIStrings();
-
-    if (ctx.showSongEditor) ImGui::OpenPopup("SongEditorModal##lib");
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, { 0.5f, 0.5f });
-    ImGui::SetNextWindowSize({ 720.f, 600.f }, ImGuiCond_Appearing);
-    ImGui::SetNextWindowSizeConstraints({ 480.f, 420.f }, { FLT_MAX, FLT_MAX });
-
-    // Fondo glass para el modal
-    ImGui::PushStyleColor(ImGuiCol_PopupBg,  ImVec4(0.07f, 0.08f, 0.16f, 0.97f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(1.00f, 1.00f, 1.00f, 0.15f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(22.f, 18.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-
-    if (ImGui::BeginPopupModal("SongEditorModal##lib", &ctx.showSongEditor,
-                               ImGuiWindowFlags_NoSavedSettings))
-    {
-        ImDrawList* dl   = ImGui::GetWindowDrawList();
-        ImVec2 wPos      = ImGui::GetWindowPos();
-        ImVec2 wSize     = ImGui::GetWindowSize();
-        ImVec2 wMax      = ImVec2(wPos.x + wSize.x, wPos.y + wSize.y);
-
-        // Highlight especular del modal
-        dl->AddLine(
-            ImVec2(wPos.x + DS::RadiusLarge, wPos.y + 0.5f),
-            ImVec2(wMax.x - DS::RadiusLarge, wPos.y + 0.5f),
-            DS::GlassHighlight, 1.0f);
-
-        // ── Título de la ventana ──────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Text, DS::TextPrimary);
-        ImGui::TextUnformatted(str.newLabel);
-        ImGui::PopStyleColor();
-
-        DS::GlassSeparator();
-        ImGui::Spacing();
-
-        // ── Estilo compartido de los campos ────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.08f, 0.10f, 0.20f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.14f, 0.28f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.14f, 0.18f, 0.35f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.14f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 8.f));
-
-        ImU32 labelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.55f, 0.60f, 0.80f, 1.0f));
-
-        // ── Título + Autor en la misma fila ────────────────────────────────
-        {
-            const float avail = ImGui::GetContentRegionAvail().x;
-            const float sp    = ImGui::GetStyle().ItemSpacing.x;
-            const float halfW = (avail - sp) * 0.5f;
-
-            ImGui::BeginGroup();
-            ImGui::PushStyleColor(ImGuiCol_Text, labelCol);
-            ImGui::TextUnformatted("Título");
-            ImGui::PopStyleColor();
-            ImGui::SetNextItemWidth(halfW);
-            ImGui::InputText("##editTitle", ctx.editTitle, 256);
-            ImGui::EndGroup();
-
-            ImGui::SameLine(0.f, sp);
-
-            ImGui::BeginGroup();
-            ImGui::PushStyleColor(ImGuiCol_Text, labelCol);
-            ImGui::TextUnformatted("Autor");
-            ImGui::PopStyleColor();
-            ImGui::SetNextItemWidth(halfW);
-            ImGui::InputText("##editAuthor", ctx.editAuthor, 256);
-            ImGui::EndGroup();
-        }
-
-        ImGui::Spacing();
-
-        // ── Contenido ───────────────────────────────────────────────────────
-        ImGui::PushStyleColor(ImGuiCol_Text, labelCol);
-        ImGui::TextUnformatted("Contenido  (separa estrofas con una línea en blanco)");
-        ImGui::PopStyleColor();
-
-        // Reserva exacta para: separador + spacing + fila de botones,
-        // asi el area de texto se achica sola cuando la ventana es chica
-        // y los botones NUNCA quedan cortados fuera de la vista.
-        const float footerH = 40.f + ImGui::GetStyle().ItemSpacing.y * 2.0f
-                                     + 1.0f  // separador
-                                     + 6.0f; // margen extra
-
-        ImGui::InputTextMultiline("##editContent", ctx.editContent, 8192,
-                                  { -FLT_MIN, ImGui::GetContentRegionAvail().y - footerH });
-
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar(2);
-
-        ImGui::Spacing();
-        DS::GlassSeparator();
-        ImGui::Spacing();
-
-        // ── Botones ────────────────────────────────────────────────────────
-        {
-            const float avail = ImGui::GetContentRegionAvail().x;
-            const float sp    = ImGui::GetStyle().ItemSpacing.x;
-            const float bw2   = std::floor((avail - sp) * 0.5f);
-
-            if (DS::GlassButton(str.save, { bw2, 40.f })) {
-                SaveSong(ctx, ctx.editTitle, ctx.editContent, ctx.editAuthor);
-                ctx.showSongEditor = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (DS::GlassButton(str.cancel, { bw2, 40.f }, DS::TextSecondary)) {
-                ctx.showSongEditor = false;
-                ImGui::CloseCurrentPopup();
-            }
-        }
-        ImGui::EndPopup();
-    }
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(2);
-}
 } // namespace ProyecThor::Library

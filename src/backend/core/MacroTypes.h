@@ -81,6 +81,7 @@ public:
 
     void Next();     // manual: dispara la cue siguiente (si hay)
     void Previous();  // manual: re-dispara la cue anterior (si hay)
+    void GoToCue(int index); // salta directo a una cue (ej. recall de un Pad), sin pasar por las intermedias
 
     bool  IsPlaying() const     { return m_Playing; }
     bool  IsAutoAdvance() const { return m_AutoAdvance; }

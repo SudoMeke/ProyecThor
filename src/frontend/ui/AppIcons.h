@@ -23,6 +23,18 @@ inline void DrawIcon_Mixer(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     }
 }
 
+// Pads — grilla 2x2 de botones (accesos rapidos programados, estilo launchpad)
+inline void DrawIcon_Pads(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.065f;
+    const float xs[2] = { 0.16f, 0.54f };
+    const float ys[2] = { 0.16f, 0.54f };
+    for (float x : xs)
+        for (float y : ys)
+            dl->AddRect(IcPt(o, sz, x, y), IcPt(o, sz, x + 0.30f, y + 0.30f),
+                        col, sz * 0.04f, ImDrawFlags_RoundCornersAll, thick);
+}
+
 // Stage Display — monitor con base
 inline void DrawIcon_Monitor(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

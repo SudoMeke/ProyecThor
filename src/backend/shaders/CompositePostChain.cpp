@@ -131,6 +131,8 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_CRT.ForgetGLResources();
         m_Grain.ForgetGLResources();
         m_FXAA.ForgetGLResources();
+        m_Saturation.ForgetGLResources();
+        m_Vignette.ForgetGLResources();
         m_SubEffectsInitialized = false;
     } else {
         // Mismo contexto: el resize normal, con glDelete* real, es seguro.
@@ -148,11 +150,15 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_CRT.Init(w, h);
         m_Grain.Init(w, h);
         m_FXAA.Init(w, h);
+        m_Saturation.Init(w, h);
+        m_Vignette.Init(w, h);
         m_SubEffectsInitialized = true;
     } else {
         m_CRT.Resize(w, h);
         m_Grain.Resize(w, h);
         m_FXAA.Resize(w, h);
+        m_Saturation.Resize(w, h);
+        m_Vignette.Resize(w, h);
     }
 }
 
@@ -189,11 +195,17 @@ void CompositePostChain::RenderViewport(ImGuiViewport* viewport,
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(viewport->DrawData);
 
-    // 2) Cadena de efectos sobre el composite ya capturado.
+    // 2) Cadena de efectos sobre el composite ya capturado. Orden: primero
+    //    el grado de color (Saturación), después los efectos "de estilo"
+    //    (CRT, Grano, Viñeta), y FXAA al final porque suaviza los bordes
+    //    que dejo todo lo anterior (incluido el propio degradado del
+    //    viñetado).
     GLuint tex = m_CaptureTex;
-    if (m_CRT.IsEnabled())   tex = m_CRT.Process(tex, m_W, m_H);
-    if (m_Grain.IsEnabled()) tex = m_Grain.Process(tex, glfwGetTime());
-    if (m_FXAA.IsEnabled())  tex = m_FXAA.Process(tex, m_W, m_H);
+    if (m_Saturation.IsEnabled()) tex = m_Saturation.Process(tex);
+    if (m_CRT.IsEnabled())        tex = m_CRT.Process(tex, m_W, m_H);
+    if (m_Grain.IsEnabled())      tex = m_Grain.Process(tex, glfwGetTime());
+    if (m_Vignette.IsEnabled())   tex = m_Vignette.Process(tex);
+    if (m_FXAA.IsEnabled())       tex = m_FXAA.Process(tex, m_W, m_H);
 
     // 3) Blit final al framebuffer real de la ventana.
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFBO));
@@ -210,7 +222,54 @@ void CompositePostChain::Destroy() {
     m_CRT.Destroy();
     m_Grain.Destroy();
     m_FXAA.Destroy();
+    m_Saturation.Destroy();
+    m_Vignette.Destroy();
     m_SubEffectsInitialized = false;
+
+    m_PreviewCRT.Destroy();
+    m_PreviewGrain.Destroy();
+    m_PreviewFXAA.Destroy();
+    m_PreviewSaturation.Destroy();
+    m_PreviewVignette.Destroy();
+    m_PreviewInitialized = false;
+}
+
+GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int h) {
+    if (srcTex == 0 || w <= 0 || h <= 0) return srcTex;
+    if (!AnyEnabled()) return srcTex; // nada activo -- cero costo extra
+
+    if (!m_PreviewInitialized || w != m_PreviewW || h != m_PreviewH) {
+        m_PreviewCRT.Destroy();        m_PreviewCRT.Init(w, h);
+        m_PreviewGrain.Destroy();      m_PreviewGrain.Init(w, h);
+        m_PreviewFXAA.Destroy();       m_PreviewFXAA.Init(w, h);
+        m_PreviewSaturation.Destroy(); m_PreviewSaturation.Init(w, h);
+        m_PreviewVignette.Destroy();   m_PreviewVignette.Init(w, h);
+        m_PreviewW = w;
+        m_PreviewH = h;
+        m_PreviewInitialized = true;
+    }
+
+    // Mismo estado (habilitado/intensidad) que la cadena principal, para
+    // que el preview sea un reflejo fiel de lo que ve el público.
+    m_PreviewCRT.SetEnabled(m_CRT.IsEnabled());
+    m_PreviewCRT.SetScanlineIntensity(m_CRT.GetScanlineIntensity());
+    m_PreviewGrain.SetEnabled(m_Grain.IsEnabled());
+    m_PreviewGrain.SetIntensity(m_Grain.GetIntensity());
+    m_PreviewFXAA.SetEnabled(m_FXAA.IsEnabled());
+    m_PreviewSaturation.SetEnabled(m_Saturation.IsEnabled());
+    m_PreviewSaturation.SetAmount(m_Saturation.GetAmount());
+    m_PreviewVignette.SetEnabled(m_Vignette.IsEnabled());
+    m_PreviewVignette.SetIntensity(m_Vignette.GetIntensity());
+
+    // Mismo orden que RenderViewport().
+    GLuint tex = srcTex;
+    if (m_PreviewSaturation.IsEnabled()) tex = m_PreviewSaturation.Process(tex);
+    if (m_PreviewCRT.IsEnabled())        tex = m_PreviewCRT.Process(tex, w, h);
+    if (m_PreviewGrain.IsEnabled())      tex = m_PreviewGrain.Process(tex, glfwGetTime());
+    if (m_PreviewVignette.IsEnabled())   tex = m_PreviewVignette.Process(tex);
+    if (m_PreviewFXAA.IsEnabled())       tex = m_PreviewFXAA.Process(tex, w, h);
+
+    return tex;
 }
 
 } // namespace ProyecThor::Shaders

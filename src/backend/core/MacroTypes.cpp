@@ -259,6 +259,12 @@ void MacroPlayer::Previous() {
     ApplyCue(prev);
 }
 
+void MacroPlayer::GoToCue(int index) {
+    if (index < 0 || index >= (int)m_Macro.cues.size()) return;
+    m_Playing = true;
+    ApplyCue(index);
+}
+
 void MacroPlayer::ApplyCue(int index) {
     if (index < 0 || index >= (int)m_Macro.cues.size()) return;
     m_CurrentIndex = index;

@@ -1,5 +1,6 @@
 #include "DesignSystem.h"
 #include "SettingsManager.h"
+#include "frontend/ui/bin/StyleGeneralApp.h"
 #include <imgui_internal.h>
 #include <cmath>
 #include <algorithm>
@@ -219,6 +220,54 @@ bool GlassButton(const char* label, const ImVec2& size, ImU32 accent)
         bMin.x + std::floor((sz.x - textSize.x) * 0.5f),
         bMin.y + std::floor((sz.y - textSize.y) * 0.5f));
     dl->AddText(tp, textCol, label);
+
+    return clicked;
+}
+
+// ── GlassIconButton ─────────────────────────────────────────────────────────
+// Extraida de LibrarySongs.cpp (ver comentario en DesignSystem.h) — misma
+// implementacion exacta, sin cambios de comportamiento.
+bool GlassIconButton(const char* id,
+                      const char* iconKey,
+                      const char* fallbackGlyph,
+                      const char* tooltip,
+                      ImVec2      size,
+                      ImVec4      tint)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, RadiusMedium);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImGui::ColorConvertU32ToFloat4(BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(AccentColor));
+    ImGui::PushStyleColor(ImGuiCol_Text,          tint);
+
+    auto it = StyleGeneralApp::Icons.find(iconKey);
+    bool hasIcon = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
+    std::string label = (hasIcon ? "" : std::string(fallbackGlyph)) + "##" + id;
+
+    bool clicked = ImGui::Button(label.c_str(), size);
+
+    if (hasIcon) {
+        ImVec2 bMin = ImGui::GetItemRectMin();
+        ImVec2 bMax = ImGui::GetItemRectMax();
+
+        const float minSide  = std::min(size.x, size.y);
+        const float iconSide = minSide * 0.48f;
+        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+        const ImVec2 pMin    = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
+        const ImVec2 pMax    = { center.x + iconSide * 0.5f, center.y + iconSide * 0.5f };
+
+        ImGui::GetWindowDrawList()->AddImage(
+            it->second.textureID,
+            pMin, pMax,
+            ImVec2(0, 0), ImVec2(1, 1),
+            ImGui::ColorConvertFloat4ToU32(tint));
+    }
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar();
+
+    if (tooltip && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tooltip);
 
     return clicked;
 }

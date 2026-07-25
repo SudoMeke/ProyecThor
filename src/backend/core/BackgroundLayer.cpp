@@ -145,7 +145,7 @@ void main() {
     BackgroundLayer::BackgroundLayer(bool forceSilentAudio)
         : m_PlayerA(2, false, forceSilentAudio)
         , m_PlayerB(2, false, forceSilentAudio)
-        , m_NativePlayer(2, false, forceSilentAudio, /*nativeWindowOutput=*/true)
+        , m_ForceSilentAudio(forceSilentAudio)
     {
     }
 
@@ -154,9 +154,31 @@ void main() {
 
     void BackgroundLayer::Update()
     {
+        // Destruye los NativePlayback retirados (ver RetireActiveNative())
+        // una vez que paso tiempo de sobra para que su detach+stop
+        // encolado en m_NativeLoader haya terminado — recien AHI es seguro
+        // destruir su ventana (hilo principal, GLFW) y su VLCBasePlayer
+        // (cuyo destructor llama Stop() de nuevo, inofensivo si ya esta
+        // parado). Corre siempre, sin importar el motor actual.
+        if (!m_RetiringNative.empty())
+        {
+            double now = NowSeconds();
+            m_RetiringNative.erase(
+                std::remove_if(m_RetiringNative.begin(), m_RetiringNative.end(),
+                    [now](const std::unique_ptr<NativePlayback>& np) {
+                        return (now - np->retiredAt) > kNativeRetireSeconds;
+                    }),
+                m_RetiringNative.end());
+        }
+
+        // Revela la ventana nueva (y recien ahi retira la anterior) cuando
+        // ya este lista — ver comentario largo de m_NativeRevealPending en
+        // el .h. Corre siempre, sin importar el motor actual.
+        PollNativeReveal();
+
         // Contenido activo por motor nativo: no hay textura/crossfade que
-        // actualizar para ESTE contenido — VLC dibuja directo en
-        // m_NativeWindow por su cuenta (ver SetVideo/SyncNativeWindowVisibility).
+        // actualizar para ESTE contenido — VLC dibuja directo en su
+        // ventana por su cuenta (ver SetVideo/SyncNativeWindowVisibility).
         // Active()/Standby() pueden tener un Fondo residual cargado (ver
         // SetVideo()), pero no hace falta seguir subiendole textura
         // mientras no sea lo que se este mostrando.
@@ -486,8 +508,9 @@ void main() {
         // nunca avanza) y por los controles de transporte/preview (play,
         // pausa, seek, VU meter) para llegar al reproductor que
         // REALMENTE tiene el contenido activo — con el motor libvlc
-        // (m_ActiveIsNative), eso es m_NativePlayer, no Active().
-        return m_ActiveIsNative ? &m_NativePlayer : &Active();
+        // (m_ActiveIsNative), eso es m_ActiveNative->player, no Active().
+        if (m_ActiveIsNative && m_ActiveNative) return &m_ActiveNative->player;
+        return &Active();
     }
 
     void BackgroundLayer::SetVideo(const std::string& path, bool allowAudio)
@@ -511,36 +534,81 @@ void main() {
             m_ContentAllowsAudio  = allowAudio;
             m_ActiveIsNative      = true;
 
-            // Mostrar la ventana es una llamada GLFW: tiene que correr aca,
-            // en el hilo principal (el que llama a SetVideo()).
-            void* handle = m_IsLiveToPublic ? m_NativeWindow.Show(m_LastKnownMonitorIndex) : nullptr;
-
-            bool wantActive = m_IsLiveToPublic && allowAudio;
-            bool wantMute   = m_TargetMuted || !wantActive;
-            int  wantVolume = (wantActive && !m_TargetMuted) ? m_TargetVolume : 0;
-
             // FIX (colgaba/"No responde" desde el 2do clip en adelante,
             // confirmado con Wine: dos hilos bloqueados entre si en una
-            // critical section de Windows): TODO lo que toca
-            // m_NativePlayer — adjuntar la ventana, Play(), y el gate de
-            // audio real — va combinado en UNA sola accion despachada a
-            // m_NativeLoader, nunca repartido entre el hilo principal y el
-            // worker. Repartirlo (attach aca, Play() alla) fue justamente
-            // lo que causaba la carrera: dos hilos tocando el mismo
-            // libvlc_media_player_t a la vez. Ademas, adjuntar la ventana
-            // tiene que pasar ANTES de Play() (la doc de libVLC dice que
-            // set_hwnd/set_xwindow "toma efecto cuando arranca la
-            // reproduccion"), y el gate de audio real tiene que ir DESPUES
-            // de Play(): Play(startMuted=true) siempre arranca mudo por
-            // diseño (evita un "pop"), asi que hay que reaplicar el mute/
-            // volumen real una vez que Play() ya corrio, no antes.
-            m_NativeLoader.Request([this, path, handle, wantActive, wantMute, wantVolume]() {
-                if (handle) m_NativePlayer.AttachNativeWindow(handle);
-                m_NativePlayer.Play(path, /*loop=*/false, /*startMuted=*/true);
-                m_NativePlayer.SetAudioActive(wantActive);
-                m_NativePlayer.SetMute(wantMute);
-                m_NativePlayer.SetVolume(wantVolume);
+            // critical section de Windows, incluso despues de serializar
+            // Play/Stop/Attach/Detach en un solo hilo): el problema real
+            // era REUSAR el mismo reproductor+ventana para reproducir un
+            // clip nuevo (Stop() + set_media() + play() sobre una ventana
+            // ya adjuntada). La solucion: cada clip nuevo arranca en un
+            // NativePlayback 100% fresco (reproductor + ventana nuevos);
+            // el anterior se retira (nunca se vuelve a reproducir en el).
+            //
+            // FIX (flash blanco durante el cambio): la ventana nueva NO se
+            // muestra todavia — se crea oculta (CreateHidden) y
+            // PollNativeReveal() la revela recien cuando el reproductor
+            // nuevo confirma que ya esta reproduciendo de verdad. Mientras
+            // tanto, el anterior (si habia) sigue VISIBLE (silenciado ya
+            // mismo, para que no se escuchen dos audios a la vez) tapando
+            // la transicion — nunca se lo para/desvincula todavia, eso lo
+            // cortaria a negro de golpe antes de que el nuevo este listo.
+            if (m_PendingRetireNative) {
+                // Ya habia una transicion en danza cuando aparecio esta
+                // tercera — ese "anterior" quedo doblemente obsoleto.
+                RetireNativePlayback(std::move(m_PendingRetireNative));
+            }
+            if (m_ActiveNative) {
+                m_ActiveNative->player.SetAudioActive(false);
+                m_PendingRetireNative = std::move(m_ActiveNative);
+            }
+
+            auto fresh = std::make_unique<NativePlayback>(m_ForceSilentAudio);
+            // Reproductor recien construido, sin usar todavia: seguro
+            // aplicar el dispositivo de audio elegido aca mismo (hilo
+            // principal), antes de que este NativePlayback haga nada.
+            if (!m_AudioDeviceId.empty())
+                fresh->player.SetAudioDevice(m_AudioDeviceId);
+
+            void* handle = m_IsLiveToPublic ? fresh->window.CreateHidden(m_LastKnownMonitorIndex) : nullptr;
+            VLCBasePlayer* newPlayerPtr = &fresh->player;
+
+            // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
+            // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
+            // arranca la reproduccion").
+            //
+            // FIX (videos salian mudos): el gate de audio real se
+            // RECALCULA ADENTRO del lambda (leyendo los atomics m_TargetMuted/
+            // m_TargetVolume/m_IsLiveToPublic FRESCOS, no un valor
+            // capturado por copia al momento de encolar) — Play(startMuted=
+            // true) siempre arranca mudo por diseño, y si algo como
+            // SetLiveMute()/ApplyAV() corria en el hilo principal DESPUES
+            // de encolar pero ANTES de que el worker llegara a ejecutar
+            // esto, un valor capturado de antemano pisaba esa correccion
+            // con el estado viejo. Leerlo fresco aca lo hace correcto sin
+            // importar el orden/timing entre ambos hilos.
+            bool allowAudioCopy = allowAudio;
+            m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
+                if (handle) newPlayerPtr->AttachNativeWindow(handle);
+                // Los fondos (allowAudio=false) siempre deben repetirse en
+                // loop; los videos reales (allowAudio=true, cola del
+                // Monitor) NO -- MonitorQueueEngine::Update() depende de
+                // que ConsumeEndReached() dispare de verdad al terminar
+                // para avanzar la cola, cosa que nunca pasaria si loopean.
+                newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, /*startMuted=*/true);
+
+                bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
+                bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
+                int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
+                bool wantActive = live && allowAudioCopy;
+                newPlayerPtr->SetAudioActive(wantActive);
+                newPlayerPtr->SetMute(muted || !wantActive);
+                newPlayerPtr->SetVolume((wantActive && !muted) ? volume : 0);
             });
+
+            m_NativeRevealPending = true;
+            m_NativeRevealStart   = NowSeconds();
+
+            m_ActiveNative = std::move(fresh);
             return;
         }
 
@@ -551,18 +619,7 @@ void main() {
         if (m_ActiveIsNative)
         {
             m_ActiveIsNative = false;
-            // FIX (deadlock confirmado con Wine: dos hilos bloqueados
-            // entre si en una critical section de Windows): Stop() +
-            // Detach + mute van combinados en UNA sola accion en el
-            // worker -- nunca repartidos entre el hilo principal y el
-            // worker (ver el comentario largo en PreviewLoadWorker.h).
-            // Ocultar la ventana (GLFW) si corre aca, en el hilo principal.
-            m_NativeWindow.Hide();
-            m_NativeLoader.Request([this]() {
-                m_NativePlayer.SetAudioActive(false);
-                m_NativePlayer.Stop();
-                m_NativePlayer.DetachNativeWindow();
-            });
+            RetireActiveNative();
         }
 
         // FIX (freeze/flash en clicks repetidos): si esto es EXACTAMENTE lo
@@ -586,7 +643,9 @@ void main() {
 
         if (m_SwapPending || GetTextureID() != nullptr)
         {
-            Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
+            // Ver comentario equivalente en la rama nativa de arriba: los
+            // fondos (allowAudio=false) loopean, los videos reales no.
+            Standby().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
             Standby().SetAudioActive(false);
             m_SwapPending      = true;
             m_PendingSwapStart = NowSeconds();
@@ -619,7 +678,7 @@ void main() {
         }
         else
         {
-            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+            Active().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
             if (!m_IsLiveToPublic || !allowAudio)
             {
                 Active().SetAudioActive(false);
@@ -634,7 +693,7 @@ void main() {
                 // que el operador tocaba mute/desmute a mano.
                 Active().SetAudioActive(true);
                 Active().SetMute(m_TargetMuted);
-                Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+                Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
             }
         }
     }
@@ -672,7 +731,8 @@ void main() {
         m_PrefetchArmed  = true;
         m_PrefetchReadyAt = 0.0; // arranca de cero el asentamiento para ESTE prefetch
 
-        Standby().Play(path, /*loop=*/false, /*startMuted=*/true);
+        // Ver comentario en SetVideo(): fondos loopean, videos reales no.
+        Standby().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
         Standby().SetAudioActive(false);
     }
 
@@ -687,18 +747,7 @@ void main() {
         if (m_ActiveIsNative)
         {
             m_ActiveIsNative = false;
-            // FIX (deadlock confirmado con Wine: dos hilos bloqueados
-            // entre si en una critical section de Windows): Stop() +
-            // Detach + mute van combinados en UNA sola accion en el
-            // worker -- nunca repartidos entre el hilo principal y el
-            // worker (ver el comentario largo en PreviewLoadWorker.h).
-            // Ocultar la ventana (GLFW) si corre aca, en el hilo principal.
-            m_NativeWindow.Hide();
-            m_NativeLoader.Request([this]() {
-                m_NativePlayer.SetAudioActive(false);
-                m_NativePlayer.Stop();
-                m_NativePlayer.DetachNativeWindow();
-            });
+            RetireActiveNative();
         }
 
         if (m_PrefetchArmed && m_PrefetchedPath == path)
@@ -740,7 +789,7 @@ void main() {
         {
             newActive.SetAudioActive(true);
             newActive.SetMute(m_TargetMuted);
-            newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+            newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
         }
         else
         {
@@ -775,18 +824,7 @@ void main() {
         if (m_ActiveIsNative)
         {
             m_ActiveIsNative = false;
-            // FIX (deadlock confirmado con Wine: dos hilos bloqueados
-            // entre si en una critical section de Windows): Stop() +
-            // Detach + mute van combinados en UNA sola accion en el
-            // worker -- nunca repartidos entre el hilo principal y el
-            // worker (ver el comentario largo en PreviewLoadWorker.h).
-            // Ocultar la ventana (GLFW) si corre aca, en el hilo principal.
-            m_NativeWindow.Hide();
-            m_NativeLoader.Request([this]() {
-                m_NativePlayer.SetAudioActive(false);
-                m_NativePlayer.Stop();
-                m_NativePlayer.DetachNativeWindow();
-            });
+            RetireActiveNative();
         }
     }
 
@@ -822,13 +860,79 @@ void main() {
         return upscaled ? (void*)(uintptr_t)upscaled : (void*)(uintptr_t)rawTex;
     }
 
-    // Muestra/adjunta o esconde/desvincula m_NativeWindow segun
-    // m_IsLiveToPublic && m_ActiveIsNative — llamar despues de cambiar
-    // cualquiera de esos dos (SetPubliclyLive, SetVideo/Prefetch/
-    // CommitPrefetch/SetSolidColor). Idempotente: llamarla de mas no
-    // rompe nada (Show()/Hide()/Attach()/Detach() ya lo son).
+    void* BackgroundLayer::GetBlurredFillTexture(int workW, int workH) {
+        if (!m_FillBlurEnabled) return nullptr;
+
+        GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Active().GetTextureID()));
+        if (rawTex == 0 || workW <= 0 || workH <= 0) return nullptr;
+
+        // Resolucion de trabajo baja a proposito (1/4, igual que
+        // GlassRenderer): esto es un relleno ambiental fuera de foco, no
+        // hace falta nitidez ni resolucion real, y sale mucho mas barato.
+        int blurW = std::max(1, workW / 4);
+        int blurH = std::max(1, workH / 4);
+
+        if (!m_FillBlur.IsInitialized())
+            m_FillBlur.Init(blurW, blurH);
+        else
+            m_FillBlur.Resize(blurW, blurH);
+
+        GLuint blurred = m_FillBlur.Process(rawTex);
+        return blurred ? (void*)(uintptr_t)blurred : nullptr;
+    }
+
+    void BackgroundLayer::RetireNativePlayback(std::unique_ptr<NativePlayback> np)
+    {
+        if (!np) return;
+
+        VLCBasePlayer* p = &np->player;
+        np->window.Hide(); // GLFW: hilo principal
+        np->retiredAt = NowSeconds();
+
+        // Detach+Stop combinados en UNA accion en el worker (nunca en el
+        // hilo principal directo — ver comentario de PreviewLoadWorker.h).
+        m_NativeLoader.Request([p]() {
+            p->SetAudioActive(false);
+            p->DetachNativeWindow();
+            p->Stop();
+        });
+
+        m_RetiringNative.push_back(std::move(np));
+    }
+
+    void BackgroundLayer::RetireActiveNative()
+    {
+        // Cancela cualquier revelado pendiente: ya no hay "nuevo" que
+        // esperar, ambos se retiran.
+        m_NativeRevealPending = false;
+        if (m_PendingRetireNative) RetireNativePlayback(std::move(m_PendingRetireNative));
+        if (m_ActiveNative)        RetireNativePlayback(std::move(m_ActiveNative));
+    }
+
+    void BackgroundLayer::PollNativeReveal()
+    {
+        if (!m_NativeRevealPending || !m_ActiveNative) return;
+
+        bool ready = m_ActiveNative->player.GetLoadState() == VLCBasePlayer::LoadState::Ready;
+        bool timedOut = (NowSeconds() - m_NativeRevealStart) > kNativeRevealGiveUpSeconds;
+        if (!ready && !timedOut) return;
+
+        // Listo (o se agoto el tiempo de gracia): revelar el nuevo YA —
+        // recien ahora, nunca antes, para no exponer el instante de
+        // inicializacion del modulo de video de VLC (ver comentario largo
+        // de m_NativeRevealPending en el .h).
+        if (m_IsLiveToPublic) m_ActiveNative->window.Reveal();
+        m_NativeRevealPending = false;
+
+        // El anterior seguia visible (mudo) tapando la transicion — recien
+        // ahora se retira de verdad.
+        if (m_PendingRetireNative) RetireNativePlayback(std::move(m_PendingRetireNative));
+    }
+
     void BackgroundLayer::SyncNativeWindowVisibility()
     {
+        if (!m_ActiveNative) return; // nada cargado por este motor todavia
+
         // Mostrar/ocultar la ventana (GLFW) se hace aca mismo, en el hilo
         // que llama (siempre el principal) — son llamadas GLFW, tienen que
         // correr ahi. Adjuntar/desvincular la ventana en libVLC (Attach/
@@ -839,26 +943,40 @@ void main() {
         // PreviewLoadWorker.h — asi se corrigio un deadlock real).
         if (m_IsLiveToPublic && m_ActiveIsNative)
         {
-            void* handle = m_NativeWindow.Show(m_LastKnownMonitorIndex);
+            // Si esta ventana todavia esta esperando a revelarse (ver
+            // m_NativeRevealPending/PollNativeReveal), NO forzar Show() aca
+            // — se revelaria antes de tiempo, exponiendo el instante de
+            // inicializacion de VLC que todo este mecanismo existe para
+            // evitar. Solo se reposiciona/adjunta (CreateHidden, sin
+            // mostrar); PollNativeReveal es el UNICO que la muestra.
+            void* handle = m_NativeRevealPending
+                ? m_ActiveNative->window.CreateHidden(m_LastKnownMonitorIndex)
+                : m_ActiveNative->window.Show(m_LastKnownMonitorIndex);
+            VLCBasePlayer* p = &m_ActiveNative->player;
 
-            bool wantActive = m_ContentAllowsAudio;
-            bool wantMute   = m_TargetMuted || !wantActive;
-            int  wantVolume = (wantActive && !m_TargetMuted) ? m_TargetVolume : 0;
-
-            m_NativeLoader.Request([this, handle, wantActive, wantMute, wantVolume]() {
-                if (handle) m_NativePlayer.AttachNativeWindow(handle);
-                m_NativePlayer.SetAudioActive(wantActive);
-                m_NativePlayer.SetMute(wantMute);
-                m_NativePlayer.SetVolume(wantVolume);
+            // Gate de audio recalculado ADENTRO del lambda con valores
+            // frescos (atomics) al momento de ejecutar, no capturados de
+            // antemano — mismo motivo que en SetVideo() (ver su comentario
+            // largo: evita que un SetLiveMute()/ApplyAV() posterior quede
+            // pisado por un valor viejo).
+            m_NativeLoader.Request([this, p, handle]() {
+                if (handle) p->AttachNativeWindow(handle);
+                bool active = m_ContentAllowsAudio.load(std::memory_order_relaxed);
+                bool muted  = m_TargetMuted.load(std::memory_order_relaxed);
+                int  volume = m_TargetVolume.load(std::memory_order_relaxed);
+                p->SetAudioActive(active);
+                p->SetMute(muted || !active);
+                p->SetVolume((active && !muted) ? volume : 0);
             });
         }
         else
         {
-            m_NativeWindow.Hide();
+            m_ActiveNative->window.Hide();
+            VLCBasePlayer* p = &m_ActiveNative->player;
 
-            m_NativeLoader.Request([this]() {
-                m_NativePlayer.SetAudioActive(false);
-                m_NativePlayer.DetachNativeWindow();
+            m_NativeLoader.Request([p]() {
+                p->SetAudioActive(false);
+                p->DetachNativeWindow();
             });
         }
     }
@@ -884,7 +1002,7 @@ void main() {
             bool activeAudioAllowed = m_ContentAllowsAudio;
             Active().SetAudioActive(activeAudioAllowed);
             Active().SetMute(m_TargetMuted || !activeAudioAllowed);
-            Active().SetVolume(activeAudioAllowed && !m_TargetMuted ? m_TargetVolume : 0);
+            Active().SetVolume(activeAudioAllowed && !m_TargetMuted ? m_TargetVolume.load() : 0);
             Standby().SetAudioActive(false);
         }
         else
@@ -901,8 +1019,10 @@ void main() {
         m_TargetVolume = volume0to200;
         if (!m_IsLiveToPublic) return;
 
-        if (m_ActiveIsNative) m_NativePlayer.SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
-        else                  Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume);
+        if (m_ActiveIsNative && m_ActiveNative)
+            m_ActiveNative->player.SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+        else
+            Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
     }
 
     void BackgroundLayer::SetLiveMute(bool mute)
@@ -910,9 +1030,9 @@ void main() {
         m_TargetMuted = mute;
         if (!m_IsLiveToPublic) return;
 
-        VLCBasePlayer& target = m_ActiveIsNative ? m_NativePlayer : Active();
+        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetMute(mute);
-        target.SetVolume(mute ? 0 : m_TargetVolume);
+        target.SetVolume(mute ? 0 : m_TargetVolume.load());
     }
 
     // ── Dispositivo de salida de audio ──────────────────────────────────
@@ -928,28 +1048,27 @@ void main() {
     {
         m_AudioDeviceId = deviceId;
 
-        // Se aplica a TODOS los players (no solo al activo): el standby
-        // puede pasar a ser el activo en cualquier momento via
-        // PerformSwap(), y el nativo puede pasar a estarlo en el proximo
-        // SetVideo() con el motor libvlc activo — para entonces ya deben
-        // estar apuntando al dispositivo correcto.
+        // Se aplica a m_PlayerA/B (el standby puede pasar a ser el activo
+        // en cualquier momento via PerformSwap()) y, si hay uno cargado
+        // ahora, al reproductor nativo actual — m_AudioDeviceId tambien
+        // queda guardado para que SetVideo() lo aplique a cada
+        // NativePlayback nuevo que cree de ahi en mas (ver su motor
+        // "libvlc": cada clip usa un reproductor fresco, no reutilizado).
         m_PlayerA.SetAudioDevice(deviceId);
         m_PlayerB.SetAudioDevice(deviceId);
-        m_NativePlayer.SetAudioDevice(deviceId);
+        if (m_ActiveNative) m_ActiveNative->player.SetAudioDevice(deviceId);
     }
 
     void BackgroundLayer::BlockPath(const std::string& path)
     {
         m_PlayerA.BlockPath(path);
         m_PlayerB.BlockPath(path);
-        m_NativePlayer.BlockPath(path);
     }
 
     void BackgroundLayer::UnblockPath()
     {
         m_PlayerA.UnblockPath();
         m_PlayerB.UnblockPath();
-        m_NativePlayer.UnblockPath();
     }
 
 } // namespace ProyecThor::Core

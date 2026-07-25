@@ -153,6 +153,25 @@ void SetGlobalMute(bool mute);
 
         void*          GetBackgroundTexture();
         void*          GetProcessedBackgroundTexture(int targetW, int targetH);
+
+        // Igual que GetProcessedBackgroundTexture, pero además corre los
+        // mismos efectos de CompositePostChain (CRT/Grano/FXAA/Saturación/
+        // Viñetado) a la resolución del preview -- para que el recuadro del
+        // operador (ViewPanel/Monitor de Control) sea un reflejo fiel de lo
+        // que ve el público, en vez de mostrar siempre el fondo sin
+        // procesar (esos efectos antes SOLO corrian sobre la viewport real
+        // "ProjectorLive"). Ver CompositePostChain::ProcessBackgroundForPreview.
+        void*          GetPreviewBackgroundTexture(int targetW, int targetH);
+
+        // "Rellenado" de letterbox/pillarbox: version muy desenfocada del
+        // fondo, a pantalla completa, para dibujar DETRAS del contenido
+        // nitido en vez de barras negras. nullptr si esta desactivado.
+        void*          GetBackgroundFillTexture(int workW, int workH);
+        void           SetFillBlurEnabled(bool enabled);
+        bool           GetFillBlurEnabled() const;
+        void           SetFillBlurBrightness(float v);
+        float          GetFillBlurBrightness() const;
+
         void*          GetOverlayTexture();
         bool           IsOverlayActive() const;
         VLCBasePlayer* GetBackgroundPlayer();
@@ -187,6 +206,16 @@ void SetGlobalMute(bool mute);
 
         void  SetFXAAEnabled(bool enabled);
         bool  GetFXAAEnabled() const;
+
+        void  SetSaturationEnabled(bool enabled);
+        bool  GetSaturationEnabled() const;
+        void  SetSaturationAmount(float amount);
+        float GetSaturationAmount() const;
+
+        void  SetVignetteEnabled(bool enabled);
+        bool  GetVignetteEnabled() const;
+        void  SetVignetteIntensity(float intensity);
+        float GetVignetteIntensity() const;
 
         // Usado por UIManager (justo tras ImGui::Begin("ProjectorLive",...))
         // para informar, cada frame, cual ImGuiID es esa viewport, y por el
@@ -237,6 +266,15 @@ void SetGlobalMute(bool mute);
         void SetPendingTransitionOverride(const std::string& name, float duration);
         bool ConsumePendingTransitionOverride(std::string& outName, float& outDuration);
 
+        // Cue "consumir una vez" para que el rework del editor de canciones
+        // pueda abrir el editor unificado directamente tras crear una
+        // cancion nueva, sin popup modal — ver CreateNewSong (LibrarySongs.cpp)
+        // y SongView::Render (que hace ConsumeSongEditorOpenRequest cada
+        // frame y compara contra la seleccion actual). Mismo patron que
+        // SetClockStyleCue/ConsumeClockStyleCue arriba.
+        void        RequestSongEditorOpen(const std::string& filename);
+        bool        ConsumeSongEditorOpenRequest(std::string& outFilename);
+
         // ── Macros (ver MacroTypes.h) ─────────────────────────────────────
         // El MacroPlayer vive aca (no en un panel) para que tanto el editor
         // (LayersOverlayTab) como el transporte "Control Overlays"
@@ -245,6 +283,7 @@ void SetGlobalMute(bool mute);
         void        StopMacro();
         void        NextMacroCue();
         void        PrevMacroCue();
+        void        SetMacroCueIndex(int index); // salta directo a una cue (ej. recall de un Pad)
         void        SetMacroAutoAdvance(bool autoAdvance);
         bool        GetMacroAutoAdvance() const;
         bool        IsMacroPlaying() const;
@@ -488,6 +527,10 @@ bool m_GlobalMuted = false;
         std::string m_PendingTransitionName;
         float       m_PendingTransitionDuration = -1.0f;
         bool        m_HasTransitionOverride = false;
+
+        // Ver RequestSongEditorOpen/ConsumeSongEditorOpenRequest arriba.
+        std::string m_PendingSongEditorOpenFile;
+        bool        m_HasSongEditorOpenRequest = false;
 
         MacroPlayer m_MacroPlayer;
 

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.4.0
+    VERSION 0.4.1
     LANGUAGES C CXX
 )
 
@@ -22,6 +22,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
+# PROYECTHOR_BUILD_NUMBER: "local" en builds de desarrollo (scripts/build.sh);
+# CI (.github/workflows/build.yml) lo pisa con -DPROYECTHOR_BUILD_NUMBER=<github.run_number>,
+# un numero que aumenta solo con cada build de GitHub Actions. Se muestra en
+# el splash (ver src/main.cpp) junto a la version.
+set(PROYECTHOR_BUILD_NUMBER "local" CACHE STRING "Numero de build (lo inyecta CI)")
+
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"
     "${CMAKE_BINARY_DIR}/generated/Version.h"
@@ -331,6 +337,23 @@ else()
     endif()
 
     find_package(OpenGL REQUIRED)
+
+    # Camaras reales en el panel de Captura: CapturePanel.cpp ya tiene la
+    # enumeracion/lectura real via cv::VideoCapture (V4L2 por debajo) detras
+    # de la macro PT_USE_OPENCV -- pero como nada definia esa macro nunca se
+    # compilaba, y el panel caia siempre en el stub de "Camara 0 (simulada)"
+    # con un patron de prueba animado en vez de listar dispositivos reales.
+    # Opcional, igual que XComposite/PipeWire arriba/abajo: si OpenCV no
+    # esta instalado, el build sigue igual que antes (stub simulado).
+    find_package(OpenCV QUIET COMPONENTS core videoio)
+    if(OpenCV_FOUND)
+        message(STATUS "OpenCV encontrado (${OpenCV_VERSION}): deteccion real de camaras habilitada en Captura")
+        target_link_libraries(ProyecThor PRIVATE ${OpenCV_LIBS})
+        target_include_directories(ProyecThor PRIVATE ${OpenCV_INCLUDE_DIRS})
+        target_compile_definitions(ProyecThor PRIVATE PT_USE_OPENCV)
+    else()
+        message(STATUS "OpenCV NO encontrado: Captura seguira usando la camara simulada de prueba")
+    endif()
 
     # VLC para Linux: build .so vendorizado, igual que PDFium (no se
     # compila VLC desde cero, se linkea contra binarios ya generados en

@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "frontend/panels/home/HomeIcons.h"
 #include "backend/settings/SettingsManager.h"
 
 #include <imgui.h>
@@ -20,6 +21,11 @@ static constexpr int kCat_Bibles    = 3;
 static constexpr int kCat_Documents = 4;
 static constexpr int kCat_Audio     = 5;
 
+// Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h).
+static constexpr int kSideMode_Categories = 0;
+static constexpr int kSideMode_Streaming  = 1;
+static constexpr int kSideMode_Clock      = 2;
+
 namespace ProyecThor::Library {
 
 // Progreso animado (0..1) de "mostrar titulo" — misma idea que IconRail.cpp,
@@ -36,9 +42,101 @@ static float RailLabelProgress()
     return *cur;
 }
 
+using DrawFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
+
+// Dibuja un boton del sidebar (icono + label opcional + barra de acento +
+// hover) en la posicion actual del cursor, consumiendo btnH de alto —
+// mismo look para las 6 categorias de contenido y para el grupo Red/Reloj
+// de abajo (ver comentario de RenderCategoryButtons). Devuelve true si se
+// clickeo. No muta ctx: el llamador decide que hacer con el click.
+static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
+                                float sidebarW, float btnH, float iconSz, float lt,
+                                const char* label, DrawFn drawIcon,
+                                bool active, const float cc[4])
+{
+    const ImU32 accentBar = ImGui::ColorConvertFloat4ToU32(ImVec4(cc[0], cc[1], cc[2], cc[3]));
+    constexpr float rounding = 5.0f;
+
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    ImVec2 bMin   = cursor;
+    ImVec2 bMax   = { cursor.x + sidebarW, cursor.y + btnH };
+
+    ImGuiID hovId = ImGui::GetID(label);
+    float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
+    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
+    *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    float t = *pT;
+
+    // ── Fondo ─────────────────────────────────────────────────────────
+    if (active) {
+        ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
+        ac.w = 0.12f;
+        dl->AddRectFilled(bMin, bMax,
+                          ImGui::ColorConvertFloat4ToU32(ac), rounding);
+    } else if (t > 0.01f) {
+        dl->AddRectFilled(bMin, bMax,
+                          IM_COL32(255, 255, 255, (int)(t * 14.f)), rounding);
+    }
+
+    // ── Barra lateral izquierda ────────────────────────────────────────
+    {
+        float barH     = btnH * 0.60f * (active ? 1.0f : t);
+        float barY0    = cursor.y + (btnH - barH) * 0.5f;
+        float barAlpha = active ? 1.0f : t * 0.55f;
+        ImVec4 ac      = ImGui::ColorConvertU32ToFloat4(accentBar);
+        ac.w           = barAlpha;
+        dl->AddRectFilled(
+            { bMin.x,        barY0 },
+            { bMin.x + 3.0f, barY0 + barH },
+            ImGui::ColorConvertFloat4ToU32(ac), 2.0f);
+    }
+
+    ImGui::SetCursorScreenPos(bMin);
+    const std::string btnId = std::string("##cat_") + label;
+    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { sidebarW, btnH });
+
+    // ── Icono + label ──────────────────────────────────────────────────
+    {
+        float iconBright = active ? 1.0f : Lerp(0.32f, 0.72f, t);
+        ImVec4 icF = { iconBright, iconBright, iconBright, 1.0f };
+        if (active) {
+            ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
+            icF = LerpColor(icF, ac, 0.35f);
+            icF.w = 1.0f;
+        }
+
+        ImVec2 lblDim       = ImGui::CalcTextSize(label);
+        float  totalContent = iconSz + lt * (5.0f + lblDim.y);
+        float  startY       = cursor.y + (btnH - totalContent) * 0.5f;
+        float  iconX        = cursor.x + (sidebarW - iconSz) * 0.5f;
+
+        drawIcon(dl, { iconX, startY }, iconSz,
+                ImGui::ColorConvertFloat4ToU32(icF));
+
+        if (lt > 0.01f) {
+            float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
+            ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+            if (active) {
+                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
+                lblF = LerpColor(lblF, ac, 0.25f);
+                lblF.w = lt;
+            }
+
+            float lblX = cursor.x + (sidebarW - lblDim.x) * 0.5f;
+            float lblY = startY + iconSz + 5.0f;
+            dl->AddText({ lblX, lblY },
+                        ImGui::ColorConvertFloat4ToU32(lblF), label);
+        }
+    }
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("%s", label);
+
+    return clicked;
+}
+
 void RenderCategoryButtons(LibraryContext& ctx)
 {
-    using DrawFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
 
     // El color de identidad de cada categoria (accentBar) es configurable
     // desde Ajustes > Apariencia (SettingsManager: librarySidebar.categoryColor,
@@ -73,7 +171,6 @@ void RenderCategoryButtons(LibraryContext& ctx)
     ImGui::Dummy({ sidebarW, 4.0f });
 
     constexpr float btnGapY  = 1.0f;
-    constexpr float rounding = 5.0f;
     const float     btnH     = 46.0f;
     const float     iconSz   = std::floor(btnH * 0.38f);
     (void)winH;
@@ -85,92 +182,49 @@ void RenderCategoryButtons(LibraryContext& ctx)
 
     for (int catIdx = 0; catIdx < (int)(sizeof(k_Cats) / sizeof(k_Cats[0])); catIdx++)
     {
-        const auto& cd = k_Cats[catIdx];
-        const bool  active = (ctx.currentCategoryInt == cd.catInt);
-        const float* cc = sidebarSettings.categoryColor[catIdx];
-        const ImU32 accentBar = ImGui::ColorConvertFloat4ToU32(
-            ImVec4(cc[0], cc[1], cc[2], cc[3]));
+        const auto& cd     = k_Cats[catIdx];
+        const bool  active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == cd.catInt);
 
-        ImVec2 cursor = ImGui::GetCursorScreenPos();
-        ImVec2 bMin   = cursor;
-        ImVec2 bMax   = { cursor.x + sidebarW, cursor.y + btnH };
-
-        ImGuiID hovId = ImGui::GetID(cd.label);
-        float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-        bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-        *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-        float t = *pT;
-
-        // ── Fondo ─────────────────────────────────────────────────────────
-        if (active) {
-            ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
-            ac.w = 0.12f;
-            dl->AddRectFilled(bMin, bMax,
-                              ImGui::ColorConvertFloat4ToU32(ac), rounding);
-        } else if (t > 0.01f) {
-            dl->AddRectFilled(bMin, bMax,
-                              IM_COL32(255, 255, 255, (int)(t * 14.f)), rounding);
-        }
-
-        // ── Barra lateral izquierda ────────────────────────────────────────
-        {
-            float barH     = btnH * 0.60f * (active ? 1.0f : t);
-            float barY0    = cursor.y + (btnH - barH) * 0.5f;
-            float barAlpha = active ? 1.0f : t * 0.55f;
-            ImVec4 ac      = ImGui::ColorConvertU32ToFloat4(accentBar);
-            ac.w           = barAlpha;
-            dl->AddRectFilled(
-                { bMin.x,        barY0 },
-                { bMin.x + 3.0f, barY0 + barH },
-                ImGui::ColorConvertFloat4ToU32(ac), 2.0f);
-        }
-
-        ImGui::SetCursorScreenPos(bMin);
-        const std::string btnId = std::string("##cat_") + cd.label;
-        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { sidebarW, btnH });
-
-        // ── Icono + label ──────────────────────────────────────────────────
-        {
-            float iconBright = active ? 1.0f : Lerp(0.32f, 0.72f, t);
-            ImVec4 icF = { iconBright, iconBright, iconBright, 1.0f };
-            if (active) {
-                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
-                icF = LerpColor(icF, ac, 0.35f);
-                icF.w = 1.0f;
-            }
-
-            ImVec2 lblDim       = ImGui::CalcTextSize(cd.label);
-            float  totalContent = iconSz + lt * (5.0f + lblDim.y);
-            float  startY       = cursor.y + (btnH - totalContent) * 0.5f;
-            float  iconX        = cursor.x + (sidebarW - iconSz) * 0.5f;
-
-            cd.drawIcon(dl, { iconX, startY }, iconSz,
-                        ImGui::ColorConvertFloat4ToU32(icF));
-
-            if (lt > 0.01f) {
-                float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-                ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
-                if (active) {
-                    ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
-                    lblF = LerpColor(lblF, ac, 0.25f);
-                    lblF.w = lt;
-                }
-
-                float lblX = cursor.x + (sidebarW - lblDim.x) * 0.5f;
-                float lblY = startY + iconSz + 5.0f;
-                dl->AddText({ lblX, lblY },
-                            ImGui::ColorConvertFloat4ToU32(lblF), cd.label);
-            }
-        }
-
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", cd.label);
-
+        bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
+                                           cd.label, cd.drawIcon, active,
+                                           sidebarSettings.categoryColor[catIdx]);
         if (clicked) {
             ctx.currentCategoryInt = cd.catInt;
+            ctx.sideModeInt        = kSideMode_Categories;
             ctx.selectedIndex      = -1;
             ctx.refreshList();
         }
+    }
+
+    // ── Divisor + grupo aparte "Red"/"Reloj" ────────────────────────────────
+    // Mudados desde ViewToolsPanel (hub debajo de "Vista en Vivo") — el
+    // operador los pedia junto a la biblioteca de contenido, no mezclados
+    // con las categorias de arriba, de ahi la linea separadora. No tocan
+    // ctx.currentCategoryInt/LibraryCategory: usan su propio modo
+    // (ctx.sideModeInt, ver UI::LibrarySideMode en LibraryPanel.h).
+    {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        dl->AddRectFilled(p, { p.x + sidebarW, p.y + 1.0f }, IM_COL32(255, 255, 255, 28));
+        ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
+    }
+
+    struct SideDef { const char* label; DrawFn drawIcon; int mode; };
+    static const SideDef k_SideItems[] = {
+        { "Red",   ProyecThor::UI::HomeIcons::DrawIcon_Broadcast, kSideMode_Streaming },
+        { "Reloj", ProyecThor::UI::HomeIcons::DrawIcon_Clock,     kSideMode_Clock     },
+    };
+
+    for (const auto& sd : k_SideItems)
+    {
+        const bool active = (ctx.sideModeInt == sd.mode);
+        // Colores en los indices 6/7 de librarySidebar.categoryColor — ver
+        // SettingsManager.h.
+        int colorIdx = (sd.mode == kSideMode_Streaming) ? 6 : 7;
+
+        bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
+                                           sd.label, sd.drawIcon, active,
+                                           sidebarSettings.categoryColor[colorIdx]);
+        if (clicked) ctx.sideModeInt = sd.mode;
     }
 
     ImGui::PopStyleVar();

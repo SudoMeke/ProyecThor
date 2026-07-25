@@ -6,18 +6,121 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdlib>
+#include <vector>
 #ifndef _WIN32
 #include <pwd.h>
 #include <unistd.h>
+#else
+#include <windows.h>
 #endif
 #include "MonitorTheme.h"
 #include "HubTheme.h"
 #include "LayersTheme.h"
 #include "CanvaStyleEditor.h"
+#include <cstdint>
 
 using json = nlohmann::json;
 
 namespace ProyecThor::Settings {
+
+// Valida el archivo de fuente leyendo el directorio de tablas sfnt a mano,
+// SIN pasar por stb_truetype: ImGui compila su copia con STBTT_STATIC (ver
+// imgui_draw.cpp), asi que sus simbolos quedan ocultos a esta unidad de
+// compilacion, y compilar una copia propia de imstb_truetype.h aca choca
+// con el forward-declare de 'stbrp_node' que ya trae imgui_internal.h
+// (mismo nombre de tipo, structs incompatibles). Como AddFontFromFileTTF
+// llama IM_ASSERT ante un archivo invalido/corrupto -- en build Debug eso
+// aborta el proceso entero, bug real que golpeo la propia fuente por
+// defecto de este repo -- esta es la unica forma de saber de antemano si
+// una fuente "sirve" sin arriesgar ese crash al cargarla de verdad.
+bool IsValidFontFile(const std::string& path) {
+    if (path.empty()) return false;
+
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+
+    std::vector<unsigned char> data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (data.size() < 12) return false;
+
+    auto readU16 = [&](size_t off) -> uint16_t {
+        return (uint16_t(data[off]) << 8) | uint16_t(data[off + 1]);
+    };
+    auto readU32 = [&](size_t off) -> uint32_t {
+        return (uint32_t(data[off])     << 24) | (uint32_t(data[off + 1]) << 16) |
+               (uint32_t(data[off + 2]) <<  8) |  uint32_t(data[off + 3]);
+    };
+
+    size_t   dirOffset = 0;
+    uint32_t tag       = readU32(0);
+    if (tag == 0x74746366u) { // 'ttcf' -- TrueType Collection: usa la primera fuente del set
+        if (data.size() < 16) return false;
+        dirOffset = readU32(12);
+    } else if (tag != 0x00010000u && tag != 0x4F54544Fu /*'OTTO'*/ &&
+               tag != 0x74727565u /*'true'*/ && tag != 0x74797031u /*'typ1'*/) {
+        return false; // no es un sfnt reconocible
+    }
+
+    if (dirOffset + 12 > data.size()) return false;
+    uint16_t numTables = readU16(dirOffset + 4);
+    if (numTables == 0 || numTables > 128) return false; // sanity
+
+    bool hasGlyf = false, hasLoca = false, hasHead = false, hasCFF = false;
+    size_t recBase = dirOffset + 12;
+
+    for (uint16_t i = 0; i < numTables; i++) {
+        size_t rec = recBase + (size_t)i * 16;
+        if (rec + 16 > data.size()) return false; // directorio trunco
+
+        uint32_t tableTag    = readU32(rec);
+        uint32_t tableOffset = readU32(rec + 8);
+        uint32_t tableLength = readU32(rec + 12);
+        if ((size_t)tableOffset + tableLength > data.size()) return false; // tabla fuera de rango -> archivo trunco/corrupto
+
+        switch (tableTag) {
+            case 0x676C7966u: hasGlyf = true; break; // 'glyf'
+            case 0x6C6F6361u: hasLoca = true; break; // 'loca'
+            case 0x68656164u: hasHead = true; break; // 'head'
+            case 0x43464620u: hasCFF  = true; break; // 'CFF '
+            default: break;
+        }
+    }
+
+    // Hace falta el esqueleto TrueType (glyf+loca) o PostScript (CFF) para
+    // tener contornos que rasterizar, mas la tabla 'head' que ImGui/
+    // stb_truetype siempre esperan poder leer.
+    return hasHead && (hasCFF || (hasGlyf && hasLoca));
+}
+
+void RestartApplication() {
+#ifdef _WIN32
+    char exePath[MAX_PATH] = {};
+    if (GetModuleFileNameA(nullptr, exePath, MAX_PATH) == 0) return;
+
+    STARTUPINFOA        si = {};
+    si.cb                  = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+
+    if (CreateProcessA(exePath, nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+#else
+    char exePath[4096] = {};
+    ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+    if (len <= 0) return;
+    exePath[len] = '\0';
+
+    // fork(): el hijo se convierte en la nueva instancia (execl); el padre
+    // (este mismo proceso) NO llama exit() aca -- ya viene de un shutdown
+    // limpio (ver comentario en el .h) y simplemente sigue su propio
+    // return normal de main().
+    pid_t pid = fork();
+    if (pid == 0) {
+        execl(exePath, exePath, (char*)nullptr);
+        _exit(127); // solo se llega aca si execl fallo
+    }
+#endif
+}
 
 // Nunca debe resolver a una ruta relativa dependiente del cwd (podria
 // terminar escrito dentro del propio repo si la app se lanza desde ahi).
@@ -277,6 +380,12 @@ void SettingsManager::ApplyProjection() {
     core.SetGrainEnabled(p.grainEnabled);
     core.SetGrainIntensity(p.grainIntensity);
     core.SetFXAAEnabled(p.fxaaEnabled);
+    core.SetSaturationEnabled(p.saturationEnabled);
+    core.SetSaturationAmount(p.saturationAmount);
+    core.SetVignetteEnabled(p.vignetteEnabled);
+    core.SetVignetteIntensity(p.vignetteIntensity);
+    core.SetFillBlurEnabled(p.fillBlurEnabled);
+    core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetVideoRenderEngine(p.videoRenderEngine);
 }
 
@@ -421,6 +530,12 @@ void SettingsManager::SaveSettings() {
     j["projection"]["grainEnabled"]         = p.grainEnabled;
     j["projection"]["grainIntensity"]       = p.grainIntensity;
     j["projection"]["fxaaEnabled"]          = p.fxaaEnabled;
+    j["projection"]["saturationEnabled"]    = p.saturationEnabled;
+    j["projection"]["saturationAmount"]     = p.saturationAmount;
+    j["projection"]["vignetteEnabled"]      = p.vignetteEnabled;
+    j["projection"]["vignetteIntensity"]    = p.vignetteIntensity;
+    j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
+    j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
 
     const auto& sd = m_Settings.stageDisplay;
@@ -429,7 +544,7 @@ void SettingsManager::SaveSettings() {
         j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
 
     const auto& lsb = m_Settings.librarySidebar;
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 8; i++)
         for (int c = 0; c < 4; c++)
             j["librarySidebar"]["categoryColor"][i][c] = lsb.categoryColor[i][c];
 
@@ -449,9 +564,50 @@ void SettingsManager::SaveSettings() {
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
     const auto& vts = m_Settings.viewTools;
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 4; i++)
         for (int c = 0; c < 4; c++)
             j["viewTools"]["categoryColor"][i][c] = vts.categoryColor[i][c];
+
+    for (int i = 0; i < kCaptureSceneCount; i++) {
+        const auto& sc = m_Settings.capture.scenes[i];
+        auto& js = j["capture"]["scenes"][i];
+        js["assigned"]     = sc.assigned;
+        js["sourceType"]   = sc.sourceType;
+        js["sourceIndex"]  = sc.sourceIndex;
+        js["sourceHandle"] = sc.sourceHandle;
+        js["sourceName"]   = sc.sourceName;
+        js["x0"] = sc.x0; js["y0"] = sc.y0; js["x1"] = sc.x1; js["y1"] = sc.y1;
+        js["opacity"] = sc.opacity;
+    }
+
+    for (int i = 0; i < kPadCount; i++) {
+        const auto& p  = m_Settings.pads.pads[i];
+        auto&       jp = j["pads"]["pads"][i];
+        jp["assigned"]  = p.assigned;
+        jp["iconIndex"] = p.iconIndex;
+
+        jp["hasCapture"] = p.hasCapture;
+        auto& jc = jp["capture"];
+        jc["assigned"]     = p.capture.assigned;
+        jc["sourceType"]   = p.capture.sourceType;
+        jc["sourceIndex"]  = p.capture.sourceIndex;
+        jc["sourceHandle"] = p.capture.sourceHandle;
+        jc["sourceName"]   = p.capture.sourceName;
+        jc["x0"] = p.capture.x0; jc["y0"] = p.capture.y0;
+        jc["x1"] = p.capture.x1; jc["y1"] = p.capture.y1;
+        jc["opacity"] = p.capture.opacity;
+
+        jp["hasStyle"]  = p.hasStyle;
+        jp["styleName"] = p.styleName;
+        jp["bgType"]    = p.bgType;
+        jp["bgPath"]    = p.bgPath;
+        for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
+
+        jp["hasMacro"]         = p.hasMacro;
+        jp["macroName"]        = p.macroName;
+        jp["macroCueIndex"]    = p.macroCueIndex;
+        jp["macroAutoAdvance"] = p.macroAutoAdvance;
+    }
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -482,10 +638,11 @@ void SettingsManager::SaveSettings() {
 
     j["foudrevue"]["releaseChannel"] = m_Settings.foudrevue.releaseChannel;
 
-    j["theme"]["preset"]        = ThemePresetToKey(t.preset);
-    j["theme"]["windowRounding"]= t.windowRounding;
-    j["theme"]["frameRounding"] = t.frameRounding;
-    j["theme"]["scrollbarSize"] = t.scrollbarSize;
+    j["theme"]["preset"]         = ThemePresetToKey(t.preset);
+    j["theme"]["windowRounding"] = t.windowRounding;
+    j["theme"]["frameRounding"]  = t.frameRounding;
+    j["theme"]["scrollbarSize"]  = t.scrollbarSize;
+    j["theme"]["customFontPath"] = t.customFontPath;
     auto putCol = [&](const char* key, const float* v) {
         j["theme"][key] = { v[0], v[1], v[2], v[3] };
     };
@@ -553,6 +710,12 @@ void SettingsManager::LoadSettings() {
             p.grainEnabled          = jp.value("grainEnabled",          false);
             p.grainIntensity        = jp.value("grainIntensity",        0.15f);
             p.fxaaEnabled           = jp.value("fxaaEnabled",           false);
+            p.saturationEnabled     = jp.value("saturationEnabled",     false);
+            p.saturationAmount      = jp.value("saturationAmount",      1.3f);
+            p.vignetteEnabled       = jp.value("vignetteEnabled",       false);
+            p.vignetteIntensity     = jp.value("vignetteIntensity",     0.45f);
+            p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
+            p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
         }
 
@@ -572,7 +735,7 @@ void SettingsManager::LoadSettings() {
             const auto& jlsb = j["librarySidebar"];
             if (jlsb.contains("categoryColor") && jlsb["categoryColor"].is_array()) {
                 const auto& arr = jlsb["categoryColor"];
-                for (int i = 0; i < 6 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 8 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         lsb.categoryColor[i][c] = arr[i][c].get<float>();
             }
@@ -616,9 +779,63 @@ void SettingsManager::LoadSettings() {
             const auto& jvts = j["viewTools"];
             if (jvts.contains("categoryColor") && jvts["categoryColor"].is_array()) {
                 const auto& arr = jvts["categoryColor"];
-                for (int i = 0; i < 5 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 4 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         vts.categoryColor[i][c] = arr[i][c].get<float>();
+            }
+        }
+
+        if (j.contains("capture") && j["capture"].contains("scenes") && j["capture"]["scenes"].is_array()) {
+            const auto& arr = j["capture"]["scenes"];
+            for (int i = 0; i < kCaptureSceneCount && i < (int)arr.size(); i++) {
+                const auto& js = arr[i];
+                auto& sc = m_Settings.capture.scenes[i];
+                sc.assigned     = js.value("assigned",     false);
+                sc.sourceType   = js.value("sourceType",   0);
+                sc.sourceIndex  = js.value("sourceIndex", -1);
+                sc.sourceHandle = js.value("sourceHandle", "");
+                sc.sourceName   = js.value("sourceName",   "");
+                sc.x0 = js.value("x0", 0.25f); sc.y0 = js.value("y0", 0.25f);
+                sc.x1 = js.value("x1", 0.75f); sc.y1 = js.value("y1", 0.75f);
+                sc.opacity = js.value("opacity", 1.0f);
+            }
+        }
+
+        if (j.contains("pads") && j["pads"].contains("pads") && j["pads"]["pads"].is_array()) {
+            const auto& arr = j["pads"]["pads"];
+            for (int i = 0; i < kPadCount && i < (int)arr.size(); i++) {
+                const auto& jp = arr[i];
+                auto&       p  = m_Settings.pads.pads[i];
+                p.assigned  = jp.value("assigned",  false);
+                p.iconIndex = jp.value("iconIndex", 0);
+
+                p.hasCapture = jp.value("hasCapture", false);
+                if (jp.contains("capture")) {
+                    const auto& jc = jp["capture"];
+                    p.capture.assigned     = jc.value("assigned",     false);
+                    p.capture.sourceType   = jc.value("sourceType",   0);
+                    p.capture.sourceIndex  = jc.value("sourceIndex", -1);
+                    p.capture.sourceHandle = jc.value("sourceHandle", "");
+                    p.capture.sourceName   = jc.value("sourceName",   "");
+                    p.capture.x0 = jc.value("x0", 0.25f); p.capture.y0 = jc.value("y0", 0.25f);
+                    p.capture.x1 = jc.value("x1", 0.75f); p.capture.y1 = jc.value("y1", 0.75f);
+                    p.capture.opacity = jc.value("opacity", 1.0f);
+                }
+
+                p.hasStyle  = jp.value("hasStyle",  false);
+                p.styleName = jp.value("styleName", "");
+                p.bgType    = jp.value("bgType",    0);
+                p.bgPath    = jp.value("bgPath",    "");
+                if (jp.contains("bgColor") && jp["bgColor"].is_array()) {
+                    const auto& bc = jp["bgColor"];
+                    for (int c = 0; c < 3 && c < (int)bc.size(); c++)
+                        p.bgColor[c] = bc[c].get<float>();
+                }
+
+                p.hasMacro         = jp.value("hasMacro",         false);
+                p.macroName        = jp.value("macroName",        "");
+                p.macroCueIndex    = jp.value("macroCueIndex",    -1);
+                p.macroAutoAdvance = jp.value("macroAutoAdvance", false);
             }
         }
 
@@ -695,6 +912,10 @@ void SettingsManager::LoadSettings() {
             } else {
                 m_Settings.theme = MakeThemePreset(preset);
             }
+
+            // Independiente del preset de colores (Custom o predefinido):
+            // la fuente de la interfaz es una preferencia aparte.
+            m_Settings.theme.customFontPath = jt.value("customFontPath", "");
         } else {
             m_Settings.theme = MakeThemePreset(ThemePreset::Dark);
         }

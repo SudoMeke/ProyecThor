@@ -26,8 +26,23 @@ public:
     // VLCBasePlayer::AttachNativeWindow(), o nullptr si fallo.
     void* Show(int monitorIndex);
 
-    // Oculta la ventana sin destruirla — Show() la vuelve a mostrar sin
-    // recrearla.
+    // Igual que Show(), pero NO la hace visible (glfwShowWindow) — usar
+    // junto con Reveal() cuando hace falta que la ventana ya exista (para
+    // adjuntarle un reproductor y empezar a reproducir) pero se decida
+    // recien despues, con otra informacion, si conviene mostrarla ya
+    // (ver BackgroundLayer::Update() / m_NativeRevealPending: no se
+    // revela hasta que el video nuevo confirma que ya esta reproduciendo,
+    // para nunca exponer el instante de inicializacion propio del modulo
+    // de video de VLC — que puede pintar cualquier cosa, incluso blanco,
+    // antes de su primer frame real).
+    void* CreateHidden(int monitorIndex);
+
+    // Hace visible una ventana ya creada por CreateHidden(). No-op si no
+    // hay ventana.
+    void Reveal();
+
+    // Oculta la ventana sin destruirla — Show()/Reveal() la vuelven a
+    // mostrar sin recrearla.
     void Hide();
 
     void Destroy();

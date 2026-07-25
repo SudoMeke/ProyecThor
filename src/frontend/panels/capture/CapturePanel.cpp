@@ -1,5 +1,6 @@
 #include "CapturePanel.h"
 #include "DesignSystem.h"
+#include "backend/settings/SettingsManager.h"
 #ifdef PT_HAVE_WAYLAND_CAPTURE
   #include "WaylandScreenCapture.h"
 #endif
@@ -1053,6 +1054,158 @@ void CapturePanel::RenderPlacementEditor() {
     ImGui::SetCursorScreenPos(ImVec2(pos.x, end.y));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Escenas rápidas — 8 botones de color, guardan/recuperan una
+//  configuración completa de captura (fuente + recuadro de posición libre
+//  + opacidad) para saltar entre "escenas" con un click en vivo.
+// ─────────────────────────────────────────────────────────────────────────────
+bool CapturePanel::SnapshotCurrentCapture(Settings::CaptureSceneSettings& out) const {
+    // Solo tiene sentido guardar algo que esté realmente en pantalla, en
+    // modo "Posición libre" -- si no, al recuperar la escena se aplicaría
+    // un recuadro viejo/default en vez del que el usuario ve ahora.
+    if (!m_IsCapturing || m_PlacementMode != PlacementMode::Custom) return false;
+
+    out.assigned     = true;
+    out.sourceType   = static_cast<int>(m_ActiveSource.type);
+    out.sourceIndex  = m_ActiveSource.index;
+    out.sourceHandle = m_ActiveSource.handle;
+    out.sourceName   = m_ActiveSource.name;
+    out.x0 = m_CustomX0; out.y0 = m_CustomY0; out.x1 = m_CustomX1; out.y1 = m_CustomY1;
+    out.opacity = m_Opacity;
+    return true;
+}
+
+void CapturePanel::ApplyCaptureScene(const Settings::CaptureSceneSettings& sc) {
+    if (!sc.assigned) return;
+
+    CaptureSource src;
+    src.type   = static_cast<CaptureSourceType>(sc.sourceType);
+    src.index  = sc.sourceIndex;
+    src.handle = sc.sourceHandle;
+    src.name   = sc.sourceName;
+
+    m_PlacementMode = PlacementMode::Custom;
+    m_CustomX0 = sc.x0; m_CustomY0 = sc.y0; m_CustomX1 = sc.x1; m_CustomY1 = sc.y1;
+    m_Opacity  = sc.opacity;
+
+    // Si ya está capturando exactamente esa fuente, no reabrir el
+    // dispositivo (evita el parpadeo/reinicio innecesario) -- solo se
+    // actualiza posición/opacidad, ya hecho arriba.
+    bool sameSource = m_IsCapturing &&
+        m_ActiveSource.type == src.type && m_ActiveSource.index == src.index &&
+        m_ActiveSource.handle == src.handle;
+    if (!sameSource)
+        StartCapture(src);
+
+    // "Cambio rápido de escena" implica que queda al aire de una: no tiene
+    // sentido recuperar una escena y que el operador tenga que acordarse
+    // de tocar "Enviar al proyector" aparte.
+    m_ProjectOnScreen = true;
+}
+
+void CapturePanel::SaveCurrentAsScene(int slot) {
+    if (slot < 0 || slot >= Settings::kCaptureSceneCount) return;
+    auto& sc = Settings::SettingsManager::Get().GetSettings().capture.scenes[slot];
+    if (!SnapshotCurrentCapture(sc)) return;
+    Settings::SettingsManager::Get().Save();
+}
+
+void CapturePanel::RecallScene(int slot) {
+    if (slot < 0 || slot >= Settings::kCaptureSceneCount) return;
+    const auto& sc = Settings::SettingsManager::Get().GetSettings().capture.scenes[slot];
+    ApplyCaptureScene(sc);
+}
+
+void CapturePanel::ClearScene(int slot) {
+    if (slot < 0 || slot >= Settings::kCaptureSceneCount) return;
+    Settings::SettingsManager::Get().GetSettings().capture.scenes[slot] = Settings::CaptureSceneSettings{};
+    Settings::SettingsManager::Get().Save();
+}
+
+void CapturePanel::RenderSceneButtons() {
+    static const ImU32 kSceneColors[Settings::kCaptureSceneCount] = {
+        IM_COL32(230,  90,  90, 255), // 1 rojo
+        IM_COL32(230, 150,  70, 255), // 2 naranja
+        IM_COL32(230, 210,  70, 255), // 3 amarillo
+        IM_COL32(120, 210, 120, 255), // 4 verde
+        IM_COL32( 90, 190, 220, 255), // 5 celeste
+        IM_COL32(100, 130, 230, 255), // 6 azul
+        IM_COL32(170, 120, 230, 255), // 7 violeta
+        IM_COL32(230, 120, 180, 255), // 8 rosa
+    };
+
+    ImGui::Spacing();
+    DS::GlassSeparator();
+    ImGui::Spacing();
+    DS::GlassSectionHeader("ESCENAS RÁPIDAS");
+    // GlassSectionHeader dibuja el texto directo por ImDrawList (no
+    // registra un "item" de ImGui), asi que IsItemHovered() de aca no
+    // serviria para un tooltip -- el hint queda como texto siempre
+    // visible en su lugar.
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
+    ImGui::TextWrapped("Click: aplicar. Click derecho: guardar la posicion libre actual o borrar.");
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+
+    auto& scenes = Settings::SettingsManager::Get().GetSettings().capture.scenes;
+    const bool canSave = m_IsCapturing && m_PlacementMode == PlacementMode::Custom;
+
+    const int   cols     = 4;
+    const float btnSize  = 52.0f;
+    const float spacing  = 8.0f;
+
+    for (int i = 0; i < Settings::kCaptureSceneCount; i++) {
+        if (i % cols != 0) ImGui::SameLine(0.0f, spacing);
+
+        auto& sc = scenes[i];
+        ImVec4 baseCol = ImGui::ColorConvertU32ToFloat4(kSceneColors[i]);
+        ImVec4 fillCol = sc.assigned ? baseCol : ImVec4(baseCol.x, baseCol.y, baseCol.z, 0.14f);
+        ImVec4 hovCol  = ImVec4(baseCol.x, baseCol.y, baseCol.z, sc.assigned ? 0.85f : 0.30f);
+        ImVec4 bordCol = sc.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.35f)
+                                      : ImVec4(baseCol.x, baseCol.y, baseCol.z, 0.55f);
+
+        ImGui::PushID(i);
+        ImGui::PushStyleColor(ImGuiCol_Button,        fillCol);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  hovCol);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   hovCol);
+        ImGui::PushStyleColor(ImGuiCol_Border,         bordCol);
+        ImGui::PushStyleColor(ImGuiCol_Text,           sc.assigned ? ImVec4(0.08f, 0.08f, 0.09f, 1.0f) : ToVec4(DS::TextHint));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   10.0f);
+
+        char label[8];
+        snprintf(label, sizeof(label), "%d", i + 1);
+        bool clicked = ImGui::Button(label, ImVec2(btnSize, btnSize));
+
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(5);
+
+        if (clicked && sc.assigned) RecallScene(i);
+
+        if (ImGui::BeginPopupContextItem("##sceneCtx")) {
+            if (ImGui::MenuItem(sc.assigned ? "Reemplazar con posición actual" : "Guardar posición actual acá",
+                                nullptr, false, canSave))
+                SaveCurrentAsScene(i);
+            if (!canSave) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
+                ImGui::TextWrapped("Necesita una fuente activa en modo \"Posición libre\".");
+                ImGui::PopStyleColor();
+            }
+            if (sc.assigned) {
+                ImGui::Separator();
+                if (ImGui::MenuItem("Borrar escena"))
+                    ClearScene(i);
+            }
+            ImGui::EndPopup();
+        }
+
+        if (sc.assigned && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("%s", sc.sourceName.c_str());
+
+        ImGui::PopID();
+    }
+}
+
 void CapturePanel::RenderProjectButton() {
     ImGui::Spacing();
     DS::GlassSeparator();
@@ -1102,6 +1255,7 @@ void CapturePanel::RenderContent() {
     RenderPreview();
 
     RenderControls();
+    RenderSceneButtons();
     RenderProjectButton();
 }
 } // namespace ProyecThor::UI

@@ -68,6 +68,12 @@ private:
     bool                                 m_ResetLayout          = true;
     GlassRenderer                        m_GlassRenderer;
 
+    // ── Pantalla completa (menu Ventana) ────────────────────────────────────
+    // Geometria de la ventana ANTES de pasar a pantalla completa, para poder
+    // restaurarla al salir (glfwSetWindowMonitor no la recuerda solo).
+    int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
+    void ToggleFullscreen();
+
     Hub   m_Hub;
     bool  m_HubMode = true;
 };

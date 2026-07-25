@@ -6,13 +6,30 @@
 namespace ProyecThor::Library {
 
 void RenderSideList(LibraryContext& ctx);
-void RenderSongEditor(LibraryContext& ctx);
+
+// Divide la letra de <filename> en diapositivas: primero por estrofa (linea
+// en blanco = limite, igual que siempre), y dentro de cada estrofa agrupando
+// las lineas fisicas de a GetSongMeta(filename).linesPerSlide (si esta
+// configurado) — ver LibrarySongMeta.h. Sin config guardada, una estrofa
+// completa sigue siendo una sola diapositiva (comportamiento legacy).
+std::vector<std::string> LoadSongVerses(const std::string& filename);
+
+// Nucleo del agrupado de LoadSongVerses, factorizado para que SongEditView
+// pueda recalcular el mismo resultado sobre el buffer EN MEMORIA (mientras
+// el usuario todavia esta escribiendo/pegando, antes de guardar en disco) y
+// asi el panel de preview del editor sea fiel a lo que se va a guardar.
+// linesPerSlide<=0 = centinela legacy (una estrofa completa = una diapositiva).
+std::vector<std::string> GroupLyricsIntoSlides(const std::string& normalizedContent, int linesPerSlide);
 
 void CreateNewSong(LibraryContext& ctx);
-void SaveSong(LibraryContext& ctx,
-              const std::string& title,
-              const std::string& content,
-              const std::string& author);
+
+// Variante de CreateNewSong para el menu Archivo > Importar > "Importar
+// cancion desde portapapeles": crea el archivo con <clipboardText> como
+// letra inicial (en vez de vacio) y pide que el editor unificado se abra
+// directo. No recibe LibraryContext (a diferencia de CreateNewSong) porque
+// se llama desde la barra de menu, que no tiene una instancia a mano —
+// hace el mismo select+RequestSongEditorOpen directo contra PresentationCore.
+void CreateNewSongFromClipboard(const std::string& clipboardText);
 
 std::string GetSongAuthor(const std::string& filename);
 void SetSongAuthor(const std::string& filename, const std::string& author);

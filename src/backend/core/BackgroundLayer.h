@@ -2,11 +2,14 @@
 #include <GL/glew.h>
 #include "backend/media/VLCBasePlayer.h"
 #include "backend/shaders/PostProcessorFSR.h"
+#include "backend/shaders/BackgroundFillBlur.h"
 #include "backend/core/PreviewLoadWorker.h"
 #include "frontend/windowing/NativeVideoOutputWindow.h"
 #include <string>
 #include <vector>
 #include <deque>
+#include <memory>
+#include <atomic>
 #include <algorithm>
 
 namespace ProyecThor::Core {
@@ -74,8 +77,16 @@ namespace ProyecThor::Core {
         static constexpr size_t kMaxLoadSamples = 8;
         static constexpr float  kDefaultEtaSeconds = 1.5f;
 
-        int  m_TargetVolume = 100;
-        bool m_TargetMuted  = true;
+        // Atomics (no simples bool/int): el motor libvlc los lee desde el
+        // hilo de m_NativeLoader (ver SetVideo/SyncNativeWindowVisibility)
+        // para recalcular el gate de audio real EN EL MOMENTO en que Play()
+        // termina de correr, no con un valor viejo capturado al encolar —
+        // sin esto, un SetLiveMute()/ApplyAV() que corriera en el hilo
+        // principal DESPUES de encolar pero ANTES de que el worker
+        // terminara, quedaba pisado por el valor viejo (bug real: video
+        // quedaba mudo pese a haberse desmuteado).
+        std::atomic<int>  m_TargetVolume{100};
+        std::atomic<bool> m_TargetMuted{true};
         float m_TransitionProgress = 1.0f;
 
         // Gate real de audio al publico. Solo cuando esta en true el
@@ -83,7 +94,7 @@ namespace ProyecThor::Core {
         // esto, cargar un video de fondo (SetVideo) o mover el doble
         // buffer (PerformSwap) podia dejar audio sonando sin que el
         // operador hubiese puesto nada al aire todavia.
-        bool m_IsLiveToPublic = false;
+        std::atomic<bool> m_IsLiveToPublic{false};
 
         // Indica si el contenido actualmente cargado (o pendiente de swap)
         // tiene PERMITIDO sonar cuando m_IsLiveToPublic sea true. Se fija
@@ -91,7 +102,7 @@ namespace ProyecThor::Core {
         // true  -> viene de "Videos"/cola (audio permitido)
         // false -> viene de "Fondos" (BackgroundsPanel/LayersBgTab), NUNCA
         //          suena sin importar el estado de m_IsLiveToPublic.
-        bool m_ContentAllowsAudio = true;
+        std::atomic<bool> m_ContentAllowsAudio{true};
 
         // Dispositivo de salida de audio seleccionado por el operador
         // (vacio o "default" = predeterminado del sistema). Se aplica a
@@ -112,6 +123,18 @@ namespace ProyecThor::Core {
         bool  m_FSREnabled   = true;
         float m_FSRSharpness = 0.2f;
 
+        // "Rellenado" de las barras de letterbox/pillarbox: ver
+        // GetBlurredFillTexture(). Vive aca (no en CompositePostChain) por
+        // la misma razon que FSR -- necesita el contenido de fondo SIN
+        // componer todavia, no el frame final ya con overlays/texto encima.
+        ProyecThor::Shaders::BackgroundFillBlur m_FillBlur;
+        bool  m_FillBlurEnabled    = false;
+        // Cuanto brilla el relleno: 0 = negro (bordes practicamente
+        // invisibles, como antes), 1 = brillo real del fondo desenfocado.
+        // Pedido explicito: a algunos les gusta el relleno pero mas oscuro
+        // -- por eso el default no es 1.0.
+        float m_FillBlurBrightness = 0.6f;
+
         bool  m_StretchToFill = true;
 
         // ── Motor de renderizado alternativo: "libvlc (ventana nativa)" ──
@@ -122,37 +145,98 @@ namespace ProyecThor::Core {
         // sin importar este ajuste. m_UseNativeEngine es la preferencia
         // configurada (Ajustes > Proyeccion); m_ActiveIsNative es el
         // estado real de "lo que esta reproduciendose AHORA vino por el
-        // camino nativo" (ver SetVideo/Prefetch/CommitPrefetch/
-        // SyncNativeWindowVisibility), que es lo que deciden Update()/
-        // Render() y el resto de los getters de audio.
+        // camino nativo", que es lo que deciden Update()/Render() y el
+        // resto de los getters de audio.
         //
-        // Cuando m_ActiveIsNative es true, m_NativePlayer (construido con
-        // nativeWindowOutput=true, ver VLCBasePlayer.h) reproduce el video
-        // adjuntado a m_NativeWindow — una ventana nativa fullscreen sobre
-        // el monitor de Audiencia donde VLC dibuja con su propio renderer
-        // acelerado. Esa ventana queda por ENCIMA de "ProjectorLive" (que
-        // sigue existiendo y renderizando fondo/overlays/texto con
-        // total normalidad, sin enterarse de nada de esto) mientras el
-        // video este visible, y se oculta apenas termina/cambia a otra
-        // cosa, revelando "ProjectorLive" de nuevo debajo.
-        bool                    m_UseNativeEngine = false;
-        bool                    m_ActiveIsNative  = false;
-        int                     m_LastKnownMonitorIndex = -1;
-        VLCBasePlayer           m_NativePlayer;
-        NativeVideoOutputWindow m_NativeWindow;
+        // NativePlayback = un reproductor + su propia ventana nativa,
+        // creados juntos para UN SOLO clip. FIX importante (confirmado en
+        // la practica en Windows, con Wine reportando un deadlock real
+        // entre dos hilos): reusar el MISMO reproductor+ventana para el
+        // SIGUIENTE clip (Stop() + set_media() + play() sobre una ventana
+        // ya adjuntada) hace que el modulo de video de VLC se cuelgue —
+        // andaba el primer clip, se trababa desde el segundo, sin importar
+        // que tan cuidadosamente se serializara Play()/Stop()/Attach/
+        // Detach en un solo hilo. La solucion es no reusar nunca ese par:
+        // cada clip nuevo arranca 100% de cero (jugador + ventana nuevos),
+        // y el par anterior se retira (detach+stop, encolado en
+        // m_NativeLoader) y se destruye un rato despues (ver
+        // m_RetiringNative/kNativeRetireSeconds en Update()), nunca
+        // reutilizado ni vuelto a reproducir.
+        struct NativePlayback {
+            VLCBasePlayer           player;
+            NativeVideoOutputWindow window;
+            double                  retiredAt = 0.0; // 0 = todavia activo, no retirado
 
-        // Despacha Play()/Stop() de m_NativePlayer en un hilo aparte —
-        // NUNCA llamarlos directo desde el hilo principal para este
-        // player: es el mismo hilo que bombea los mensajes de
-        // m_NativeWindow, y un Play()/Stop() sincronico ahi podia colgar
-        // toda la app (visto en la practica: andaba el primer clip, se
-        // colgaba en el segundo). Ver PreviewLoadWorker.h para el
-        // detalle completo — pese al nombre, es generico.
-        PreviewLoadWorker       m_NativeLoader;
+            explicit NativePlayback(bool forceSilentAudio)
+                : player(2, false, forceSilentAudio, /*nativeWindowOutput=*/true) {}
+        };
 
-        // Muestra/adjunta o esconde/desvincula m_NativeWindow segun
-        // m_IsLiveToPublic && m_ActiveIsNative (llamar despues de cambiar
-        // cualquiera de esos dos). Idempotente.
+        bool m_UseNativeEngine = false;
+        bool m_ActiveIsNative  = false;
+        int  m_LastKnownMonitorIndex = -1;
+        bool m_ForceSilentAudio = false; // recordado para poder crear NativePlayback mas adelante
+
+        // El par en uso ahora mismo (nullptr si nunca se cargo nada por
+        // este motor todavia). Los que ya se retiraron (ver arriba) viven
+        // un rato en m_RetiringNative hasta que Update() los destruye.
+        std::unique_ptr<NativePlayback>              m_ActiveNative;
+        std::vector<std::unique_ptr<NativePlayback>> m_RetiringNative;
+        static constexpr double kNativeRetireSeconds = 2.0;
+
+        // ── Revelado diferido de la ventana nueva ────────────────────────
+        // FIX (flash blanco durante el cambio de clip): la pintada en negro
+        // de NativeVideoOutputWindow (ver su .cpp) cubre el fondo de LA
+        // VENTANA, pero no lo que el propio modulo de video de VLC
+        // (Direct3D9/11, XVideo) pinte encima una vez adjuntado — eso es
+        // otro nivel, fuera de nuestro control, y confirmado en la
+        // practica que puede mostrar blanco un instante antes de su
+        // primer frame real. La unica forma de garantizar que eso NUNCA
+        // se vea es no mostrar la ventana nueva hasta confirmar que el
+        // reproductor nuevo ya esta reproduciendo de verdad (GetLoadState
+        // == Ready) — mientras tanto, el reproductor+ventana ANTERIOR
+        // (m_PendingRetireNative) se deja seguir visible (mudo, ver
+        // SetVideo) cubriendo la transicion, y recien se retira cuando el
+        // nuevo se revela. kNativeRevealGiveUpSeconds es una red de
+        // seguridad: si un archivo roto nunca llega a Ready, se revela
+        // igual pasado ese tiempo en vez de quedarse en el clip anterior
+        // para siempre.
+        std::unique_ptr<NativePlayback> m_PendingRetireNative;
+        bool   m_NativeRevealPending = false;
+        double m_NativeRevealStart   = 0.0;
+        static constexpr double kNativeRevealGiveUpSeconds = 4.0;
+
+        // Despacha TODA operacion sobre un NativePlayback::player en un
+        // hilo aparte (Play/Stop/Attach/DetachNativeWindow) — NUNCA
+        // llamarlas directo desde el hilo principal: es el mismo hilo que
+        // bombea los mensajes de la ventana nativa, y hacerlo ahi podia
+        // colgar toda la app. Ver PreviewLoadWorker.h para el detalle
+        // completo (pese al nombre, es generico) — critico tambien: cada
+        // pedido combina TODO lo que tiene que pasar en un orden dado en
+        // UNA sola accion (nunca dos Request() sueltos para una misma
+        // transicion), porque la politica "ultimo pedido gana" podria
+        // descartar uno de los dos si se llamaran por separado.
+        PreviewLoadWorker m_NativeLoader;
+
+        // Retira un NativePlayback dado: oculta su ventana, encola
+        // detach+stop en m_NativeLoader, y lo pasa a m_RetiringNative para
+        // que Update() lo destruya mas tarde.
+        void RetireNativePlayback(std::unique_ptr<NativePlayback> np);
+
+        // Retira m_ActiveNative Y (si lo hubiera) m_PendingRetireNative,
+        // cancelando cualquier revelado pendiente — usar para apagar el
+        // motor nativo por completo (vuelta a OpenGL / color solido). No
+        // crea nada nuevo.
+        void RetireActiveNative();
+
+        // Sondea si el NativePlayback en m_ActiveNative (mientras
+        // m_NativeRevealPending sea true) ya esta listo para revelarse —
+        // ver comentario largo de m_NativeRevealPending arriba. Llamar una
+        // vez por frame desde Update(), sin importar el motor actual.
+        void PollNativeReveal();
+
+        // Muestra/adjunta o esconde/desvincula la ventana de m_ActiveNative
+        // segun m_IsLiveToPublic && m_ActiveIsNative (llamar despues de
+        // cambiar cualquiera de esos dos). No-op si m_ActiveNative es null.
         void SyncNativeWindowVisibility();
 
         VLCBasePlayer& Active();
@@ -186,6 +270,16 @@ namespace ProyecThor::Core {
         void  SetFSRSharpness(float sharpness);
         float GetFSRSharpness() const;
 
+        // "Rellenado": en vez de barras negras de letterbox/pillarbox,
+        // llena ese espacio con el mismo contenido estirado a pantalla
+        // completa y muy desenfocado, detras del contenido nitido -- ver
+        // GetBlurredFillTexture() y el uso en UIManager.cpp.
+        void SetFillBlurEnabled(bool enabled) { m_FillBlurEnabled = enabled; }
+        bool GetFillBlurEnabled() const       { return m_FillBlurEnabled; }
+        void  SetFillBlurBrightness(float v)  { m_FillBlurBrightness = std::clamp(v, 0.0f, 1.0f); }
+        float GetFillBlurBrightness() const   { return m_FillBlurBrightness; }
+        void* GetBlurredFillTexture(int workW, int workH);
+
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
@@ -212,10 +306,11 @@ namespace ProyecThor::Core {
         bool   StandbyHasFrame();
 
         // Reproductor con el contenido REALMENTE activo ahora mismo — el
-        // par OpenGL de siempre, o m_NativePlayer si el video actual esta
-        // usando el motor libvlc (ver m_ActiveIsNative). Este es el punto
-        // que usan la cola del Monitor y los controles de transporte para
-        // llegar al reproductor correcto sin importar el motor.
+        // par OpenGL de siempre, o el reproductor de m_ActiveNative si el
+        // video actual esta usando el motor libvlc (ver m_ActiveIsNative).
+        // Este es el punto que usan la cola del Monitor y los controles de
+        // transporte para llegar al reproductor correcto sin importar el
+        // motor.
         VLCBasePlayer* GetPlayer();
 
         void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }

@@ -1,6 +1,4 @@
 #include "Hub.h"
-
-// Includes del sistema que clangd no encontraba porque Hub.h no los incluia
 #include <GL/glew.h>
 #include <imgui.h>
 #include <GLFW/glfw3.h>
@@ -67,11 +65,20 @@ struct UpdateVersionInfo {
     const char* summary;    // Resumen corto mostrado en la tarjeta
 };
 
-// A partir de la version estable 0.3.5, el historial visible en el Hub
-// muestra unicamente las actualizaciones MAYORES (0.3.0, 0.3.5 y 0.4.0). Todas
-// las betas intermedias (0.3.1 a 0.3.4) quedaron consolidadas dentro del
-// changelog de la 0.3.5 en vez de listarse por separado.
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
+    {
+        8, "0.4.1",
+        "ACTUALIZACION", "ACTUALIZACION",
+        "splash_bg4.png",
+        "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
+        "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
+        "y vista en grilla/lista en Biblioteca > Videos, escenas rapidas "
+        "guardadas para Captura, fuente de interfaz personalizable, un "
+        "motor de renderizado alternativo (libvlc en ventana nativa) para "
+        "videos, editor de canciones rediseñado por completo y menu "
+        "principal reorganizado, con una correccion importante de "
+        "sincronizacion de audio/video en equipos de bajos recursos."
+    },
     {
         7, "0.4.0",
         "ACTUALIZACION MAYOR", "ACTUALIZACION MAYOR",
@@ -102,17 +109,12 @@ static const UpdateVersionInfo* FindUpdateVersion(int id) {
     return kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
 }
 
-// ── Texturas de portada (con dimensiones) ───────────────────────────────────
-//  Guardamos ancho/alto ademas del id de GL: los necesitamos para calcular
-//  el recorte "cover" (llenar la caja sin deformar la imagen).
 struct GLTextureInfo {
     GLuint id     = 0;
     int    width  = 0;
     int    height = 0;
 };
 
-// Cache simple de texturas por nombre de archivo: evita recargar la misma
-// portada varias veces si dos entradas del registro la comparten.
 static GLTextureInfo GetCoverTexture(const char* filename) {
     static std::unordered_map<std::string, GLTextureInfo> s_Cache;
     auto it = s_Cache.find(filename);
@@ -538,7 +540,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 7; // id de kUpdateRegistry (7 = v0.4.0, la mas reciente)
+    static int    selectedUpdateVer = 8; // id de kUpdateRegistry (8 = v0.4.1, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -1079,11 +1081,62 @@ void Hub::RenderMainContent(float w, float h) {
             };
 
             // ── Bloque de contenido condicional por versión ──────────────────
-            // Tres entradas: la 0.4.0 (mas reciente), la 0.3.5 (estable, con
-            // TODO lo acumulado desde la 0.3.1 hasta la 0.3.5, incluidas las
-            // betas) y la 0.3.0 original. Cualquier otro id cae en el bloque
-            // "else" de la 0.3.0 por seguridad.
-            if (selectedUpdateVer == 7) { // v0.4.0
+            // Cuatro entradas: la 0.4.1 (mas reciente, todavia sin publicar),
+            // la 0.4.0, la 0.3.5 (estable, con TODO lo acumulado desde la
+            // 0.3.1 hasta la 0.3.5, incluidas las betas) y la 0.3.0 original.
+            // Cualquier otro id cae en el bloque "else" de la 0.3.0 por
+            // seguridad.
+            if (selectedUpdateVer == 8) { // v0.4.1
+                Cat("Editor de canciones (rediseño total)");
+                Bul("Editar una cancion ya no abre una ventana flotante encima: el mismo panel de Canciones pasa a modo edicion, con letra a la izquierda (mucho mas grande) y preview de las diapositivas a la derecha.");
+                Bul("Titulo y Autor quedan siempre a la vista; Nota, Derechos de autor y Extra se movieron detras de un boton de informacion para no restarle espacio a la letra.");
+                Bul("Todo se guarda solo mientras se escribe (sin boton Guardar), con indicador de estado y botones de Deshacer/Rehacer del ultimo cambio.");
+                Bul("Nuevo filtro de \"Lineas por diapositiva\" (1/2/3): separa la letra de verdad, insertando lineas en blanco reales dentro de cada estrofa, para que la division se vea en el propio texto y no solo en el preview.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Menu principal reorganizado");
+                Bul("Nuevo menu \"ProyecThor\" (primero, a la izquierda) con Preferencias y Salir.");
+                Bul("Archivo ahora es la categoria Importar, con una opcion nueva: \"Importar cancion desde portapapeles\" (crea la cancion y pega el contenido del portapapeles de una).");
+                Bul("\"Base de datos\" y \"Wiki\" se movieron al menu Ayuda.");
+                Bul("Nuevo menu \"Ventana\" con Pantalla completa (tambien con la tecla F11).");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Efectos de video (rediseñado + nuevos)");
+                Bul("El panel de Shaders (al lado de Overlays, en Diseño) ahora se ve como tarjetas con icono, descripcion y control de intensidad propio para cada efecto, en vez de una lista de switches.");
+                Bul("Dos efectos nuevos: Saturacion (colores mas vivos o hasta blanco y negro) y Vinetado (oscurece los bordes para enfocar el centro), sumados a FSR, CRT, grano de pelicula y FXAA.");
+                Bul("Nuevo efecto \"Rellenado\" (recomendado): llena las barras negras de letterbox/pillarbox con el mismo fondo, estirado y muy desenfocado, en vez de dejarlas negras — el efecto tipo Spotify Canvas / Smart TV.");
+                Bul("Cada efecto se prende o apaga por separado y se ve reflejado al instante en la salida en vivo.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca > Videos");
+                Bul("Los videos ahora muestran una miniatura real (un frame del video), igual que ya pasaba con los Fondos.");
+                Bul("Nuevo boton para alternar entre vista en lista y vista en grilla con miniaturas grandes, mas un control para agrandar o achicar las miniaturas.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca > Playlists");
+                Bul("El panel de \"Agregar canciones\" a una playlist es mas grande y las canciones se listan en orden alfabetico, con un boton \"+\" bien visible para agregar y una insignia verde \"Agregada\" para las que ya estan.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Captura (camara / pantalla)");
+                Bul("Nuevas \"Escenas rapidas\": 8 botones de color donde guardar una fuente + recuadro + opacidad ya armados, para saltar entre encuadres con un solo click durante el evento.");
+                Bul("Click derecho sobre un boton para guardar la posicion libre actual ahi o borrarla; quedan guardadas entre sesiones.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Ajustes > Apariencia");
+                Bul("Nueva fuente de interfaz personalizable: se puede importar una tipografia propia (.ttf/.otf/.ttc) ademas de elegir entre las que ya trae la app, con reinicio guiado para aplicarla.");
+                Bul("El menu de Ajustes se reordeno con iconos por categoria y subcategorias navegables, para ubicar cada opcion mas rapido.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Nuevo motor de video (experimental)");
+                Bul("En Ajustes > Proyeccion, opcion para elegir el motor con el que se reproducen los Videos: el de siempre (OpenGL) o uno nuevo (libvlc) que usa una ventana propia con reproduccion acelerada.");
+                Bul("Pensado para equipos con poca placa de video — los Fondos (loops decorativos) siempre siguen mostrandose como hasta ahora, con overlays y texto encima.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Estabilidad");
+                Bul("Corregido un problema por el cual el video de fondo podia irse desincronizando del audio con el correr de los minutos en computadoras mas lentas.");
+                Bul("Corregido: el control de FSR en Ajustes > Proyeccion y el del panel de Shaders podian mostrar y guardar valores distintos entre si.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 7) { // v0.4.0
                 Cat("Cola de videos y video en vivo");
                 Bul("La cola de videos es mucho mas confiable: los clips pasan de uno a otro sin cortes ni pantallas de carga de por medio.");
                 Bul("Corregido: la app ya no se traba si hacias clic varias veces seguidas sobre el mismo video.");

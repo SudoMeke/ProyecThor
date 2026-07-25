@@ -5,6 +5,8 @@
 #include <memory>
 #include <functional>
 
+namespace ProyecThor::Settings { struct CaptureSceneSettings; }
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  CaptureSource — abstracción de cualquier fuente de captura
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +64,18 @@ public:
     // Todo") que necesitan cortarla sin pasar por los controles internos.
     void        Stop() { StopCapture(); }
 
+    // Version parametrizada de la logica de "Escenas rápidas" (ver
+    // SaveCurrentAsScene/RecallScene mas abajo), para que paneles externos
+    // (ViewToolsPanel > Pads) puedan guardar/aplicar una disposicion de
+    // captura sin pasar por los 8 slots fijos de este panel.
+    // Calificado con "::" porque, en headers incluidos junto con
+    // SettingsPanel.h (backend/settings), "Settings::" sin calificar dentro
+    // de namespace ProyecThor::UI resuelve al OTRO namespace anidado
+    // ProyecThor::UI::Settings (panel de Ajustes), no a ProyecThor::Settings
+    // (datos, ver SettingsManager.h).
+    bool        SnapshotCurrentCapture(::ProyecThor::Settings::CaptureSceneSettings& out) const;
+    void        ApplyCaptureScene(const ::ProyecThor::Settings::CaptureSceneSettings& scene);
+
 private:
     // ── Enumeración de fuentes ───────────────────────────────────────────────
     void EnumerateCameras();
@@ -107,6 +121,17 @@ private:
     float m_CustomX1 = 0.75f, m_CustomY1 = 0.75f;
 
     void RenderPlacementEditor();
+
+    // ── Escenas rápidas (posiciones libres guardadas) ────────────────────
+    // 8 botones de color: click corto aplica la escena guardada en ese
+    // slot (fuente + recuadro + opacidad, ver SettingsManager::
+    // CaptureSceneSettings), click derecho abre un menú para guardar la
+    // posición libre actual ahí o borrarla. Persisten en Settings, no en
+    // memoria de sesión.
+    void RenderSceneButtons();
+    void SaveCurrentAsScene(int slot);
+    void RecallScene(int slot);
+    void ClearScene(int slot);
 
     // ── Textura de preview ───────────────────────────────────────────────────
     unsigned int m_PreviewTexID = 0;   // GLuint como uint para evitar include de GL aquí

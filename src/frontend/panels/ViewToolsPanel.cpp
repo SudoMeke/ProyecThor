@@ -5,6 +5,7 @@
 #include "frontend/ui/AppIcons.h"
 #include "frontend/panels/home/HomeIcons.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
+#include "frontend/panels/capture/CapturePanel.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/settings/SettingsManager.h"
 #include "MonitorTheme.h"
@@ -12,6 +13,7 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace ProyecThor::UI {
 
@@ -21,10 +23,6 @@ using namespace Components;
 ViewToolsPanel::ViewToolsPanel(UIManager* uiManager)
     : m_UIManager(uiManager)
 {
-    // Se registra a si mismo (direccion de su propio miembro) para que
-    // ViewPanel pueda pedir "Limpiar reloj" sin depender de ViewToolsPanel
-    // directamente — ver PresentationCore::SetOClockRef.
-    Core::PresentationCore::Get().SetOClockRef(&m_OClock);
 }
 
 namespace {
@@ -66,6 +64,148 @@ bool DrawIconButton(const char* iconName, float size,
 
     ImGui::PopStyleColor(3);
     return pressed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tabla de iconos elegibles para un Pad — reusa dibujos vectoriales ya
+//  existentes (AppIcons/HomeIcons, misma firma en los dos headers), no hace
+//  falta agregar assets nuevos. PadSettings::iconIndex es la posicion en
+//  esta tabla (no un nombre), asi que el orden importa para la persistencia.
+// ─────────────────────────────────────────────────────────────────────────────
+using PadIconDrawFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
+struct PadIconEntry { const char* name; PadIconDrawFn draw; };
+
+static const PadIconEntry kPadIcons[] = {
+    { "Mixer",      AppIcons::DrawIcon_Mixer     },
+    { "Monitor",    AppIcons::DrawIcon_Monitor   },
+    { "Capas",      AppIcons::DrawIcon_Layers    },
+    { "Paleta",     AppIcons::DrawIcon_Palette   },
+    { "Overlay",    AppIcons::DrawIcon_Overlay   },
+    { "Tipografia", AppIcons::DrawIcon_TextAa    },
+    { "Transicion", AppIcons::DrawIcon_Swap      },
+    { "Shader",     AppIcons::DrawIcon_Shader    },
+    { "Home",       HomeIcons::DrawIcon_Home     },
+    { "Reloj",      HomeIcons::DrawIcon_Clock    },
+    { "Anuncios",   HomeIcons::DrawIcon_Megaphone},
+    { "Notas",      HomeIcons::DrawIcon_Notepad  },
+    { "Camara",     HomeIcons::DrawIcon_Camera   },
+    { "Red",        HomeIcons::DrawIcon_Broadcast},
+    { "Chat",       HomeIcons::DrawIcon_Chat     },
+};
+static constexpr int kPadIconCount = (int)(sizeof(kPadIcons) / sizeof(kPadIcons[0]));
+
+const PadIconEntry& PadIconFor(int index)
+{
+    return kPadIcons[std::clamp(index, 0, kPadIconCount - 1)];
+}
+
+// Grilla de seleccion de icono, usada dentro del submenu "Elegir icono" del
+// menu contextual de cada pad. Devuelve true si el usuario eligio uno nuevo.
+bool RenderPadIconGrid(int& iconIndex)
+{
+    bool changed = false;
+    const int   cols    = 5;
+    const float cellSz  = 34.0f;
+    const float spacing = 6.0f;
+
+    for (int i = 0; i < kPadIconCount; i++)
+    {
+        if (i % cols != 0) ImGui::SameLine(0.0f, spacing);
+
+        const bool sel = (i == iconIndex);
+        ImGui::PushID(i);
+        ImGui::PushStyleColor(ImGuiCol_Button, sel ? MT::k_PrevBtn : ImVec4(1,1,1,0.04f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, MT::k_PrevBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  MT::k_PrevBtnAct);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+
+        bool clicked = ImGui::Button("##padIcon", ImVec2(cellSz, cellSz));
+        ImVec2 p = ImGui::GetItemRectMin();
+        ImVec2 s = ImGui::GetItemRectSize();
+        float  iconSz = cellSz * 0.55f;
+        kPadIcons[i].draw(ImGui::GetWindowDrawList(),
+                          { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f },
+                          iconSz, ImGui::GetColorU32(ImVec4(1,1,1,0.92f)));
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("%s", kPadIcons[i].name);
+
+        if (clicked) { iconIndex = i; changed = true; }
+        ImGui::PopID();
+    }
+    return changed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Guardar/aplicar un Pad — junta las tres partes independientes (Captura,
+//  Estilo+Fondo, Control Overlays) via las APIs ya existentes de cada
+//  subsistema. Nunca toca la letra/texto en pantalla (PresentationState::
+//  currentText) a proposito -- eso es lo unico que un Pad no guarda.
+// ─────────────────────────────────────────────────────────────────────────────
+using PadSettings = ProyecThor::Settings::PadSettings;
+
+void SavePad(PadSettings& pad, const std::string& styleChoice)
+{
+    auto& core = Core::PresentationCore::Get();
+
+    if (auto* cap = core.GetCapturePanelRef())
+        pad.hasCapture = cap->SnapshotCurrentCapture(pad.capture);
+    else
+        pad.hasCapture = false;
+
+    pad.hasStyle = !styleChoice.empty();
+    if (pad.hasStyle) {
+        pad.styleName = styleChoice;
+        auto state = core.GetState();
+        pad.bgType = (int)state.bgType;
+        pad.bgPath = state.bgPath;
+        for (int c = 0; c < 3; c++) pad.bgColor[c] = state.bgColor[c];
+    }
+
+    pad.hasMacro = core.IsMacroPlaying();
+    if (pad.hasMacro) {
+        pad.macroName        = core.GetActiveMacroName();
+        pad.macroCueIndex    = core.GetMacroCueIndex();
+        pad.macroAutoAdvance = core.GetMacroAutoAdvance();
+    }
+
+    pad.assigned = pad.hasCapture || pad.hasStyle || pad.hasMacro;
+    ProyecThor::Settings::SettingsManager::Get().Save();
+}
+
+void ApplyPad(const PadSettings& pad)
+{
+    auto& core = Core::PresentationCore::Get();
+    using BgType = Core::PresentationState::BackgroundType;
+
+    if (pad.hasCapture) {
+        if (auto* cap = core.GetCapturePanelRef())
+            cap->ApplyCaptureScene(pad.capture);
+    }
+
+    if (pad.hasStyle) {
+        core.ApplyStyleByName(pad.styleName);
+        switch ((BgType)pad.bgType) {
+            case BgType::SolidColor:
+                core.SetLayer0_Color(pad.bgColor[0], pad.bgColor[1], pad.bgColor[2]);
+                break;
+            case BgType::Video:
+                core.SetBackgroundMedia(pad.bgPath, true, false);
+                break;
+            case BgType::Audio:
+                core.SetBackgroundAudio();
+                break;
+        }
+    }
+
+    if (pad.hasMacro) {
+        core.PlayMacro(pad.macroName, pad.macroAutoAdvance);
+        if (pad.macroCueIndex >= 0)
+            core.SetMacroCueIndex(pad.macroCueIndex);
+    }
 }
 
 } // namespace
@@ -198,14 +338,140 @@ void ViewToolsPanel::RenderControlOverlays(float w, float h)
     ImGui::PopStyleColor(2);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderPads — 8 botones tipo pad MIDI, mismo espiritu y layout que las
+//  "Escenas rapidas" de CapturePanel (ver CapturePanel::RenderSceneButtons)
+//  pero con un icono elegible en vez de un color fijo, y guardando tres
+//  cosas independientes (Captura / Estilo+Fondo / Control Overlays) en vez
+//  de solo la disposicion de captura. Nunca guarda la letra en pantalla.
+// ─────────────────────────────────────────────────────────────────────────────
+void ViewToolsPanel::RenderPads(float w, float h)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { MT::k_PadLg, MT::k_Pad });
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
+    ImGui::PushStyleColor(ImGuiCol_Border,  MT::k_BorderSubtle);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   MT::k_R);
+
+    ImGui::BeginChild("##viewPads", { w, h }, true, ImGuiWindowFlags_NoScrollbar);
+
+    const float innerW = w - MT::k_PadLg * 2.0f;
+
+    ImGui::SetCursorPosX(MT::k_PadLg);
+    ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextSecondary);
+    ImGui::TextUnformatted("PADS");
+    ImGui::PopStyleColor();
+
+    DrawAccentLine(innerW, MT::k_PrevAccentDim, 1.0f);
+    ImGui::Spacing();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextDim);
+    ImGui::TextWrapped("Click: aplicar. Click derecho: guardar lo que hay en pantalla (captura + estilo/fondo + overlay activo, no la letra) o elegir icono.");
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    auto& core       = Core::PresentationCore::Get();
+    auto& padsArr    = ProyecThor::Settings::SettingsManager::Get().GetSettings().pads.pads;
+    const auto styleNames = core.GetSavedStyleNames();
+
+    const int   cols    = 4;
+    const float btnSize = 56.0f;
+    const float spacing = 10.0f;
+
+    static std::string s_styleChoice[ProyecThor::Settings::kPadCount];
+
+    for (int i = 0; i < ProyecThor::Settings::kPadCount; i++)
+    {
+        if (i % cols != 0) ImGui::SameLine(0.0f, spacing);
+
+        auto& pad = padsArr[i];
+        const auto& icon = PadIconFor(pad.iconIndex);
+
+        ImVec4 fillCol = pad.assigned ? MT::k_PrevBtn : ImVec4(MT::k_PrevBtn.x, MT::k_PrevBtn.y, MT::k_PrevBtn.z, 0.12f);
+        ImVec4 bordCol = pad.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.35f) : MT::k_BorderSubtle;
+
+        ImGui::PushID(i);
+        ImGui::PushStyleColor(ImGuiCol_Button,        fillCol);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  MT::k_PrevBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   MT::k_PrevBtnAct);
+        ImGui::PushStyleColor(ImGuiCol_Border,         bordCol);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   10.0f);
+
+        bool clicked = ImGui::Button("##pad", ImVec2(btnSize, btnSize));
+
+        ImVec2 p       = ImGui::GetItemRectMin();
+        ImVec2 s       = ImGui::GetItemRectSize();
+        float  iconSz  = btnSize * 0.42f;
+        ImU32  iconCol = ImGui::GetColorU32(pad.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.92f) : MT::k_TextDim);
+        icon.draw(ImGui::GetWindowDrawList(),
+                  { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f }, iconSz, iconCol);
+
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+
+        if (clicked && pad.assigned) ApplyPad(pad);
+
+        if (ImGui::BeginPopupContextItem("##padCtx")) {
+            if (ImGui::IsWindowAppearing())
+                s_styleChoice[i] = pad.hasStyle ? pad.styleName : std::string();
+
+            ImGui::TextUnformatted("Estilo + fondo a guardar:");
+            ImGui::SetNextItemWidth(200.0f);
+            if (ImGui::BeginCombo("##padStyle", s_styleChoice[i].empty() ? "(ninguno)" : s_styleChoice[i].c_str())) {
+                bool noneSel = s_styleChoice[i].empty();
+                if (ImGui::Selectable("(ninguno)", noneSel)) s_styleChoice[i].clear();
+                for (const auto& name : styleNames) {
+                    bool sel = (s_styleChoice[i] == name);
+                    if (ImGui::Selectable(name.c_str(), sel)) s_styleChoice[i] = name;
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::MenuItem(pad.assigned ? "Guardar aqui (reemplazar)" : "Guardar aqui"))
+                SavePad(pad, s_styleChoice[i]);
+
+            if (ImGui::BeginMenu("Elegir icono")) {
+                if (RenderPadIconGrid(pad.iconIndex))
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                ImGui::EndMenu();
+            }
+
+            if (pad.assigned) {
+                ImGui::Separator();
+                if (ImGui::MenuItem("Borrar pad")) {
+                    pad = PadSettings{};
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        if (pad.assigned && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+            std::string tip = "Pad " + std::to_string(i + 1);
+            if (pad.hasCapture) tip += "\n- Captura";
+            if (pad.hasStyle)   tip += "\n- Estilo: " + pad.styleName;
+            if (pad.hasMacro)   tip += "\n- Overlay: " + pad.macroName;
+            ImGui::SetTooltip("%s", tip.c_str());
+        }
+
+        ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+}
+
 void ViewToolsPanel::Render()
 {
     // ── Pump incondicional ──────────────────────────────────────────────────
-    // Mismo motivo que antes en HomePanel: OClock/StreamingPanel deben
-    // seguir corriendo aunque el operador este mirando otra pestaña de este
-    // hub (Reloj alimenta LAN/pantalla, Streaming alimenta la transmision).
-    m_OClock.Update();
-    m_StreamingPanel.Update();
+    // Mismo motivo que antes en HomePanel: TeamChatPanel debe seguir
+    // corriendo aunque el operador este mirando otra pestaña de este hub.
+    // OClock/StreamingPanel se mudaron a LibraryPanel (grupo Red/Reloj del
+    // sidebar) junto con su propio pump.
     m_TeamChatPanel.Update();
 
     bool visible = m_UIManager
@@ -231,15 +497,14 @@ void ViewToolsPanel::Render()
 
     {
         static const IconRailItem kItems[] = {
-            { (int)ViewToolsSection::ControlOverlays, AppIcons::DrawIcon_Mixer,     "Overlays" },
-            { (int)ViewToolsSection::Streaming,       HomeIcons::DrawIcon_Broadcast,"Red"      },
-            { (int)ViewToolsSection::QuickNotes,      HomeIcons::DrawIcon_Notepad,  "Notas"    },
-            { (int)ViewToolsSection::Clock,           HomeIcons::DrawIcon_Clock,    "Reloj"    },
-            { (int)ViewToolsSection::Chat,             HomeIcons::DrawIcon_Chat,      "Chat"    },
+            { (int)ViewToolsSection::ControlOverlays, AppIcons::DrawIcon_Mixer,    "Overlays" },
+            { (int)ViewToolsSection::QuickNotes,      HomeIcons::DrawIcon_Notepad, "Notas"    },
+            { (int)ViewToolsSection::Chat,             HomeIcons::DrawIcon_Chat,     "Chat"    },
+            { (int)ViewToolsSection::Pads,             AppIcons::DrawIcon_Pads,      "Pads"    },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().viewTools;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 4, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (ViewToolsSection)currentIndex;
     }
 
@@ -274,12 +539,11 @@ void ViewToolsPanel::Render()
         case ViewToolsSection::ControlOverlays:
             RenderControlOverlays(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
             break;
-        case ViewToolsSection::Streaming:  m_StreamingPanel.RenderContent();          break;
         case ViewToolsSection::QuickNotes: m_QuickNotes.Render();                     break;
-        case ViewToolsSection::Clock:
-            if (m_UIManager) m_OClock.Render(m_UIManager->GetGlassRenderer());
-            break;
         case ViewToolsSection::Chat:       m_TeamChatPanel.RenderContent();           break;
+        case ViewToolsSection::Pads:
+            RenderPads(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
+            break;
     }
 
     ImGui::EndChild();

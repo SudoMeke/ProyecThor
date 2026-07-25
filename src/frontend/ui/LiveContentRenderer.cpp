@@ -3,6 +3,7 @@
 #include "backend/media/VLCBasePlayer.h"
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/StageLayoutTemplates.h"
+#include "frontend/panels/capture/CapturePanel.h"
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
@@ -37,7 +38,12 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     // Si está proyectando
     if (state.bgType == Core::PresentationState::BackgroundType::Video)
     {
-        void* texID = core.GetProcessedBackgroundTexture((int)drawW, (int)drawH);
+        // GetPreviewBackgroundTexture (no GetProcessedBackgroundTexture):
+        // antes este preview SIEMPRE mostraba el fondo crudo -- CRT/Grano/
+        // FXAA/Saturación/Viñetado nunca se veian aca porque esos corren
+        // sobre el composite de la viewport real "ProjectorLive", que este
+        // recuadro no es. Ver CompositePostChain::ProcessBackgroundForPreview.
+        void* texID = core.GetPreviewBackgroundTexture((int)drawW, (int)drawH);
         dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
         if (texID)
         {
@@ -203,6 +209,15 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
 
         dl->PopClipRect();
     }
+
+    // ── Captura (cámara/pantalla/ventana) ──────────────────────────────────
+    // Antes esto NUNCA se dibujaba en el preview -- en la salida real
+    // (UIManager.cpp) es un llamado aparte, directo sobre "ProjectorLive",
+    // que este código compartido no replicaba. Mismo orden que ahí: encima
+    // del fondo/overlay/texto. RenderOnProjector ya se auto-descarta si no
+    // hay captura en vivo, así que es seguro llamarlo siempre.
+    if (CapturePanel* cap = core.GetCapturePanelRef())
+        cap->RenderOnProjector(dl, p0.x, p0.y, drawW, drawH);
 
     // ── Borde ──────────────────────────────────────────────────────────────
     dl->AddRect(p0, p1, IM_COL32(50, 55, 80, 180), 0.0f, 0, 1.0f);

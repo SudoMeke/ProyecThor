@@ -106,6 +106,7 @@ Library::LibraryContext LibraryPanel::BuildContext()
 {
     return Library::LibraryContext{
         reinterpret_cast<int&>(m_CurrentCategory),
+        reinterpret_cast<int&>(m_SideMode),
         m_Items,
         m_SelectedIndex,
         m_SearchBuffer,
@@ -160,6 +161,10 @@ Library::LibraryContext LibraryPanel::BuildContext()
 // =============================================================================
 LibraryPanel::LibraryPanel()
 {
+    // Mudado desde ViewToolsPanel — ver PresentationCore::SetOClockRef y el
+    // comentario de m_OClock en LibraryPanel.h.
+    Core::PresentationCore::Get().SetOClockRef(&m_OClock);
+
     try {
         const std::string& base = GetAssetsPath();
         fs::create_directories(U8Path(base + "/songs"));
@@ -397,6 +402,14 @@ void LibraryPanel::RenderFileInUseToast()
 
 void LibraryPanel::Render()
 {
+    // ── Pump incondicional ──────────────────────────────────────────────────
+    // Mudado desde ViewToolsPanel junto con m_OClock/m_StreamingPanel: deben
+    // seguir corriendo aunque el operador este mirando otra categoria de
+    // Biblioteca (Reloj alimenta LAN/pantalla, Streaming alimenta la
+    // transmision), sin importar si el grupo Red/Reloj esta activo ahora.
+    m_OClock.Update();
+    m_StreamingPanel.Update();
+
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     if (m_CurrentCategory != m_PrevCategory)
@@ -418,7 +431,8 @@ void LibraryPanel::Render()
             {
                 // Convertimos el índice 0-5 a tu enum LibraryCategory
                 m_CurrentCategory = static_cast<LibraryCategory>(i);
-                
+                m_SideMode = LibrarySideMode::Categories;
+
                 // Opcional: limpiar selección o refrescar al cambiar
                 m_SelectedIndex = -1;
                 RefreshList();
@@ -504,7 +518,15 @@ void LibraryPanel::Render()
     {
         Library::LibraryContext ctx = BuildContext();
 
-        if (m_CurrentCategory == LibraryCategory::Audio)
+        if (m_SideMode == LibrarySideMode::Streaming)
+        {
+            m_StreamingPanel.RenderContent();
+        }
+        else if (m_SideMode == LibrarySideMode::Clock)
+        {
+            if (m_UIManagerRef) m_OClock.Render(m_UIManagerRef->GetGlassRenderer());
+        }
+        else if (m_CurrentCategory == LibraryCategory::Audio)
         {
             if (!m_AudioSelectionSet)
             {
@@ -528,7 +550,6 @@ void LibraryPanel::Render()
         else
         {
             Library::RenderSideList(ctx);
-            Library::RenderSongEditor(ctx);
         }
 
         Library::RenderRenameModal(ctx);
@@ -545,12 +566,40 @@ void LibraryPanel::Render()
 // =============================================================================
 //  Helpers — canciones
 // =============================================================================
+// Rework del editor: ya no abre un popup modal para pedir titulo/autor/
+// contenido antes de crear el archivo (RenderSongEditor, retirado). En vez
+// de eso, crea de una un archivo vacio con un nombre unico, lo selecciona, y
+// pide (via el cue "consumir una vez" de PresentationCore) que SongView
+// entre directo al editor unificado apenas la seleccion coincida —
+// SongEditView permite renombrar el titulo visible desde adentro.
 void LibraryPanel::CreateNewSong()
 {
-    memset(m_EditTitle,   0, sizeof(m_EditTitle));
-    memset(m_EditContent, 0, sizeof(m_EditContent));
-    memset(m_EditAuthor,  0, sizeof(m_EditAuthor));
-    m_ShowSongEditor = true;
+    const std::string base = "Nueva cancion";
+    std::string filename = base + ".txt";
+    int suffix = 2;
+    while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
+        filename = base + " (" + std::to_string(suffix) + ").txt";
+        ++suffix;
+    }
+
+    std::ofstream f(U8Path(GetAssetsPath() + "/songs/" + filename));
+    if (f.is_open())
+        f << "\xEF\xBB\xBF";
+    f.close();
+
+    RefreshList();
+
+    Core::LibrarySelection s;
+    s.title       = filename;
+    s.type        = Core::ItemType::Song;
+    s.contentData = LoadSongVerses(filename);
+    Core::PresentationCore::Get().SetSelection(s);
+
+    auto it = std::find(m_Items.begin(), m_Items.end(), filename);
+    if (it != m_Items.end())
+        m_SelectedIndex = (int)std::distance(m_Items.begin(), it);
+
+    Core::PresentationCore::Get().RequestSongEditorOpen(filename);
 }
 
 void LibraryPanel::SaveSong(const std::string& title, const std::string& content, const std::string& /*author*/)
@@ -568,41 +617,15 @@ void LibraryPanel::SaveSong(const std::string& title, const std::string& content
 }
 
 // =============================================================================
-//  LoadSongVerses
+//  LoadSongVerses — delega en Library::LoadSongVerses (LibrarySongs.cpp), que
+//  es la unica implementacion real (antes estaba duplicada aca). Se mantiene
+//  este metodo (en vez de que los llamadores usen la funcion libre
+//  directamente) para no tocar el wiring existente de ctx.loadSongVerses ni
+//  la llamada de SelectPlaylistSong mas abajo.
 // =============================================================================
 std::vector<std::string> LibraryPanel::LoadSongVerses(const std::string& filename)
 {
-    std::vector<std::string> verses;
-
-    std::ifstream file(U8Path(GetAssetsPath() + "/songs/" + filename),
-                       std::ios::binary);
-    if (!file.is_open()) {
-        verses.push_back(
-            "Error: No se pudo abrir el archivo.\nRuta: " +
-            GetAssetsPath() + "/songs/" + filename);
-        return verses;
-    }
-
-    std::string raw((std::istreambuf_iterator<char>(file)),
-                     std::istreambuf_iterator<char>());
-    file.close();
-    if (raw.empty()) return verses;
-
-    std::string content = NormalizeToUtf8(raw);
-
-    std::string line, verse;
-    std::istringstream stream(content);
-    while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.empty()) {
-            if (!verse.empty()) { verses.push_back(verse); verse.clear(); }
-        } else {
-            verse += line + '\n';
-        }
-    }
-    if (!verse.empty()) verses.push_back(verse);
-
-    return verses;
+    return Library::LoadSongVerses(filename);
 }
 
 // =============================================================================
