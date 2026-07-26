@@ -35,6 +35,44 @@ inline void DrawIcon_Pads(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
                         col, sz * 0.04f, ImDrawFlags_RoundCornersAll, thick);
 }
 
+// Yggdrasil — arbol sin hojas (tronco + ramas desnudas), el "arbol del
+// mundo": funcion fundamental de primer nivel, no un icono de red generico.
+inline void DrawIcon_Yggdrasil(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.06f;
+
+    // Tronco: de la base hasta donde arrancan las ramas.
+    ImVec2 trunkBase = IcPt(o, sz, 0.5f, 0.90f);
+    ImVec2 trunkTop  = IcPt(o, sz, 0.5f, 0.46f);
+    dl->AddLine(trunkBase, trunkTop, col, thick);
+
+    // Cada rama sale de un punto del tronco y se bifurca una vez, como
+    // ramas desnudas de invierno (sin follaje).
+    struct Branch { float trunkY, endX, endY, midX, midY; bool left; };
+    const Branch branches[] = {
+        { 0.46f, 0.14f, 0.14f, 0.28f, 0.28f, true  },
+        { 0.46f, 0.86f, 0.14f, 0.72f, 0.28f, false },
+        { 0.62f, 0.22f, 0.34f, 0.34f, 0.40f, true  },
+        { 0.62f, 0.78f, 0.34f, 0.66f, 0.40f, false },
+        { 0.76f, 0.30f, 0.58f, 0.38f, 0.60f, true  },
+        { 0.76f, 0.70f, 0.58f, 0.62f, 0.60f, false },
+    };
+
+    for (const auto& b : branches) {
+        ImVec2 start = IcPt(o, sz, 0.5f, b.trunkY);
+        ImVec2 mid   = IcPt(o, sz, b.midX, b.midY);
+        ImVec2 end   = IcPt(o, sz, b.endX, b.endY);
+        dl->AddLine(start, mid, col, thick * 0.75f);
+        dl->AddLine(mid, end, col, thick * 0.55f);
+
+        // Segunda bifurcacion chica en la punta, para que se lea "ramas"
+        // y no solo lineas rectas.
+        float twigX = b.left ? b.endX + 0.10f : b.endX - 0.10f;
+        ImVec2 twig = IcPt(o, sz, twigX, b.endY - 0.08f);
+        dl->AddLine(mid, twig, col, thick * 0.45f);
+    }
+}
+
 // Stage Display — monitor con base
 inline void DrawIcon_Monitor(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

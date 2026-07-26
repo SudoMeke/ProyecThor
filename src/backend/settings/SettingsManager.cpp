@@ -663,6 +663,32 @@ void SettingsManager::SaveSettings() {
         jp["macroAutoAdvance"] = p.macroAutoAdvance;
     }
 
+    j["yggdrasil"]["targetIp"]   = m_Settings.yggdrasil.targetIp;
+    j["yggdrasil"]["targetPort"] = m_Settings.yggdrasil.targetPort;
+    j["yggdrasil"]["listenPort"] = m_Settings.yggdrasil.listenPort;
+    j["yggdrasil"]["autoListen"] = m_Settings.yggdrasil.autoListen;
+    for (size_t i = 0; i < m_Settings.yggdrasil.messages.size(); i++) {
+        const auto& m = m_Settings.yggdrasil.messages[i];
+        auto& jm = j["yggdrasil"]["messages"][i];
+        jm["label"]    = m.label;
+        jm["address"]  = m.address;
+        jm["argsText"] = m.argsText;
+        // lastSendOk/lastSentAt son de sesion, no se persisten a proposito.
+    }
+    for (size_t i = 0; i < m_Settings.yggdrasil.bindings.size(); i++) {
+        const auto& b = m_Settings.yggdrasil.bindings[i];
+        auto& jb = j["yggdrasil"]["bindings"][i];
+        jb["paramName"]  = b.paramName;
+        jb["oscAddress"] = b.oscAddress;
+    }
+
+    j["streaming"]["serverUrl"]        = m_Settings.streaming.serverUrl;
+    j["streaming"]["streamKey"]        = m_Settings.streaming.streamKey;
+    j["streaming"]["videoBitrateKbps"] = m_Settings.streaming.videoBitrateKbps;
+    j["streaming"]["fps"]              = m_Settings.streaming.fps;
+    j["streaming"]["width"]            = m_Settings.streaming.width;
+    j["streaming"]["height"]           = m_Settings.streaming.height;
+
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
     else if (m_Settings.general.language == Language::Portuguese) langStr = "pt";
@@ -679,6 +705,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
+    j["general"]["showModeToolbar"]     = m_Settings.general.showModeToolbar;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -877,6 +904,44 @@ void SettingsManager::LoadSettings() {
             }
         }
 
+        if (j.contains("streaming")) {
+            const auto& js = j["streaming"];
+            m_Settings.streaming.serverUrl        = js.value("serverUrl", "rtmp://");
+            m_Settings.streaming.streamKey        = js.value("streamKey", "");
+            m_Settings.streaming.videoBitrateKbps = js.value("videoBitrateKbps", 4500);
+            m_Settings.streaming.fps              = js.value("fps", 30);
+            m_Settings.streaming.width            = js.value("width", 1280);
+            m_Settings.streaming.height           = js.value("height", 720);
+        }
+
+        if (j.contains("yggdrasil")) {
+            const auto& jy = j["yggdrasil"];
+            m_Settings.yggdrasil.targetIp   = jy.value("targetIp",   "127.0.0.1");
+            m_Settings.yggdrasil.targetPort = jy.value("targetPort", 9000);
+            m_Settings.yggdrasil.listenPort = jy.value("listenPort", 9001);
+            m_Settings.yggdrasil.autoListen = jy.value("autoListen", false);
+            m_Settings.yggdrasil.messages.clear();
+            if (jy.contains("messages") && jy["messages"].is_array()) {
+                for (const auto& jm : jy["messages"]) {
+                    OSCMessageDef m;
+                    m.label    = jm.value("label",    "Luz 1");
+                    m.address  = jm.value("address",  "/cue/1");
+                    m.argsText = jm.value("argsText", "");
+                    m_Settings.yggdrasil.messages.push_back(m);
+                }
+            }
+            m_Settings.yggdrasil.bindings.clear();
+            if (jy.contains("bindings") && jy["bindings"].is_array()) {
+                for (const auto& jb : jy["bindings"]) {
+                    OSCBinding b;
+                    b.paramName  = jb.value("paramName",  "");
+                    b.oscAddress = jb.value("oscAddress", "");
+                    if (!b.paramName.empty() && !b.oscAddress.empty())
+                        m_Settings.yggdrasil.bindings.push_back(b);
+                }
+            }
+        }
+
         if (j.contains("pads") && j["pads"].contains("pads") && j["pads"]["pads"].is_array()) {
             const auto& arr = j["pads"]["pads"];
             for (int i = 0; i < kPadCount && i < (int)arr.size(); i++) {
@@ -947,6 +1012,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
+            m_Settings.general.showModeToolbar      = jg.value("showModeToolbar",      false);
         }
 
         if (j.contains("audio")) {

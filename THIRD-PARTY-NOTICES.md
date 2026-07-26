@@ -19,6 +19,17 @@ ProyecThor's own source code is released under the MIT License (see `LICENSE`), 
 | **PDFium** | BSD 3-Clause | Permissive | [chromium.googlesource.com/.../pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) | Keep copyright notice; do not use the project's name for promotion without permission. |
 | **LibVLC SDK** | LGPL 2.1 | Weak copyleft | [videolan.org](https://www.videolan.org) | See special section below. |
 | **TagLib** | LGPL 2.1 / MPL 1.1 | Weak copyleft | [taglib.github.io](https://taglib.github.io) | See special section below. |
+| **FFmpeg** (Windows builds, `ffmpeg.exe`) | GPL v3 (essentials build, includes libx264) | Strong copyleft | [ffmpeg.org](https://ffmpeg.org) | See "FFmpeg" section below. Bundled as a separate executable, invoked as a subprocess (not linked) for the Streaming/RTMP feature. |
+
+---
+
+## Special Attention: FFmpeg (GPL)
+
+`ffmpeg.exe` (bundled in `extrabuild/` on Windows, next to `yt-dlp.exe`) is used by `BroadcastPanel`/`StreamEncoder` to encode and publish the live RTMP stream. The specific build distributed (gyan.dev "essentials") includes `libx264`, which makes that ffmpeg binary **GPL v3**, not LGPL.
+
+ProyecThor **launches ffmpeg as a separate child process** (piping raw frames to its stdin) — it does not statically or dynamically link against any ffmpeg/libav library, and ProyecThor's own source stays under its own license. This is the standard "mere aggregation" pattern (same as invoking `yt-dlp.exe`) and does not require ProyecThor itself to be GPL-licensed. However, the `ffmpeg.exe` binary itself, when redistributed, remains subject to the full GPL v3 — anyone redistributing ProyecThor builds that include this binary must be able to provide (or point to) the corresponding FFmpeg source for the exact build distributed.
+
+Full text of the GPL v3: https://www.gnu.org/licenses/gpl-3.0.html
 
 ---
 

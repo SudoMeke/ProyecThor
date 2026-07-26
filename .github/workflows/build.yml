@@ -97,7 +97,7 @@ jobs:
       # Version del MSI (formato Major.Minor.Build.Revision) -- mantener
       # sincronizada a mano con el "project(VERSION ...)" de CMakeLists.txt
       # cuando se bump-ea la version del proyecto.
-      PRODUCT_VERSION: 0.4.1.0
+      PRODUCT_VERSION: 0.5.0.0
     steps:
       - uses: actions/checkout@v4
 
@@ -114,16 +114,21 @@ jobs:
         run: wix extension add -g WixToolset.UI.wixext
 
       - name: Compilar instalador (.msi)
+        # BuildDir absoluto: WiX resuelve el harvesting de <Files Include=...>
+        # relativo a la carpeta del .wxs, no al cwd -- con una ruta relativa
+        # ("build-win") busca en packaging/windows/build-win y no encuentra
+        # nada, generando un .msi "vacio" (solo el .exe, sin DLLs) sin avisar
+        # con un error, solo un warning WIX8601 facil de pasar por alto.
         run: >
           wix build packaging/windows/ProyecThor.wxs
           -arch x64
           -ext WixToolset.UI.wixext
-          -d BuildDir="build-win"
+          -d BuildDir="${{ github.workspace }}\build-win"
           -d ProductVersion="${{ env.PRODUCT_VERSION }}"
-          -out ProyecThor_Setup.msi
+          -out packaging/windows/dist/ProyecThor_Setup.msi
 
       - name: Subir instalador
         uses: actions/upload-artifact@v4
         with:
           name: ProyecThor_Setup-${{ github.run_number }}
-          path: ProyecThor_Setup.msi
+          path: packaging/windows/dist/ProyecThor_Setup.msi

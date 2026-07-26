@@ -21,6 +21,9 @@
 #include "qrcodegen.hpp"
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/ProjectionQualityPresets.h"
+#include "AppIcons.h"
+#include "IconRail.h"
+#include "frontend/panels/home/HomeIcons.h"
 #include "LiveContentRenderer.h"
 #include "LibrarySongs.h"
 #include <ctime>
@@ -193,7 +196,7 @@ void UIManager::AddPanel(std::shared_ptr<IPanel> panel)
 void UIManager::OpenHub()
 {
     m_Hub.ForceOpen();
-    m_HubMode = true;
+    m_Mode = WorkspaceMode::Hub;
 }
 
 void UIManager::RequestSettings()
@@ -226,14 +229,45 @@ void UIManager::RenderAll()
         if (ImGui::IsKeyPressed(ImGuiKey_F11, false))
             ToggleFullscreen();
     }
+
+    // Toolbar de segundo nivel (Hub/Proyector/Streaming/Yggdrasil) — se
+    // dibuja siempre, sea cual sea el modo activo, y reduce el area de
+    // trabajo del viewport (ver RenderModeToolbar) para que lo que se
+    // dibuje despues (Hub, dockspace o Yggdrasil) no quede tapado debajo.
+    RenderModeToolbar();
+
+    // ── Streaming (transmision RTMP en vivo, ver BroadcastPanel) ────────────
+    if (m_Mode == WorkspaceMode::Streaming)
+    {
+        m_BroadcastPanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
+    // ── Yggdrasil (control OSC de dispositivos externos) ───────────────────
+    if (m_Mode == WorkspaceMode::Yggdrasil)
+    {
+        m_YggdrasilPanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
+    // ── Biblioteca (ver/gestionar assets, sin proyectar) ────────────────────
+    if (m_Mode == WorkspaceMode::Biblioteca)
+    {
+        m_LibraryManagerPanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
     // ── Hub de inicio ────────────────────────────────────────────────────────
-if (m_HubMode)
+if (m_Mode == WorkspaceMode::Hub)
     {
         if (m_Hub.Render())
         {
             if (!m_Hub.SettingsRequested())
             {
-                m_HubMode     = false;
+                m_Mode        = WorkspaceMode::Projector;
                 m_ResetLayout = true;
             }
         }
@@ -958,6 +992,72 @@ void UIManager::ToggleFullscreen()
 }
 
 // ---------------------------------------------------------------------------
+// RenderModeToolbar
+// ---------------------------------------------------------------------------
+// Segunda toolbar, debajo del menu principal: 4 iconos que cambian el modo
+// completo del workspace (ver WorkspaceMode en UIManager.h) — no son
+// paneles dockeados, cada uno reemplaza TODO lo que se dibuja despues.
+// Reduce manualmente el area de trabajo del viewport (mismo mecanismo que
+// usa ImGui::BeginMainMenuBar internamente) para que el Hub/dockspace/
+// Yggdrasil que se dibuje a continuacion no quede tapado por esta barra.
+void UIManager::RenderModeToolbar()
+{
+    // Opcional (menu Vista > "Barra de modos...") y apagada por default:
+    // si esta apagada no se dibuja nada ni se reserva espacio -- el
+    // comportamiento queda identico al de antes de que esta barra existiera.
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    if (!general.showModeToolbar) return;
+
+    static const IconRailItem kItems[] = {
+        { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
+        { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
+        { (int)WorkspaceMode::Streaming,  HomeIcons::DrawIcon_Broadcast, "Streaming"  },
+        { (int)WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
+        { (int)WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
+    };
+    static const float kColors[5][4] = {
+        { 0.55f, 0.60f, 0.68f, 1.0f }, // Hub
+        { 0.31f, 0.55f, 1.00f, 1.0f }, // Proyector
+        { 0.30f, 0.80f, 0.85f, 1.0f }, // Streaming
+        { 0.65f, 0.31f, 0.94f, 1.0f }, // Yggdrasil
+        { 0.35f, 0.80f, 0.55f, 1.0f }, // Biblioteca
+    };
+
+    ImGuiViewport* vp     = ImGui::GetMainViewport();
+    float          railH  = IconRailThickness(false);
+
+    ImGui::SetNextWindowPos(vp->WorkPos);
+    ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, railH));
+    ImGui::SetNextWindowViewport(vp->ID);
+
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove       |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("##ModeToolbar", nullptr, flags);
+    ImGui::PopStyleVar();
+
+    int currentIndex = (int)m_Mode;
+    RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, kColors);
+    WorkspaceMode newMode = (WorkspaceMode)currentIndex;
+    if (newMode != m_Mode)
+    {
+        m_Mode = newMode;
+        if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
+        if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+    }
+
+    ImGui::End();
+
+    // Reserva el alto de esta barra para lo que se dibuje despues en el
+    // mismo frame (Hub/dockspace/Yggdrasil ya leen vp->WorkPos/WorkSize).
+    vp->WorkPos.y  += railH;
+    vp->WorkSize.y -= railH;
+}
+
+// ---------------------------------------------------------------------------
 // RenderMainMenuBar
 // ---------------------------------------------------------------------------
 void UIManager::RenderMainMenuBar()
@@ -1053,6 +1153,14 @@ void UIManager::RenderMainMenuBar()
             if (ImGui::MenuItem("Botones de limpieza (Vista en Vivo)", nullptr, general.showViewQuickActions))
             {
                 general.showViewQuickActions = !general.showViewQuickActions;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+
+            // Toolbar de modos (Hub/Proyector/Streaming/Yggdrasil/Biblioteca)
+            // — opcional y apagada por default, ver GeneralSettings::showModeToolbar.
+            if (ImGui::MenuItem("Barra de modos (Streaming/Yggdrasil/Biblioteca)", nullptr, general.showModeToolbar))
+            {
+                general.showModeToolbar = !general.showModeToolbar;
                 ProyecThor::Settings::SettingsManager::Get().Save();
             }
 

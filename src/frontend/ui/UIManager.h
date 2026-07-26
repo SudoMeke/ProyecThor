@@ -13,6 +13,9 @@
 #include "panels/DatabasePanel.h"
 #include "panels/WikiPanel.h"
 #include "panels/PerformancePanel.h"
+#include "panels/YggdrasilPanel.h"
+#include "panels/LibraryManagerPanel.h"
+#include "panels/BroadcastPanel.h"
 
 namespace ProyecThor::UI {
 
@@ -20,6 +23,25 @@ enum class ActiveLeftPanel {
     Library,
     Canva,
     None
+};
+
+// ── Modo de workspace ────────────────────────────────────────────────────────
+// La toolbar de segundo nivel (ver RenderModeToolbar) reemplaza TODO el
+// contenido de abajo segun el modo activo -- no son paneles dockeados mas,
+// son secciones completas de la app:
+//  - Hub: pantalla de inicio/novedades (Hub.cpp), tal cual ya existia.
+//  - Projector: el workspace de siempre (Biblioteca/Home/Vista en Vivo/
+//    Herramientas/Diseño dockeados), antes controlado por el bool m_HubMode.
+//  - Streaming: todavia no hace nada (placeholder).
+//  - Yggdrasil: control OSC de dispositivos externos (YggdrasilPanel), solo.
+//  - Biblioteca: ver/gestionar (renombrar, borrar) Video/Imagen/Audio ya
+//    importados, sin seleccionar nada para Vista en Vivo (LibraryManagerPanel).
+enum class WorkspaceMode {
+    Hub,
+    Projector,
+    Streaming,
+    Yggdrasil,
+    Biblioteca,
 };
 
 class UIManager {
@@ -52,8 +74,12 @@ private:
     void EndDockspace();
     void ApplyProfessionalTheme();
     void RenderMainMenuBar();
+    void RenderModeToolbar();
  DatabasePanel m_DatabasePanel;
     WikiPanel     m_WikiPanel;
+    YggdrasilPanel      m_YggdrasilPanel;
+    LibraryManagerPanel m_LibraryManagerPanel;
+    BroadcastPanel      m_BroadcastPanel;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;
@@ -74,8 +100,8 @@ private:
     int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
     void ToggleFullscreen();
 
-    Hub   m_Hub;
-    bool  m_HubMode = true;
+    Hub           m_Hub;
+    WorkspaceMode m_Mode = WorkspaceMode::Hub;
 };
 
 } // namespace ProyecThor::UI

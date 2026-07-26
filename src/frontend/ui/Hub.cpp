@@ -67,6 +67,14 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        10, "0.5.0",
+        "ACTUALIZACION", "ACTUALIZACION",
+        "splash_bg6.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Nuevo instalador para Windows (.msi), mas moderno y confiable, que reemplaza "
+        "solo cualquier version anterior sin pasos extra. Corregido tambien el icono "
+        "de la aplicacion, que en algunos casos no se veia bien tras instalar."
+    },
+    {
         9, "0.4.2",
         "ACTUALIZACION", "ACTUALIZACION",
         "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
@@ -551,7 +559,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 9; // id de kUpdateRegistry (9 = v0.4.2, la mas reciente)
+    static int    selectedUpdateVer = 10; // id de kUpdateRegistry (10 = v0.5.0, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -1092,12 +1100,19 @@ void Hub::RenderMainContent(float w, float h) {
             };
 
             // ── Bloque de contenido condicional por versión ──────────────────
-            // Cinco entradas: la 0.4.2 (mas reciente, todavia sin publicar),
-            // la 0.4.1, la 0.4.0, la 0.3.5 (estable, con TODO lo acumulado
-            // desde la 0.3.1 hasta la 0.3.5, incluidas las betas) y la 0.3.0
-            // original. Cualquier otro id cae en el bloque "else" de la
-            // 0.3.0 por seguridad.
-            if (selectedUpdateVer == 9) { // v0.4.2
+            // Seis entradas: la 0.5.0 (mas reciente, todavia sin publicar),
+            // la 0.4.2, la 0.4.1, la 0.4.0, la 0.3.5 (estable, con TODO lo
+            // acumulado desde la 0.3.1 hasta la 0.3.5, incluidas las betas) y
+            // la 0.3.0 original. Cualquier otro id cae en el bloque "else" de
+            // la 0.3.0 por seguridad.
+            if (selectedUpdateVer == 10) { // v0.5.0
+                Cat("Nuevo instalador para Windows");
+                Bul("ProyecThor ahora se instala con un instalador moderno (.msi) en vez del anterior (.exe): mas rapido, mas prolijo y con menos falsos positivos de antivirus.");
+                Bul("Si ya tenias ProyecThor instalado con una version anterior, no hace falta que la desinstales a mano: el instalador nuevo la reemplaza solo.");
+                Bul("Corregido: el icono de la aplicacion no se veia bien (aparecia en blanco) en el acceso directo y en el instalador.");
+                Bul("Las actualizaciones automaticas de esta pantalla tambien se actualizaron para descargar el instalador nuevo correctamente.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 9) { // v0.4.2
                 Cat("Pads de Vista en Vivo");
                 Bul("Corregido el problema por el cual guardar un pad (click derecho > Guardar aqui) podia no aplicar nada al presionarlo despues: ahora siempre captura estilo, fondo y captura de pantalla tal cual estan en pantalla.");
                 Bul("El panel de Pads se reorganizo en dos secciones: \"General\" (los pads de siempre) y \"Captura\", que ahora muestra las mismas escenas rapidas del panel Captura, sincronizadas — guardar o aplicar una desde cualquiera de los dos lados es lo mismo.");

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <imgui.h>
 #include "Version.h"
 #include "StageLayoutTemplates.h"
@@ -163,6 +164,12 @@ namespace ProyecThor::Settings {
         // el menu Vista para operadores que no lo necesitan y prefieren mas
         // ancho para el video.
         bool        showViewQuickActions = true;
+        // Toolbar de modos (Hub/Proyector/Streaming/Yggdrasil/Biblioteca,
+        // ver WorkspaceMode en UIManager.h), activable desde el menu Vista.
+        // Apagada por default: la mayoria de los operadores solo usa el
+        // workspace normal (Proyector) y no necesita el selector visible
+        // todo el tiempo.
+        bool        showModeToolbar      = false;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -390,6 +397,58 @@ namespace ProyecThor::Settings {
         PadSettings pads[kPadCount];
     };
 
+    // ── Yggdrasil: control de dispositivos externos (luces, etc.) por OSC ──
+    // ProyecThor solo emite (no escucha) — ver OSCSender.h. Cada mensaje
+    // guardado es una "cue" disparable a mano desde el panel: una direccion
+    // OSC (ej. "/cue/1") mas los argumentos, escritos tal cual los tipearia
+    // el operador (ver OSCSender::ParseOSCArgs para como se infiere el tipo
+    // de cada uno al enviar).
+    struct OSCMessageDef {
+        std::string label   = "Luz 1";
+        std::string address = "/cue/1";
+        std::string argsText;  // ej. "1, 0.5, hola" -- vacio = sin argumentos
+
+        // Ultimo resultado de envio (no persistido -- solo para que el
+        // operador vea de un vistazo que luz esta respondiendo, ver
+        // YggdrasilPanel). false + lastSentAt vacio = todavia no se probo.
+        bool        lastSendOk = false;
+        std::string lastSentAt;
+    };
+
+    // Vincula un parametro en vivo de ProyecThor (ver YggdrasilPanel::
+    // GetBindableParams) a una direccion OSC entrante, aprendida con el
+    // boton "Aprender" (se guarda la direccion del primer mensaje que
+    // llega mientras esa fila esta en modo aprendizaje). paramName debe
+    // matchear exactamente el "name" del registro de parametros.
+    struct OSCBinding {
+        std::string paramName;
+        std::string oscAddress;
+    };
+
+    struct YggdrasilSettings {
+        std::string targetIp    = "127.0.0.1";
+        int         targetPort  = 9000;   // hacia donde se envia (luces)
+        int         listenPort  = 9001;   // en donde se escucha (Control List)
+        bool        autoListen  = false;  // arrancar la escucha sola al abrir la app
+        std::vector<OSCMessageDef> messages;
+        std::vector<OSCBinding>    bindings;
+    };
+
+    // ── Streaming en vivo (RTMP, ver BroadcastPanel/StreamEncoder) ───────
+    // serverUrl + streamKey se concatenan como serverUrl + "/" + streamKey
+    // para armar la URL RTMP final (mismo criterio que OBS: "Servidor" y
+    // "Clave de stream" por separado, asi la clave no queda pegada a mano
+    // en una URL larga). videoBitrateKbps sigue la misma convencion de
+    // "kbps" que usan las plataformas de streaming (Twitch/YouTube).
+    struct StreamingSettings {
+        std::string serverUrl        = "rtmp://";
+        std::string streamKey        = "";
+        int         videoBitrateKbps = 4500;
+        int         fps              = 30;
+        int         width            = 1280;
+        int         height           = 720;
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
@@ -405,6 +464,8 @@ namespace ProyecThor::Settings {
         ViewToolsSettings      viewTools;
         CaptureSettings        capture;
         PadsSettings           pads;
+        YggdrasilSettings      yggdrasil;
+        StreamingSettings      streaming;
     };
 
     class SettingsManager {

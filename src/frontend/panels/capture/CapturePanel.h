@@ -60,6 +60,14 @@ public:
 
     bool        IsLive()   const { return m_IsCapturing; }
 
+    // Para BroadcastPanel (Streaming > Capture -> "Mostrar en Layer"): la
+    // misma textura/tamaño que ya usa el preview interno de este panel,
+    // expuestos tal cual (sin disparar un grab nuevo -- GetCurrentTexture
+    // ya cachea por frame de ImGui, ver su comentario).
+    void* GetPreviewTexture() { return GetCurrentTexture(); }
+    int   GetFrameWidth()  const { return m_FrameW; }
+    int   GetFrameHeight() const { return m_FrameH; }
+
     // Para paneles externos (ej. ViewPanel > "Limpiar captura"/"Borrar
     // Todo") que necesitan cortarla sin pasar por los controles internos.
     void        Stop() { StopCapture(); }

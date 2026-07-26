@@ -28,8 +28,9 @@
 
     <SummaryInformation Description="Instalador de ProyecThor" Manufacturer="vixcho" />
 
-    <!-- Instala sin pedir admin (equivalente a PrivilegesRequired=lowest de Inno) -->
-    <Property Id="ALLUSERS" Value="" />
+    <!-- Instala sin pedir admin (equivalente a PrivilegesRequired=lowest de Inno).
+         Lo da Scope="perUser" en el Package de arriba; ALLUSERS="" explicito
+         ya no es valido en WiX v5 estable (WIX0006, valor vacio no permitido). -->
 
     <!--
       Al instalar una version nueva con el MISMO UpgradeCode, MSI desinstala
@@ -111,7 +112,9 @@
          tener que enumerar a mano decenas de DLLs de plugins de VLC (glob
          harvesting de WiX v5, un Component por archivo generado solo). -->
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Files Include="$(var.BuildDir)\**" Exclude="$(var.BuildDir)\ProyecThor.exe" />
+      <Files Include="$(var.BuildDir)\**">
+        <Exclude Files="$(var.BuildDir)\ProyecThor.exe" />
+      </Files>
     </ComponentGroup>
 
     <Icon Id="ProyecThorIcon" SourceFile="$(var.BuildDir)\proyecthor.ico" />
@@ -122,6 +125,9 @@
       <ComponentGroupRef Id="AppFiles" />
     </Feature>
 
+    <!-- WixUI_Minimal muestra un Lorem Ipsum de ejemplo si no se le pasa un
+         RTF propio: este es el texto real de la licencia MIT. -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)LICENSE.rtf" />
     <ui:WixUI Id="WixUI_Minimal" />
 
   </Package>

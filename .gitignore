@@ -19,6 +19,8 @@ iss/installer_output/
 *.deb
 *.rpm
 *.log
+*.msi
+*.wixpdb
 
 # ── Carpetas de distribución alternativa (si no van en el repo principal) ───
 web/
