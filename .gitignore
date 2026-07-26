@@ -25,7 +25,6 @@ iss/installer_output/
 # ── Carpetas de distribución alternativa (si no van en el repo principal) ───
 web/
 lite/
-FoudreVue/
 # ── Copia suelta de shaders en la raiz (leftover de builds viejos; el
 # codigo real vive en src/backend/shaders/, este NO) ─────────────────────────
 /shaders/

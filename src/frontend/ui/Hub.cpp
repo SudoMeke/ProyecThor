@@ -950,58 +950,6 @@ void Hub::RenderMainContent(float w, float h) {
     DrawMetricCard("Proyecciones totales", std::to_string(totalProjections), "Cuentas locales registradas", HT::Success);
     DrawMetricCard("FPS promedio", std::to_string(perfSummary.first), fpsHint.c_str(), HT::AccentBlue, &fpsSpark);
 
-    // ── Banner "app hermana" — FoudreVue ─────────────────────────────────────
-    // Cross-sell dentro de la propia suite (mismo violeta que usa la pestana
-    // de Overlays para todo lo relacionado a FoudreVue): promociona la app
-    // hermana de creacion de overlays y linkea directo a sus releases.
-    {
-        const ImU32 fvAccent = IM_COL32(107, 122, 255, 255);
-        const float bannerH  = 100.0f;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild("##FoudreVueBanner", ImVec2(rightColWidth, bannerH), false);
-
-        const float bannerHoverT = HubHoverLerp(ImGui::GetID("##FoudreVueBanner"), ImGui::IsWindowHovered());
-
-        ImVec2 bp = ImGui::GetWindowPos();
-        if (bannerHoverT > 0.001f)
-            ImGui::GetWindowDrawList()->AddRectFilled(bp, ImVec2(bp.x + rightColWidth, bp.y + bannerH),
-                ColAf(fvAccent, 0.05f * bannerHoverT), HT::RadiusMd);
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            bp, ImVec2(bp.x + 4.0f, bp.y + bannerH), fvAccent, HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
-
-        ImGui::SetCursorPos(ImVec2(16.0f, 12.0f));
-        ImGui::BeginGroup();
-        ImGui::PushStyleColor(ImGuiCol_Text, fvAccent);
-        ImGui::Text("FoudreVue");
-        ImGui::PopStyleColor();
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rightColWidth - 32.0f);
-        ImGui::TextWrapped(
-            "Editor de overlays: capas de texto, imagenes de Pexels, "
-            "tipografia y rotacion. App hermana, open source.");
-        ImGui::PopTextWrapPos();
-        ImGui::PopStyleColor();
-        ImGui::EndGroup();
-
-        ImGui::SetCursorPos(ImVec2(16.0f, bannerH - 38.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button,        fvAccent);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(127, 140, 255, 255));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   IM_COL32(87, 100, 220, 255));
-        ImGui::PushStyleColor(ImGuiCol_Text,           IM_COL32(255, 255, 255, 255));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
-        if (ImGui::Button("Descargar FoudreVue", ImVec2(200.0f, 28.0f)))
-            ProyecThor::External::OpenURL("https://github.com/TheVixcho/FoudreVue");
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(4);
-
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    }
-
     ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
     ImGui::BeginChild("##SongStats", ImVec2(rightColWidth, 240.0f), false);

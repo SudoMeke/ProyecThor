@@ -238,13 +238,6 @@ namespace ProyecThor::Settings {
         bool        autoDownload   = false;
     };
 
-    // ── FoudreVue (app hermana de overlays) ──────────────────────────────
-    // Solo guarda el canal elegido para el chequeo de version en el modal
-    // de descarga (ver LayersOverlayTab::RenderFoudreVueDownloadModal).
-    struct FoudreVueSettings {
-        std::string releaseChannel = "stable"; // "stable" | "beta"
-    };
-
     // ── Stage Display (monitor de control) ──────────────────────────────
     struct StageDisplaySettings {
         int layoutTemplateIndex = 0; // indice en kStageLayoutTemplates
@@ -455,7 +448,6 @@ namespace ProyecThor::Settings {
         GeneralSettings        general;
         ThemeSettings          theme;
         UpdatesSettings        updates;
-        FoudreVueSettings      foudrevue;
         StageDisplaySettings   stageDisplay;
         LibrarySidebarSettings librarySidebar;
         HomeSidebarSettings    homeSidebar;

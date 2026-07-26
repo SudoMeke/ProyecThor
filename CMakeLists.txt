@@ -47,21 +47,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-# ── 1b. FOUDREVUE (app hermana, editor de overlays) ──────────────────────────
-# Vive como submodulo en la raiz (carpeta FoudreVue/, repo propio en
-# github.com/TheVixcho/FoudreVue). Se compila junto a ProyecThor como un
-# ejecutable aparte (target "FoudreVue"), no como libreria: cada app sigue
-# siendo standalone, solo comparten build system para facilitar desarrollo
-# en conjunto ("git submodule update --remote FoudreVue" trae los ultimos
-# cambios de la app hermana).
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FoudreVue/CMakeLists.txt")
-    add_subdirectory(FoudreVue)
-else()
-    message(WARNING
-        "FoudreVue/ no encontrado o vacio — corre 'git submodule update --init "
-        "--recursive' para traer el codigo de la app hermana.")
-endif()
-
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
 set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glfw")
