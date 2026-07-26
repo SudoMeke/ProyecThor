@@ -16,6 +16,7 @@
 #include "panels/YggdrasilPanel.h"
 #include "panels/LibraryManagerPanel.h"
 #include "panels/BroadcastPanel.h"
+#include "panels/BibleFullscreenPanel.h"
 
 namespace ProyecThor::UI {
 
@@ -36,12 +37,15 @@ enum class ActiveLeftPanel {
 //  - Yggdrasil: control OSC de dispositivos externos (YggdrasilPanel), solo.
 //  - Biblioteca: ver/gestionar (renombrar, borrar) Video/Imagen/Audio ya
 //    importados, sin seleccionar nada para Vista en Vivo (LibraryManagerPanel).
+//  - Biblia: el mismo BibleView de Home, a pantalla completa
+//    (BibleFullscreenPanel).
 enum class WorkspaceMode {
     Hub,
     Projector,
     Streaming,
     Yggdrasil,
     Biblioteca,
+    Biblia,
 };
 
 class UIManager {
@@ -81,6 +85,7 @@ private:
     YggdrasilPanel      m_YggdrasilPanel;
     LibraryManagerPanel m_LibraryManagerPanel;
     BroadcastPanel      m_BroadcastPanel;
+    BibleFullscreenPanel m_BiblePanel;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;

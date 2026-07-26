@@ -24,6 +24,7 @@
 #include "AppIcons.h"
 #include "IconRail.h"
 #include "frontend/panels/home/HomeIcons.h"
+#include "biblio/LibraryIcons.h"
 #include "LiveContentRenderer.h"
 #include "LibrarySongs.h"
 #include <ctime>
@@ -256,6 +257,14 @@ void UIManager::RenderAll()
     if (m_Mode == WorkspaceMode::Biblioteca)
     {
         m_LibraryManagerPanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
+    // ── Biblia (el mismo BibleView de Home, a pantalla completa) ────────────
+    if (m_Mode == WorkspaceMode::Biblia)
+    {
+        m_BiblePanel.Render();
         RenderMainMenuBar();
         return;
     }
@@ -1014,13 +1023,15 @@ void UIManager::RenderModeToolbar()
         { (int)WorkspaceMode::Streaming,  HomeIcons::DrawIcon_Broadcast, "Streaming"  },
         { (int)WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
         { (int)WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
+        { (int)WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
     };
-    static const float kColors[5][4] = {
+    static const float kColors[6][4] = {
         { 0.55f, 0.60f, 0.68f, 1.0f }, // Hub
         { 0.31f, 0.55f, 1.00f, 1.0f }, // Proyector
         { 0.30f, 0.80f, 0.85f, 1.0f }, // Streaming
         { 0.65f, 0.31f, 0.94f, 1.0f }, // Yggdrasil
         { 0.35f, 0.80f, 0.55f, 1.0f }, // Biblioteca
+        { 0.86f, 0.67f, 0.16f, 1.0f }, // Biblia
     };
 
     ImGuiViewport* vp     = ImGui::GetMainViewport();
@@ -1040,7 +1051,7 @@ void UIManager::RenderModeToolbar()
     ImGui::PopStyleVar();
 
     int currentIndex = (int)m_Mode;
-    RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, kColors);
+    RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Horizontal, kColors);
     WorkspaceMode newMode = (WorkspaceMode)currentIndex;
     if (newMode != m_Mode)
     {
@@ -1076,8 +1087,9 @@ void UIManager::RenderQuickSwitcher()
         { WorkspaceMode::Streaming,  HomeIcons::DrawIcon_Broadcast, "Streaming"  },
         { WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
         { WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
+        { WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
     };
-    constexpr int kCount = 5;
+    constexpr int kCount = 6;
 
     ImGuiIO& io = ImGui::GetIO();
     if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Space, false))
