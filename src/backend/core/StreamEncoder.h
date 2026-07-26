@@ -44,7 +44,8 @@ public:
     void PushFrame(const uint8_t* rgba, int width, int height);
 
 private:
-    FILE*       m_Pipe   = nullptr;
+    FILE*       m_Pipe          = nullptr;
+    void*       m_ProcessHandle = nullptr; // solo Windows (HiddenProcess.h) -- nullptr en el resto
     int         m_Width  = 0;
     int         m_Height = 0;
     int         m_Fps    = 30;

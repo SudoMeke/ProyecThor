@@ -3,8 +3,7 @@
 #include <cstdlib>
 
 #if defined(_WIN32)
-    #define PT_POPEN  _popen
-    #define PT_PCLOSE _pclose
+    #include "HiddenProcess.h"
 #else
     #define PT_POPEN  popen
     #define PT_PCLOSE pclose
@@ -63,11 +62,23 @@ bool StreamEncoder::Start(const std::string& rtmpUrl, int width, int height, int
         videoBitrateKbps, videoBitrateKbps, bufsizeKbps, gop,
         rtmpUrl.c_str());
 
+#if defined(_WIN32)
+    // CreateProcess con CREATE_NO_WINDOW: sin esto, cada vez que se inicia
+    // una transmision aparece (y desaparece al terminar) una consola de
+    // ffmpeg tapando la app -- ProyecThor es GUI-only, no hereda consola
+    // propia, y _popen() no da forma de suprimirla.
+    if (!StartHiddenProcess(cmd, /*wantStdinPipe=*/true, &m_Pipe,
+                             /*wantOutputCapture=*/false, nullptr, &m_ProcessHandle)) {
+        if (errorOut) *errorOut = "No se pudo iniciar el proceso de ffmpeg.";
+        return false;
+    }
+#else
     m_Pipe = PT_POPEN(cmd, "wb");
     if (!m_Pipe) {
         if (errorOut) *errorOut = "No se pudo iniciar el proceso de ffmpeg.";
         return false;
     }
+#endif
 
     m_Width        = width;
     m_Height       = height;
@@ -79,8 +90,18 @@ bool StreamEncoder::Start(const std::string& rtmpUrl, int width, int height, int
 void StreamEncoder::Stop() {
     if (!m_Pipe) return;
     std::fflush(m_Pipe);
+
+#if defined(_WIN32)
+    std::fclose(m_Pipe); // cierra el pipe de stdin -- ffmpeg ve el EOF y termina solo
+    m_Pipe = nullptr;
+    if (m_ProcessHandle) {
+        WaitHiddenProcess(m_ProcessHandle);
+        m_ProcessHandle = nullptr;
+    }
+#else
     PT_PCLOSE(m_Pipe);
     m_Pipe = nullptr;
+#endif
 }
 
 void StreamEncoder::PushFrame(const uint8_t* rgba, int width, int height) {
