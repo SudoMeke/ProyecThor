@@ -1,8 +1,8 @@
 #include "StreamEncoder.h"
+#include "FfmpegPath.h"
 #include <cstdlib>
 
 #if defined(_WIN32)
-    #include <windows.h>
     #define PT_POPEN  _popen
     #define PT_PCLOSE _pclose
 #else
@@ -11,46 +11,6 @@
 #endif
 
 namespace ProyecThor::Core {
-
-// En Windows, ffmpeg.exe viene EMPAQUETADO al lado del ejecutable (ver
-// extrabuild/ffmpeg.exe, mismo criterio que yt-dlp.exe): asi la
-// transmision funciona para cualquier usuario sin que tenga que instalar
-// ni configurar nada por su cuenta, como en OBS. Se resuelve la ruta
-// absoluta via GetModuleFileName en vez de confiar en que el directorio de
-// trabajo actual sea el de la app (no siempre es asi segun como se lance
-// el acceso directo). En el resto de plataformas se espera un ffmpeg del
-// sistema (via el gestor de paquetes de la distro), igual criterio que ya
-// usa el resto de la app para dependencias externas en Linux.
-static std::string FfmpegPath() {
-#if defined(_WIN32)
-    char exePath[MAX_PATH] = {};
-    if (GetModuleFileNameA(nullptr, exePath, MAX_PATH) > 0) {
-        std::string path(exePath);
-        size_t slash = path.find_last_of("\\/");
-        if (slash != std::string::npos) {
-            std::string candidate = path.substr(0, slash + 1) + "ffmpeg.exe";
-            FILE* f = std::fopen(candidate.c_str(), "rb");
-            if (f) { std::fclose(f); return "\"" + candidate + "\""; }
-        }
-    }
-    return "ffmpeg"; // fallback: PATH del sistema, por si no esta empaquetado
-#else
-    return "ffmpeg";
-#endif
-}
-
-static bool FfmpegAvailable(const std::string& ffmpegPath) {
-    FILE* probe = PT_POPEN((ffmpegPath + " -version").c_str(), "r");
-    if (!probe) return false;
-
-    char    buf[256];
-    bool    found = false;
-    if (fgets(buf, sizeof(buf), probe) && std::string(buf).find("ffmpeg") != std::string::npos)
-        found = true;
-
-    PT_PCLOSE(probe);
-    return found;
-}
 
 StreamEncoder::~StreamEncoder() {
     Stop();

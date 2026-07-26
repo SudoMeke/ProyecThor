@@ -31,27 +31,30 @@ void LibraryManagerPanel::ClearThumbCache() {
 
 std::string LibraryManagerPanel::FolderFor(AssetKind kind) const {
     switch (kind) {
-        case AssetKind::Video: return GetAssetsPath() + "/videos/";
-        case AssetKind::Image: return GetAssetsPath() + "/images/";
-        case AssetKind::Audio: return ProyecThor::Audio::GetAudioPath() + "/";
+        case AssetKind::Video:  return GetAssetsPath() + "/videos/";
+        case AssetKind::Image:  return GetAssetsPath() + "/images/";
+        case AssetKind::Audio:  return ProyecThor::Audio::GetAudioPath() + "/";
+        case AssetKind::Render: return ""; // no es una carpeta de assets, ver RenderConverterSection
     }
     return "";
 }
 
 std::vector<std::string> LibraryManagerPanel::ExtensionsFor(AssetKind kind) const {
     switch (kind) {
-        case AssetKind::Video: return { ".mp4", ".mkv", ".avi", ".mov" };
-        case AssetKind::Image: return { ".jpg", ".jpeg", ".png" };
-        case AssetKind::Audio: return { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" };
+        case AssetKind::Video:  return { ".mp4", ".mkv", ".avi", ".mov" };
+        case AssetKind::Image:  return { ".jpg", ".jpeg", ".png" };
+        case AssetKind::Audio:  return { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" };
+        case AssetKind::Render: return {};
     }
     return {};
 }
 
 const char* LibraryManagerPanel::LabelFor(AssetKind kind) const {
     switch (kind) {
-        case AssetKind::Video: return "VID";
-        case AssetKind::Image: return "IMG";
-        case AssetKind::Audio: return "AUD";
+        case AssetKind::Video:  return "VID";
+        case AssetKind::Image:  return "IMG";
+        case AssetKind::Audio:  return "AUD";
+        case AssetKind::Render: return "";
     }
     return "";
 }
@@ -87,14 +90,16 @@ void LibraryManagerPanel::RefreshItems() {
 
 void LibraryManagerPanel::RenderRail() {
     static const IconRailItem kItems[] = {
-        { (int)AssetKind::Video, AppIcons::DrawIcon_Monitor, "Video"  },
-        { (int)AssetKind::Image, AppIcons::DrawIcon_Layers,  "Imagen" },
-        { (int)AssetKind::Audio, AppIcons::DrawIcon_Mixer,   "Audio"  },
+        { (int)AssetKind::Video,  AppIcons::DrawIcon_Monitor, "Video"  },
+        { (int)AssetKind::Image,  AppIcons::DrawIcon_Layers,  "Imagen" },
+        { (int)AssetKind::Audio,  AppIcons::DrawIcon_Mixer,   "Audio"  },
+        { (int)AssetKind::Render, AppIcons::DrawIcon_Swap,    "Render" },
     };
-    static const float kColors[3][4] = {
+    static const float kColors[4][4] = {
         { 0.86f, 0.24f, 0.24f, 1.0f }, // Video
         { 0.24f, 0.86f, 0.39f, 1.0f }, // Imagen
         { 0.16f, 0.75f, 0.75f, 1.0f }, // Audio
+        { 0.90f, 0.55f, 0.20f, 1.0f }, // Render
     };
 
     float railW = IconRailThickness(true);
@@ -102,7 +107,7 @@ void LibraryManagerPanel::RenderRail() {
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     int currentIndex = (int)m_Kind;
-    RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Vertical, kColors);
+    RenderIconRail(kItems, 4, currentIndex, IconRailOrientation::Vertical, kColors);
     AssetKind newKind = (AssetKind)currentIndex;
     if (newKind != m_Kind) {
         m_Kind         = newKind;
@@ -172,6 +177,11 @@ void LibraryManagerPanel::RenderCard(int index, float w, float h) {
 }
 
 void LibraryManagerPanel::RenderGrid() {
+    if (m_Kind == AssetKind::Render) {
+        RenderConverterSection();
+        return;
+    }
+
     if (m_NeedsRefresh || m_Kind != m_LoadedKind) RefreshItems();
 
     if (!m_StatusMessage.empty()) {
@@ -280,6 +290,151 @@ void LibraryManagerPanel::RenderDeleteModal() {
         }
         ImGui::EndPopup();
     }
+}
+
+void LibraryManagerPanel::RefreshConvertibleItems() {
+    m_ConvertibleItems.clear();
+
+    auto scan = [&](AssetKind kind, bool isVideo) {
+        auto     exts = ExtensionsFor(kind);
+        fs::path dir  = U8Path(FolderFor(kind));
+        std::error_code ec;
+        if (!fs::exists(dir, ec) || ec) return;
+
+        for (auto& entry : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+
+            std::string lowExt = entry.path().extension().string();
+            std::transform(lowExt.begin(), lowExt.end(), lowExt.begin(),
+                            [](unsigned char c) { return (char)std::tolower(c); });
+            if (std::find(exts.begin(), exts.end(), lowExt) == exts.end()) continue;
+
+            m_ConvertibleItems.push_back({ PathToUtf8(entry.path().filename()), isVideo });
+        }
+    };
+    scan(AssetKind::Video, true);
+    scan(AssetKind::Audio, false);
+
+    std::sort(m_ConvertibleItems.begin(), m_ConvertibleItems.end(),
+              [](const ConvertibleItem& a, const ConvertibleItem& b) { return a.filename < b.filename; });
+
+    if (m_ConvertSourceIndex >= (int)m_ConvertibleItems.size()) m_ConvertSourceIndex = -1;
+    m_ConvertibleNeedsRefresh = false;
+}
+
+void LibraryManagerPanel::RenderConverterSection() {
+    if (m_ConvertibleNeedsRefresh) RefreshConvertibleItems();
+
+    ImGui::TextUnformatted("Render");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(convertir Video/Audio ya importados a otro formato)");
+    ImGui::Spacing();
+
+    // Si termino una conversion desde el ultimo frame, actualizar estado.
+    bool        finishedOk = false;
+    std::string finishedMsg;
+    if (m_Converter.PollFinished(finishedOk, finishedMsg)) {
+        m_ConvertStatusIsError = !finishedOk;
+        m_ConvertStatus        = finishedMsg;
+        m_ConvertibleNeedsRefresh = true; // por si el archivo convertido cae en la misma carpeta
+    }
+
+    if (m_ConvertibleItems.empty()) {
+        ImGui::TextDisabled("Todavia no importaste ningun Video o Audio para convertir.");
+        return;
+    }
+
+    bool running = m_Converter.IsRunning();
+    if (running) ImGui::BeginDisabled();
+
+    // ── Origen ────────────────────────────────────────────────────────────
+    std::string sourcePreview = (m_ConvertSourceIndex >= 0 && m_ConvertSourceIndex < (int)m_ConvertibleItems.size())
+        ? m_ConvertibleItems[m_ConvertSourceIndex].filename : "Elegi un archivo...";
+
+    ImGui::SetNextItemWidth(360.0f);
+    if (ImGui::BeginCombo("Archivo de origen", sourcePreview.c_str())) {
+        for (int i = 0; i < (int)m_ConvertibleItems.size(); i++) {
+            const auto& item = m_ConvertibleItems[i];
+            std::string label = std::string(item.isVideo ? "[Video] " : "[Audio] ") + item.filename;
+            bool sel = (i == m_ConvertSourceIndex);
+            if (ImGui::Selectable(label.c_str(), sel)) {
+                m_ConvertSourceIndex = i;
+                m_ConvertFormatIndex = 0;
+            }
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    // ── Formato de destino ───────────────────────────────────────────────
+    static const char* kVideoFormats[] = { "mp4", "mkv", "webm", "avi", "mov" };
+    static const char* kAudioFormats[] = { "mp3", "wav", "flac", "ogg", "aac", "m4a" };
+
+    const char** formats     = kVideoFormats;
+    int          formatCount = (int)(sizeof(kVideoFormats) / sizeof(kVideoFormats[0]));
+    bool         haveSource  = (m_ConvertSourceIndex >= 0 && m_ConvertSourceIndex < (int)m_ConvertibleItems.size());
+    if (haveSource && !m_ConvertibleItems[m_ConvertSourceIndex].isVideo) {
+        formats     = kAudioFormats;
+        formatCount = (int)(sizeof(kAudioFormats) / sizeof(kAudioFormats[0]));
+    }
+    if (m_ConvertFormatIndex >= formatCount) m_ConvertFormatIndex = 0;
+
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::BeginCombo("Formato de destino", haveSource ? formats[m_ConvertFormatIndex] : "-")) {
+        for (int i = 0; i < formatCount; i++) {
+            bool sel = (i == m_ConvertFormatIndex);
+            if (ImGui::Selectable(formats[i], sel)) m_ConvertFormatIndex = i;
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    if (running) ImGui::EndDisabled();
+
+    ImGui::Spacing();
+    if (!m_ConvertStatus.empty()) {
+        ImGui::TextColored(m_ConvertStatusIsError ? ImVec4(0.90f, 0.35f, 0.35f, 1.0f) : ImVec4(0.40f, 0.85f, 0.55f, 1.0f),
+                            "%s", m_ConvertStatus.c_str());
+        ImGui::Spacing();
+    }
+
+    if (running) {
+        ImGui::TextColored(ImVec4(0.96f, 0.75f, 0.30f, 1.0f), "Convirtiendo...");
+        return;
+    }
+
+    if (!haveSource) { ImGui::BeginDisabled(); }
+    if (ImGui::Button("Convertir", ImVec2(160, 36)) && haveSource) {
+        const auto& src     = m_ConvertibleItems[m_ConvertSourceIndex];
+        AssetKind   srcKind = src.isVideo ? AssetKind::Video : AssetKind::Audio;
+        fs::path    dir     = U8Path(FolderFor(srcKind));
+        std::string stem    = StripExtension(src.filename);
+        std::string ext     = formats[m_ConvertFormatIndex];
+
+        // Nombre de salida unico -- nunca pisa un archivo existente (mismo
+        // criterio que LibraryPanel::CreateNewSong).
+        std::string outName = stem + "." + ext;
+        int suffix = 2;
+        std::error_code ec;
+        while (fs::exists(dir / U8Path(outName), ec)) {
+            outName = stem + " (" + std::to_string(suffix) + ")." + ext;
+            suffix++;
+        }
+
+        std::string inputPath  = FolderFor(srcKind) + src.filename;
+        std::string outputPath = FolderFor(srcKind) + outName;
+
+        std::string err;
+        if (m_Converter.Start(inputPath, outputPath, &err)) {
+            m_ConvertStatusIsError = false;
+            m_ConvertStatus        = "Convirtiendo a " + outName + "...";
+        } else {
+            m_ConvertStatusIsError = true;
+            m_ConvertStatus        = err;
+        }
+    }
+    if (!haveSource) { ImGui::EndDisabled(); }
 }
 
 void LibraryManagerPanel::Render() {

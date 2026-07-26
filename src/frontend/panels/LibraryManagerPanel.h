@@ -1,5 +1,6 @@
 #pragma once
 #include "IPanel.h"
+#include "backend/core/MediaConverter.h"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -25,7 +26,12 @@ public:
     std::string GetName() const override { return "Biblioteca"; }
 
 private:
-    enum class AssetKind { Video, Image, Audio };
+    // Render no es una carpeta de assets como las otras tres -- es la
+    // pestaña del conversor de formato (ver RenderConverterSection). Vive
+    // en el mismo enum/rail por simplicidad: FolderFor/ExtensionsFor la
+    // ignoran (ver sus .cpp), y RenderGrid() la desvia a
+    // RenderConverterSection() antes de tocar la logica de carpetas.
+    enum class AssetKind { Video, Image, Audio, Render };
 
     std::string              FolderFor(AssetKind kind) const;
     std::vector<std::string> ExtensionsFor(AssetKind kind) const;
@@ -38,6 +44,10 @@ private:
     void RenderRenameModal();
     void RenderDeleteModal();
     void ClearThumbCache();
+
+    // ── Render (conversor de formato, ver MediaConverter.h) ──────────────
+    void RenderConverterSection();
+    void RefreshConvertibleItems(); // junta Video+Audio de las dos carpetas para el combo de origen
 
     AssetKind m_Kind       = AssetKind::Video;
     AssetKind m_LoadedKind = AssetKind::Video;
@@ -62,6 +72,18 @@ private:
     // aca (eso vive en el ThumbnailWorker de LibraryVideos.cpp, que a
     // proposito no se toca).
     std::unordered_map<std::string, unsigned int> m_ImageThumbCache;
+
+    // ── Render (conversor de formato) ─────────────────────────────────────
+    struct ConvertibleItem { std::string filename; bool isVideo; };
+    std::vector<ConvertibleItem> m_ConvertibleItems; // Video + Audio juntos, para el combo de origen
+    bool                          m_ConvertibleNeedsRefresh = true;
+
+    int  m_ConvertSourceIndex = -1;
+    int  m_ConvertFormatIndex = 0;
+
+    Core::MediaConverter m_Converter;
+    std::string          m_ConvertStatus;
+    bool                 m_ConvertStatusIsError = false;
 };
 
 } // namespace ProyecThor::UI
