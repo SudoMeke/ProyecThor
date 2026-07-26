@@ -1,8 +1,11 @@
+#include <GL/glew.h>
 #include "YggdrasilPanel.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/core/OSCSender.h"
 #include "backend/settings/SettingsManager.h"
 #include "AppIcons.h"
+#include "IconRail.h"
+#include "home/HomeIcons.h"
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -343,8 +346,44 @@ void YggdrasilPanel::RenderSendSection() {
     }
 }
 
+void YggdrasilPanel::RenderRail() {
+    static const IconRailItem kItems[] = {
+        { (int)Section::OSC,  AppIcons::DrawIcon_Yggdrasil,  "OSC"  },
+        { (int)Section::Red,  HomeIcons::DrawIcon_Broadcast, "Red"  },
+        { (int)Section::Chat, HomeIcons::DrawIcon_Chat,      "Chat" },
+    };
+    static const float kColors[3][4] = {
+        { 0.65f, 0.31f, 0.94f, 1.0f }, // OSC
+        { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
+        { 0.75f, 0.40f, 0.90f, 1.0f }, // Chat
+    };
+
+    float railW = IconRailThickness(true);
+    ImGui::BeginChild("##yggdrasilRail", ImVec2(railW, 0.0f), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    int currentIndex = (int)m_Section;
+    RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Vertical, kColors);
+    m_Section = (Section)currentIndex;
+
+    ImGui::EndChild();
+}
+
+void YggdrasilPanel::RenderOSCSection() {
+    RenderConnectionSection();
+    RenderControlListSection();
+    RenderSendSection();
+}
+
 void YggdrasilPanel::Render() {
     ApplyReceivedMessages();
+
+    // Red y Chat comparten servidor/puerto (ver TeamChatPanel.h) y deben
+    // seguir corriendo sin importar que pestaña este activa -- mismo
+    // criterio que ya usaban en sus hogares anteriores (LibraryPanel/
+    // ViewToolsPanel).
+    m_Red.Update();
+    m_Chat.Update();
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
@@ -370,13 +409,23 @@ void YggdrasilPanel::Render() {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (iconSz - ImGui::GetTextLineHeight()) * 0.5f);
         ImGui::TextUnformatted("Yggdrasil");
         ImGui::SameLine();
-        ImGui::TextDisabled("(control OSC de dispositivos externos)");
+        ImGui::TextDisabled("(OSC, Red y Chat)");
     }
     ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
 
-    RenderConnectionSection();
-    RenderControlListSection();
-    RenderSendSection();
+    RenderRail();
+    ImGui::SameLine();
+    ImGui::BeginChild("##yggdrasilSection", ImVec2(0.0f, 0.0f));
+
+    switch (m_Section) {
+        case Section::OSC:  RenderOSCSection();       break;
+        case Section::Red:  m_Red.RenderContent();     break;
+        case Section::Chat: m_Chat.RenderContent();    break;
+    }
+
+    ImGui::EndChild();
     ImGui::EndChild();
     ImGui::End();
 }

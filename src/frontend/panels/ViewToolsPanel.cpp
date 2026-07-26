@@ -471,13 +471,8 @@ void ViewToolsPanel::RenderPads(float w, float h)
 
 void ViewToolsPanel::Render()
 {
-    // ── Pump incondicional ──────────────────────────────────────────────────
-    // Mismo motivo que antes en HomePanel: TeamChatPanel debe seguir
-    // corriendo aunque el operador este mirando otra pestaña de este hub.
-    // OClock/StreamingPanel se mudaron a LibraryPanel (grupo Red/Reloj del
-    // sidebar) junto con su propio pump.
-    m_TeamChatPanel.Update();
-
+    // OClock se mudo a LibraryPanel (grupo Reloj del sidebar) junto con su
+    // propio pump; TeamChatPanel ("Chat") se mudo a Yggdrasil.
     bool visible = m_UIManager
         ? DS::BeginGlassPanel(GetName().c_str(), m_UIManager->GetGlassRenderer(),
                               nullptr, 0, ImVec2(0.0f, 0.0f))
@@ -503,12 +498,11 @@ void ViewToolsPanel::Render()
         static const IconRailItem kItems[] = {
             { (int)ViewToolsSection::ControlOverlays, AppIcons::DrawIcon_Mixer,    "Overlays" },
             { (int)ViewToolsSection::QuickNotes,      HomeIcons::DrawIcon_Notepad, "Notas"    },
-            { (int)ViewToolsSection::Chat,             HomeIcons::DrawIcon_Chat,     "Chat"    },
             { (int)ViewToolsSection::Pads,             AppIcons::DrawIcon_Pads,      "Pads"    },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().viewTools;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 4, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (ViewToolsSection)currentIndex;
     }
 
@@ -544,7 +538,6 @@ void ViewToolsPanel::Render()
             RenderControlOverlays(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
             break;
         case ViewToolsSection::QuickNotes: m_QuickNotes.Render();                     break;
-        case ViewToolsSection::Chat:       m_TeamChatPanel.RenderContent();           break;
         case ViewToolsSection::Pads:
             RenderPads(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
             break;

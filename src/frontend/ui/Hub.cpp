@@ -281,7 +281,7 @@ void Hub::RenderWhatsNewIfNeeded() {
         { "Nuevo instalador",
           "ProyecThor ahora se instala con un instalador moderno (.msi) que reemplaza solo cualquier version anterior, sin pasos extra." },
         { "Yggdrasil: control OSC",
-          "Nueva seccion para conectar luces y dispositivos externos por OSC: enviar mensajes a mano o vincular controladores externos a los efectos de Shaders con \"Aprender\"." },
+          "Nueva seccion para conectar luces y dispositivos externos por OSC: enviar mensajes a mano o vincular controladores externos a los efectos de Shaders con \"Aprender\". Tambien reune ahi, en el mismo lugar, la Transmision en Red y el Chat (antes en Biblioteca y Herramientas)." },
         { "Biblioteca",
           "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo." },
         { "Streaming en vivo",

@@ -403,12 +403,11 @@ void LibraryPanel::RenderFileInUseToast()
 void LibraryPanel::Render()
 {
     // ── Pump incondicional ──────────────────────────────────────────────────
-    // Mudado desde ViewToolsPanel junto con m_OClock/m_StreamingPanel: deben
-    // seguir corriendo aunque el operador este mirando otra categoria de
-    // Biblioteca (Reloj alimenta LAN/pantalla, Streaming alimenta la
-    // transmision), sin importar si el grupo Red/Reloj esta activo ahora.
+    // Mudado desde ViewToolsPanel junto con m_OClock: debe seguir corriendo
+    // aunque el operador este mirando otra categoria de Biblioteca (Reloj
+    // alimenta LAN/pantalla), sin importar si el grupo Reloj esta activo
+    // ahora. StreamingPanel ("Red") se mudo a Yggdrasil.
     m_OClock.Update();
-    m_StreamingPanel.Update();
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
@@ -518,11 +517,7 @@ void LibraryPanel::Render()
     {
         Library::LibraryContext ctx = BuildContext();
 
-        if (m_SideMode == LibrarySideMode::Streaming)
-        {
-            m_StreamingPanel.RenderContent();
-        }
-        else if (m_SideMode == LibrarySideMode::Clock)
+        if (m_SideMode == LibrarySideMode::Clock)
         {
             if (m_UIManagerRef) m_OClock.Render(m_UIManagerRef->GetGlassRenderer());
         }

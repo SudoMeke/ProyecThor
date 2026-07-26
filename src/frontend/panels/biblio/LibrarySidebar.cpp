@@ -21,9 +21,9 @@ static constexpr int kCat_Bibles    = 3;
 static constexpr int kCat_Documents = 4;
 static constexpr int kCat_Audio     = 5;
 
-// Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h).
+// Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h). El modo 1
+// ("Red"/Streaming) se elimino de aca: se mudo a Yggdrasil.
 static constexpr int kSideMode_Categories = 0;
-static constexpr int kSideMode_Streaming  = 1;
 static constexpr int kSideMode_Clock      = 2;
 
 namespace ProyecThor::Library {
@@ -208,18 +208,19 @@ void RenderCategoryButtons(LibraryContext& ctx)
         ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
     }
 
+    // "Red" se mudo a Yggdrasil (rail OSC/Red/Chat, ver YggdrasilPanel.cpp)
+    // -- solo queda "Reloj" en este grupo aparte.
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     static const SideDef k_SideItems[] = {
-        { "Red",   ProyecThor::UI::HomeIcons::DrawIcon_Broadcast, kSideMode_Streaming },
-        { "Reloj", ProyecThor::UI::HomeIcons::DrawIcon_Clock,     kSideMode_Clock     },
+        { "Reloj", ProyecThor::UI::HomeIcons::DrawIcon_Clock, kSideMode_Clock },
     };
 
     for (const auto& sd : k_SideItems)
     {
         const bool active = (ctx.sideModeInt == sd.mode);
-        // Colores en los indices 6/7 de librarySidebar.categoryColor — ver
-        // SettingsManager.h.
-        int colorIdx = (sd.mode == kSideMode_Streaming) ? 6 : 7;
+        // Color en el indice 7 de librarySidebar.categoryColor — ver
+        // SettingsManager.h (el 6, antes de "Red", queda sin uso).
+        int colorIdx = 7;
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            sd.label, sd.drawIcon, active,
