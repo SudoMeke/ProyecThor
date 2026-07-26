@@ -263,6 +263,130 @@ void Hub::UpdateAnimations(float dt) {
     }
 }
 
+// ── "Que hay de nuevo" — carrusel que se muestra UNA vez por version nueva ──
+// Antes la unica forma de ver las novedades era abrir el modal de
+// "Actualizacion" y elegir la version en la lista (ver kUpdateRegistry) --
+// ahi la 0.5.0 quedaba mezclada con versiones viejas. Esto la separa: al
+// abrir ProyecThor con una version que todavia no se vio (comparado contra
+// general.dismissedChangelog, guardado en settings.json), aparece este
+// carrusel una sola vez con las novedades resumidas en varias tarjetas.
+void Hub::RenderWhatsNewIfNeeded() {
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) return;
+
+    struct Slide { const char* title; const char* body; };
+    static const Slide kSlides[] = {
+        { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
+          "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
+        { "Nuevo instalador",
+          "ProyecThor ahora se instala con un instalador moderno (.msi) que reemplaza solo cualquier version anterior, sin pasos extra." },
+        { "Yggdrasil: control OSC",
+          "Nueva seccion para conectar luces y dispositivos externos por OSC: enviar mensajes a mano o vincular controladores externos a los efectos de Shaders con \"Aprender\"." },
+        { "Biblioteca",
+          "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo." },
+        { "Streaming en vivo",
+          "Transmiti directo por RTMP (Twitch, YouTube, etc.), con captura de camara/pantalla, preview tipo OBS, y control de calidad." },
+        { "Selector rapido (Alt+Espacio)",
+          "Apreta Alt+Espacio en cualquier momento para saltar entre secciones con el teclado, sin tocar el mouse." },
+    };
+    constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
+
+    static int  s_Index      = 0;
+    static bool s_OpenedOnce = false;
+    if (!s_OpenedOnce) {
+        ImGui::OpenPopup("##WhatsNewCarousel");
+        s_OpenedOnce = true;
+        s_Index      = 0;
+    }
+
+    ImGuiViewport* vp      = ImGui::GetMainViewport();
+    const ImVec2   winSize = ImVec2(580.0f, 400.0f);
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
+                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
+    ImGui::SetNextWindowSize(winSize);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(30.0f, 28.0f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.055f, 0.060f, 0.085f, 0.99f));
+
+    if (ImGui::BeginPopupModal("##WhatsNewCarousel", nullptr,
+                               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.75f, 0.30f, 1.0f));
+        ImGui::TextUnformatted("NOVEDADES");
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        const Slide& slide = kSlides[s_Index];
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97f, 1.0f));
+        ImGui::SetWindowFontScale(1.18f);
+        ImGui::TextWrapped("%s", slide.title);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.74f, 0.85f, 1.0f));
+        ImGui::TextWrapped("%s", slide.body);
+        ImGui::PopStyleColor();
+
+        // Puntos indicadores de progreso
+        ImGui::SetCursorPosY(winSize.y - 96.0f);
+        float dotsW = kSlideCount * 16.0f;
+        ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2      dp = ImGui::GetCursorScreenPos();
+        for (int i = 0; i < kSlideCount; i++) {
+            ImU32 col = (i == s_Index) ? IM_COL32(120, 150, 255, 255) : IM_COL32(70, 72, 90, 255);
+            dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y + 5.0f), 5.0f, col);
+        }
+        ImGui::Dummy(ImVec2(dotsW, 14.0f));
+
+        // Fila de botones: Configuracion inicial (placeholder) | Anterior | Siguiente/Entendido | Saltar
+        ImGui::SetCursorPosY(winSize.y - 60.0f);
+
+        if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
+            // Todavia no hace nada -- punto de entrada reservado para un
+            // futuro asistente de primera configuracion.
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Proximamente");
+
+        ImGui::SameLine();
+        if (s_Index == 0) ImGui::BeginDisabled();
+        if (ImGui::Button("< Anterior", ImVec2(100, 34))) s_Index--;
+        if (s_Index == 0) ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (s_Index == kSlideCount - 1) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
+            if (ImGui::Button("Entendido", ImVec2(110, 34))) {
+                general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopStyleColor();
+        } else {
+            if (ImGui::Button("Siguiente >", ImVec2(110, 34))) s_Index++;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Saltar", ImVec2(70, 34))) {
+            general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 bool Hub::Render() {
     if (!m_Open) return false;
 
@@ -330,6 +454,8 @@ bool Hub::Render() {
     ImGui::PopStyleVar(); // Alpha
     ImGui::End();
     ImGui::PopStyleVar(2);
+
+    RenderWhatsNewIfNeeded();
 
     if (m_LaunchRequested) {
         m_LaunchRequested = false;

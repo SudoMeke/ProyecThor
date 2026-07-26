@@ -23,6 +23,7 @@ public:
 private:
     void RenderSidebar(float w, float h);
     void RenderMainContent(float w, float h);
+    void RenderWhatsNewIfNeeded();
 
     void UpdateAnimations(float dt);
 
