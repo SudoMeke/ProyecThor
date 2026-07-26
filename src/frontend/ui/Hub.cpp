@@ -68,11 +68,13 @@ struct UpdateVersionInfo {
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         10, "0.5.0",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "ACTUALIZACION MAYOR", "ACTUALIZACION MAYOR",
         "splash_bg6.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Nuevo instalador para Windows (.msi), mas moderno y confiable, que reemplaza "
-        "solo cualquier version anterior sin pasos extra. Corregido tambien el icono "
-        "de la aplicacion, que en algunos casos no se veia bien tras instalar."
+        "Nueva seccion Yggdrasil (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
+        "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
+        "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
+        "en Vivo mas compacto, editor de Estilos renovado, nuevo instalador para "
+        "Windows (.msi) y varias correcciones de estabilidad."
     },
     {
         9, "0.4.2",
@@ -281,13 +283,17 @@ void Hub::RenderWhatsNewIfNeeded() {
         { "Nuevo instalador",
           "ProyecThor ahora se instala con un instalador moderno (.msi) que reemplaza solo cualquier version anterior, sin pasos extra." },
         { "Yggdrasil",
-          "Nueva seccion que reune todo lo que conecta ProyecThor con el exterior: OSC (luces/controladores externos, con \"Aprender\"), Transmision en Red, Chat, y Streaming en vivo por RTMP (Twitch, YouTube, etc. con captura de camara/pantalla y preview tipo OBS) -- todo en un mismo rail." },
+          "Nueva seccion que reune todo lo que conecta ProyecThor con el exterior: OSC (luces/controladores externos, con \"Aprender\"), Red y Chat (los mismos de siempre, ahora disponibles tambien aca), y Streaming en vivo por RTMP (Twitch, YouTube, etc. con captura de camara/pantalla y preview tipo OBS) -- todo en un mismo rail." },
         { "Biblioteca",
-          "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo." },
+          "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo. Incluye un panel \"Render\" para convertir formatos con ffmpeg." },
         { "Biblia a pantalla completa",
           "El mismo buscador de Biblia de siempre, ahora tambien disponible como su propia seccion a pantalla completa: libros/capitulos a la izquierda, texto grande a la derecha." },
         { "Selector rapido (Alt+Espacio)",
           "Apreta Alt+Espacio en cualquier momento para saltar entre secciones con el teclado, sin tocar el mouse." },
+        { "Monitor mas compacto",
+          "El panel de Preview del Monitor de Vista en Vivo ahora ocupa menos espacio y le deja mas lugar al video, con botones mas chicos y prolijos." },
+        { "Editor de Estilos renovado",
+          "El editor de estilos de texto (Diseño > Estilos) cambio de look: menos colores por seccion, bordes mas rectos, mas parecido al resto de ProyecThor." },
     };
     constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
 
@@ -1232,11 +1238,48 @@ void Hub::RenderMainContent(float w, float h) {
             // la 0.3.0 original. Cualquier otro id cae en el bloque "else" de
             // la 0.3.0 por seguridad.
             if (selectedUpdateVer == 10) { // v0.5.0
+                Cat("Nueva seccion: Yggdrasil");
+                Bul("Toolbar nueva arriba de todo (Hub / Proyector / Yggdrasil / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
+                Bul("OSC: enviar mensajes a luces/controladores externos con direccion IP y puerto configurables, mas \"Aprender\" (OSC Learn) para vincular un fader externo a parametros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");
+                Bul("Red y Chat, disponibles ahora en dos lugares a la vez (Yggdrasil y su ubicacion original en Biblioteca/Herramientas): es la misma conexion y el mismo chat, no hay que elegir uno.");
+                Bul("Streaming en vivo real por RTMP (Twitch, YouTube, Facebook, etc.), con captura de camara/pantalla, preview y control de capas tipo OBS, todo integrado en el mismo rail.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Nueva seccion: Biblioteca");
+                Bul("Ver, renombrar y borrar tus archivos de Video, Imagen y Audio ya importados, separado de Vista en Vivo para no arriesgar nada de lo que este proyectando.");
+                Bul("Nuevo panel \"Render\": convierte tus videos y audios a otros formatos aprovechando ffmpeg, sin instalar nada aparte.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblia a pantalla completa");
+                Bul("El mismo buscador de Biblia de siempre, ahora tambien como su propia seccion a pantalla completa: libros/capitulos a la izquierda, texto grande a la derecha.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Selector rapido y novedades");
+                Bul("Alt+Espacio abre un selector para saltar entre Hub, Yggdrasil, Biblioteca y Biblia con el teclado, sin tocar el mouse.");
+                Bul("Al abrir una version nueva de ProyecThor aparece un carrusel de novedades en el Hub, en vez de tener que buscarlas en esta misma pantalla.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Monitor de Vista en Vivo, mas compacto");
+                Bul("El panel de Preview del Monitor ocupaba mucho mas alto del que en realidad necesitaba: se redujo para darle bastante mas espacio al video.");
+                Bul("El boton de Play/Pausa se integro en la misma fila que Inicio / -10s / +10s / Detener, en vez de tener su propia fila completa aparte.");
+                Bul("Botones e iconos del Preview mas chicos y prolijos; la columna central (Transmitir/Loop) ahora se achica sola si el espacio disponible es menor al habitual, en vez de cortarse.");
+                Bul("Sacado el boton de Contener/Estirar de esa columna: ya estaba disponible a la derecha de Vista en Vivo, no hacia falta duplicarlo.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Estilos renovado");
+                Bul("Se le bajo el tono \"arcoiris\" que tenia (cada pestaña/tarjeta con un color distinto) a favor de un solo acento consistente con el resto de la app.");
+                Bul("Encabezado, bordes y esquinas mas sobrios y rectos, en linea con el resto de los paneles en vez de un look aparte tipo Canva.");
+                ImGui::Dummy(ImVec2(0,12));
+
                 Cat("Nuevo instalador para Windows");
                 Bul("ProyecThor ahora se instala con un instalador moderno (.msi) en vez del anterior (.exe): mas rapido, mas prolijo y con menos falsos positivos de antivirus.");
                 Bul("Si ya tenias ProyecThor instalado con una version anterior, no hace falta que la desinstales a mano: el instalador nuevo la reemplaza solo.");
                 Bul("Corregido: el icono de la aplicacion no se veia bien (aparecia en blanco) en el acceso directo y en el instalador.");
                 Bul("Las actualizaciones automaticas de esta pantalla tambien se actualizaron para descargar el instalador nuevo correctamente.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Correcciones de estabilidad");
+                Bul("Corregido un cierre inesperado de la app relacionado con ffmpeg: antes podia abrir brevemente una consola negra y cerrarse sin avisar el motivo; ahora corre oculto y muestra el error real si algo falla (por ejemplo, al convertir un video en Biblioteca > Render).");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 9) { // v0.4.2
                 Cat("Pads de Vista en Vivo");

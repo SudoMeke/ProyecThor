@@ -8,23 +8,12 @@
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Colores por margen: Izquierda, Arriba, Derecha, Abajo
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ImVec4 TabMargins::s_MarginColors[4] = {
-    ImVec4(0.39f, 0.70f, 0.97f, 1.0f),  // L — azul
-    ImVec4(0.10f, 0.79f, 0.55f, 1.0f),  // T — verde
-    ImVec4(0.93f, 0.50f, 0.20f, 1.0f),  // R — naranja
-    ImVec4(0.90f, 0.30f, 0.55f, 1.0f),  // B — rosa
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  Render principal
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TabMargins::Render(StyleData& data, float colWidth, ImDrawList* dl) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    CanvaStyleEditor::Badge("MARGENES", CanvaPalette::Gold);
+    CanvaStyleEditor::Badge("MARGENES", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     CanvaStyleEditor::SectionLabel("En pixeles, referencia a resolucion 1920x1080");
@@ -54,14 +43,14 @@ void TabMargins::RenderMarginInputs(StyleData& data, float colWidth) {
 
         ImGui::BeginGroup();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, s_MarginColors[m]);
+        ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
         ImGui::Text("%s", marginNames[m]);
         ImGui::PopStyleColor();
 
         ImGui::PushStyleColor(ImGuiCol_FrameBg,        CanvaPalette::Surface1);
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, CanvaPalette::Surface2);
-        ImGui::PushStyleColor(ImGuiCol_Border,         s_MarginColors[m]);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  7.0f);
+        ImGui::PushStyleColor(ImGuiCol_Border,         CanvaPalette::Border);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  5.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.5f);
         ImGui::SetNextItemWidth(halfW);
 
@@ -91,7 +80,7 @@ void TabMargins::RenderMarginDiagram(StyleData& data, float colWidth, ImDrawList
 
     // Fondo de pantalla
     dl->AddRectFilled(p, ImVec2(p.x + diagW, p.y + diagH),
-        CanvaPalette::ToU32(CanvaPalette::Surface1), 6.0f);
+        CanvaPalette::ToU32(CanvaPalette::Surface1), 4.0f);
 
     // Zona segura
     float sx = p.x + mL;
@@ -99,33 +88,38 @@ void TabMargins::RenderMarginDiagram(StyleData& data, float colWidth, ImDrawList
     float sw = std::max(4.0f, diagW - mL - mR);
     float sh = std::max(4.0f, diagH - mT - mB);
 
-    dl->AddRectFilled(ImVec2(sx, sy), ImVec2(sx + sw, sy + sh),
-        CanvaPalette::ToU32(ImVec4(0.39f, 0.44f, 0.97f, 0.12f)));
-    dl->AddRect(ImVec2(sx, sy), ImVec2(sx + sw, sy + sh),
-        CanvaPalette::ToU32(ImVec4(0.39f, 0.44f, 0.97f, 0.65f)), 3.0f, 0, 1.2f);
+    ImU32 accentFill = CanvaPalette::ToU32(ImVec4(
+        CanvaPalette::Accent.x, CanvaPalette::Accent.y, CanvaPalette::Accent.z, 0.12f));
+    ImU32 accentLine = CanvaPalette::ToU32(ImVec4(
+        CanvaPalette::Accent.x, CanvaPalette::Accent.y, CanvaPalette::Accent.z, 0.65f));
 
-    // Etiquetas L T R B
+    dl->AddRectFilled(ImVec2(sx, sy), ImVec2(sx + sw, sy + sh), accentFill);
+    dl->AddRect(ImVec2(sx, sy), ImVec2(sx + sw, sy + sh), accentLine, 3.0f, 0, 1.2f);
+
+    // Etiquetas L T R B — la posicion ya las distingue, no hace falta un
+    // color distinto por margen.
     const char* marginSigns[] = { "L", "T", "R", "B" };
+    ImU32       labelCol      = CanvaPalette::ToU32(CanvaPalette::TextMuted);
 
     if (mL > 8.0f) {
         dl->AddText(ImGui::GetFont(), 10.0f,
             ImVec2(p.x + mL * 0.5f - 3.0f, p.y + diagH * 0.5f - 5.0f),
-            CanvaPalette::ToU32(s_MarginColors[0]), marginSigns[0]);
+            labelCol, marginSigns[0]);
     }
     if (mT > 8.0f) {
         dl->AddText(ImGui::GetFont(), 10.0f,
             ImVec2(p.x + diagW * 0.5f, p.y + mT * 0.3f),
-            CanvaPalette::ToU32(s_MarginColors[1]), marginSigns[1]);
+            labelCol, marginSigns[1]);
     }
     if (mR > 8.0f) {
         dl->AddText(ImGui::GetFont(), 10.0f,
             ImVec2(p.x + diagW - mR * 0.5f - 3.0f, p.y + diagH * 0.5f - 5.0f),
-            CanvaPalette::ToU32(s_MarginColors[2]), marginSigns[2]);
+            labelCol, marginSigns[2]);
     }
     if (mB > 8.0f) {
         dl->AddText(ImGui::GetFont(), 10.0f,
             ImVec2(p.x + diagW * 0.5f, p.y + diagH - mB * 0.6f),
-            CanvaPalette::ToU32(s_MarginColors[3]), marginSigns[3]);
+            labelCol, marginSigns[3]);
     }
 
     ImGui::Dummy(ImVec2(0.0f, diagH + 6.0f));

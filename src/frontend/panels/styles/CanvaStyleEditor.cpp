@@ -50,8 +50,8 @@ bool CanvaStyleEditor::PrimaryButton(const char* label, ImVec2 size) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CanvaPalette::AccentHov);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  CanvaPalette::AccentActive);
     ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 7.0f));
     bool clicked = ImGui::Button(label, size);
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
@@ -63,8 +63,8 @@ bool CanvaStyleEditor::GhostButton(const char* label, ImVec2 size) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CanvaPalette::Surface2);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.28f, 0.30f, 0.40f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Text,          CanvaPalette::Text);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 7.0f));
     bool clicked = ImGui::Button(label, size);
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
@@ -80,8 +80,8 @@ void CanvaStyleEditor::Badge(const char* label, ImVec4 color) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec4 bgColor = ImVec4(color.x * 0.20f, color.y * 0.20f, color.z * 0.20f, 1.0f);
     ImVec4 bdColor = ImVec4(color.x, color.y, color.z, 0.45f);
-    dl->AddRectFilled(p, rectMax, CanvaPalette::ToU32(bgColor), 6.0f);
-    dl->AddRect(p, rectMax, CanvaPalette::ToU32(bdColor), 6.0f, 0, 1.2f);
+    dl->AddRectFilled(p, rectMax, CanvaPalette::ToU32(bgColor), 4.0f);
+    dl->AddRect(p, rectMax, CanvaPalette::ToU32(bdColor), 4.0f, 0, 1.0f);
 
     ImGui::SetCursorScreenPos(ImVec2(p.x + px, p.y + py));
     ImGui::PushStyleColor(ImGuiCol_Text, color);
@@ -119,7 +119,7 @@ void CanvaStyleEditor::SegmentedButtons(const char* prefix,
         ImGui::PushStyleColor(ImGuiCol_Button,        active ? bgActive : CanvaPalette::Surface1);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CanvaPalette::Surface2);
         ImGui::PushStyleColor(ImGuiCol_Text,          active ? activeColor : CanvaPalette::TextMuted);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
 
         // FIXED: ID = visible label + "##" + prefix + index
@@ -204,8 +204,8 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
         ImGui::SetNextWindowSizeConstraints(ImVec2(860.0f, 600.0f), ImVec2(1200.0f, 900.0f));
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, CanvaPalette::Surface0);
-        ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.22f, 0.23f, 0.32f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 14.0f);
+        ImGui::PushStyleColor(ImGuiCol_Border,   CanvaPalette::Border);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(0.0f, 0.0f));
 
         constexpr ImGuiWindowFlags kEditorFlags =
@@ -246,29 +246,27 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
         ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
+            // Un solo acento para las 4 pestañas (antes cada una tenia su
+            // propio color/hue — look "confeti" que no calzaba con el resto
+            // de la app, donde el estado activo se marca con brillo/barra,
+            // no con un color distinto por seccion).
             const char* tabLabels[] = { "Tipografia", "Alineacion", "Margenes", "Efectos" };
-            const ImVec4 tabColors[] = {
-                CanvaPalette::Accent,
-                CanvaPalette::Green,
-                CanvaPalette::Gold,
-                CanvaPalette::Pink
-            };
+
+            ImVec4 bgActive = ImVec4(
+                CanvaPalette::Accent.x * 0.20f,
+                CanvaPalette::Accent.y * 0.20f,
+                CanvaPalette::Accent.z * 0.42f,
+                1.0f);
 
             for (int t = 0; t < 4; t++) {
                 if (t > 0) ImGui::SameLine(0.0f, 4.0f);
                 bool active = (m_ActiveTab == t);
                 float tW    = (kColLeft - 4.0f * 3.0f) / 4.0f;
 
-                ImVec4 bgActive = ImVec4(
-                    tabColors[t].x * 0.20f,
-                    tabColors[t].y * 0.20f,
-                    tabColors[t].z * 0.42f,
-                    1.0f);
-
                 ImGui::PushStyleColor(ImGuiCol_Button,        active ? bgActive : CanvaPalette::Surface1);
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CanvaPalette::Surface2);
-                ImGui::PushStyleColor(ImGuiCol_Text,          active ? tabColors[t] : CanvaPalette::TextMuted);
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text,          active ? CanvaPalette::Accent : CanvaPalette::TextMuted);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
 
                 // FIXED: Tab IDs use index suffix to guarantee uniqueness
@@ -282,7 +280,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
                     dl->AddLine(
                         ImVec2(btnMin.x + 6.0f, btnMax.y - 1.0f),
                         ImVec2(btnMax.x - 6.0f, btnMax.y - 1.0f),
-                        CanvaPalette::ToU32(tabColors[t]), 2.0f);
+                        CanvaPalette::ToU32(CanvaPalette::Accent), 2.0f);
                 }
 
                 ImGui::PopStyleVar(2);
@@ -306,7 +304,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
         ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH + kColLeft + kColGap, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
-            Badge("PREVIEW EN VIVO", CanvaPalette::Pink);
+            Badge("PREVIEW EN VIVO", CanvaPalette::Accent);
             ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
             float previewW    = colRight;
@@ -324,7 +322,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
             ImGui::PopStyleColor();
 
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
-            ImGui::PushStyleColor(ImGuiCol_CheckMark, CanvaPalette::Pink);
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, CanvaPalette::Accent);
             ImGui::Checkbox("Texto largo de prueba", &m_LongPreview);
             ImGui::PopStyleColor();
         }
@@ -361,57 +359,35 @@ void CanvaStyleEditor::RenderActiveTab(float colWidth, float /*contentH*/,
 // ─────────────────────────────────────────────────────────────────────────────
 
 void CanvaStyleEditor::RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize) {
+    // Header plano de un solo tono + linea de acento fina abajo -- mismo
+    // lenguaje que el resto de la app (ver DrawStatusDot/DrawAccentLine en
+    // MonitorUIHelpers.cpp). Antes tenia un degrade multicolor + una fila de
+    // puntos de color duplicando la navegacion de pestañas de la columna
+    // izquierda; se saca esa navegacion redundante.
     const float kHeaderH = 60.0f;
 
-    dl->AddRectFilledMultiColor(
+    dl->AddRectFilled(
         winPos,
         ImVec2(winPos.x + winSize.x, winPos.y + kHeaderH),
-        CanvaPalette::ToU32(ImVec4(0.18f, 0.20f, 0.38f, 1.0f)),
-        CanvaPalette::ToU32(ImVec4(0.14f, 0.16f, 0.30f, 1.0f)),
-        CanvaPalette::ToU32(ImVec4(0.09f, 0.09f, 0.12f, 1.0f)),
-        CanvaPalette::ToU32(ImVec4(0.09f, 0.09f, 0.12f, 1.0f)));
+        CanvaPalette::ToU32(CanvaPalette::Surface1));
 
     float dotY = winPos.y + kHeaderH * 0.5f;
-    dl->AddCircleFilled(ImVec2(winPos.x + 28.0f, dotY), 7.0f,
+    dl->AddCircleFilled(ImVec2(winPos.x + 28.0f, dotY), 4.0f,
         CanvaPalette::ToU32(CanvaPalette::Accent));
-    dl->AddCircleFilled(ImVec2(winPos.x + 28.0f, dotY), 3.5f,
-        IM_COL32(255, 255, 255, 210));
 
     std::string title = m_IsEditingExisting
         ? (std::string("Editar estilo — ") + m_Name)
         : "Nuevo estilo de texto";
 
     dl->AddText(ImGui::GetFont(), 15.0f,
-        ImVec2(winPos.x + 46.0f, winPos.y + (kHeaderH - 15.0f) * 0.5f),
+        ImVec2(winPos.x + 44.0f, winPos.y + (kHeaderH - 15.0f) * 0.5f),
         CanvaPalette::ToU32(CanvaPalette::Text),
         title.c_str());
 
-    const ImVec4 tabColors[] = { CanvaPalette::Accent, CanvaPalette::Green, CanvaPalette::Gold, CanvaPalette::Pink };
-    const char*  tabNames[]  = { "Tipografia", "Alineacion", "Margenes", "Efectos" };
-    float indicatorX         = winSize.x - 400.0f;
-
-    for (int t = 0; t < 4; t++) {
-        bool  active = (m_ActiveTab == t);
-        float cx     = winPos.x + indicatorX + t * 90.0f + 50.0f;
-        float cy     = dotY;
-
-        dl->AddCircleFilled(ImVec2(cx - 22.0f, cy),
-            active ? 5.0f : 3.5f,
-            CanvaPalette::ToU32(active
-                ? tabColors[t]
-                : ImVec4(tabColors[t].x * 0.4f, tabColors[t].y * 0.4f,
-                          tabColors[t].z * 0.4f, 1.0f)));
-
-        dl->AddText(ImGui::GetFont(), 12.0f,
-            ImVec2(cx - 10.0f, cy - 6.0f),
-            CanvaPalette::ToU32(active ? tabColors[t] : CanvaPalette::TextMuted),
-            tabNames[t]);
-    }
-
     dl->AddLine(
-        ImVec2(winPos.x, winPos.y + kHeaderH),
-        ImVec2(winPos.x + winSize.x, winPos.y + kHeaderH),
-        CanvaPalette::ToU32(CanvaPalette::Border), 1.0f);
+        ImVec2(winPos.x, winPos.y + kHeaderH - 1.0f),
+        ImVec2(winPos.x + winSize.x, winPos.y + kHeaderH - 1.0f),
+        CanvaPalette::ToU32(ImVec4(CanvaPalette::Accent.x, CanvaPalette::Accent.y, CanvaPalette::Accent.z, 0.35f)), 1.5f);
 
     ImGui::Dummy(ImVec2(0.0f, kHeaderH));
 }
@@ -422,9 +398,9 @@ void CanvaStyleEditor::RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSiz
 
 void CanvaStyleEditor::RenderPreview(ImVec2 pos, ImVec2 sz, ImDrawList* dl) {
     dl->AddRectFilled(pos, ImVec2(pos.x + sz.x, pos.y + sz.y),
-        CanvaPalette::ToU32(ImVec4(0.04f, 0.04f, 0.06f, 1.0f)), 10.0f);
+        CanvaPalette::ToU32(ImVec4(0.04f, 0.04f, 0.06f, 1.0f)), 6.0f);
     dl->AddRect(pos, ImVec2(pos.x + sz.x, pos.y + sz.y),
-        CanvaPalette::ToU32(CanvaPalette::Border), 10.0f, 0, 1.0f);
+        CanvaPalette::ToU32(CanvaPalette::Border), 6.0f, 0, 1.0f);
 
     float sc = sz.x / 1920.0f;
     float mL = m_Data.margins[0] * sc;
@@ -531,7 +507,7 @@ void CanvaStyleEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        CanvaPalette::Surface1);
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, CanvaPalette::Surface2);
     ImGui::PushStyleColor(ImGuiCol_Text,           CanvaPalette::Text);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
     ImGui::SetNextItemWidth(240.0f);
     ImGui::InputText("##styleNameInput", m_Name, sizeof(m_Name));
     ImGui::PopStyleVar();

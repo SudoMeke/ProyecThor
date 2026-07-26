@@ -66,11 +66,11 @@ inline constexpr float k_RLg        = 10.0f;
 inline constexpr float k_Pad        = 6.0f;
 inline constexpr float k_PadLg      = 10.0f;
 inline constexpr float k_Gap        = 5.0f;
-inline constexpr float k_ControlsH  = 310.0f;
-inline constexpr float k_TransportH = 30.0f;
+inline constexpr float k_ControlsH  = 150.0f;
+inline constexpr float k_TransportH = 26.0f;
 inline constexpr float k_VolumeH    = 24.0f;
 inline constexpr float k_Meters_H   = 48.0f;
-inline constexpr float k_CenterW    = 100.0f;
+inline constexpr float k_CenterW    = 86.0f;
 
 // Recalcula la paleta de MonitorView a partir del tema activo.
 void Sync(const ProyecThor::Settings::ThemeSettings& theme);

@@ -20,8 +20,8 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
         : CanvaPalette::ToU32(CanvaPalette::Surface1);
     ImU32 border = enabled ? CanvaPalette::ToU32(accent) : CanvaPalette::ToU32(CanvaPalette::Border);
 
-    dl->AddRectFilled(p0, p1, bg, 8.0f);
-    dl->AddRect(p0, p1, border, 8.0f, 0, enabled ? 1.4f : 1.0f);
+    dl->AddRectFilled(p0, p1, bg, 5.0f);
+    dl->AddRect(p0, p1, border, 5.0f, 0, enabled ? 1.4f : 1.0f);
 
     // Titulo
     ImGui::SetCursorScreenPos({ p0.x + 12.0f, p0.y + 10.0f });
@@ -69,7 +69,7 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
 
 void TabEffects::Render(StyleData& data, float colWidth) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    CanvaStyleEditor::Badge("EFECTOS DE TEXTO", CanvaPalette::Pink);
+    CanvaStyleEditor::Badge("EFECTOS DE TEXTO", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     CanvaStyleEditor::SectionLabel("Capas dibujadas sobre las letras, de atras hacia adelante.");
@@ -77,26 +77,29 @@ void TabEffects::Render(StyleData& data, float colWidth) {
 
     auto& fx = data.effects;
 
-    RenderEffectCard("Fondo", CanvaPalette::Gold, colWidth,
+    // Las 7 tarjetas usan el mismo acento -- antes cada una tenia su propio
+    // hue (Gold/TextMuted/Red/Green/cyan/Pink), look "confeti" que no
+    // calzaba con el resto de la app; el titulo ya distingue cada efecto.
+    RenderEffectCard("Fondo", CanvaPalette::Accent, colWidth,
                       fx.bgEnabled, fx.bgColor, nullptr, nullptr);
 
     RenderEffectCard("Borde", CanvaPalette::Accent, colWidth,
                       fx.borderEnabled, fx.borderColor, &fx.borderWidth, "Grosor");
 
-    RenderEffectCard("Sombra", CanvaPalette::TextMuted, colWidth,
+    RenderEffectCard("Sombra", CanvaPalette::Accent, colWidth,
                       fx.shadowEnabled, fx.shadowColor, &fx.shadowIntensity, "Distancia");
 
-    RenderEffectCard("Aberracion cromatica", CanvaPalette::Red, colWidth,
+    RenderEffectCard("Aberracion cromatica", CanvaPalette::Accent, colWidth,
                       fx.chromaticAberrationEnabled, nullptr,
                       &fx.chromaticAberrationIntensity, "Intensidad");
 
-    RenderEffectCard("Glow (bloom)", CanvaPalette::Green, colWidth,
+    RenderEffectCard("Glow (bloom)", CanvaPalette::Accent, colWidth,
                       fx.glowEnabled, fx.glowColor, &fx.glowIntensity, "Intensidad");
 
-    RenderEffectCard("Neon", ImVec4(0.15f, 0.9f, 1.0f, 1.0f), colWidth,
+    RenderEffectCard("Neon", CanvaPalette::Accent, colWidth,
                       fx.neonEnabled, fx.neonColor, &fx.neonIntensity, "Intensidad");
 
-    RenderEffectCard("Subrayado", CanvaPalette::Pink, colWidth,
+    RenderEffectCard("Subrayado", CanvaPalette::Accent, colWidth,
                       fx.underlineEnabled, fx.underlineColor, &fx.underlineThickness, "Grosor");
 }
 

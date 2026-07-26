@@ -86,11 +86,11 @@ void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
 
     const float importBtnH = 26.0f;
 
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.20f, 0.32f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.28f, 0.46f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f, 0.16f, 0.26f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        CanvaPalette::Surface1);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CanvaPalette::Surface2);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  CanvaPalette::AccentActive);
     ImGui::PushStyleColor(ImGuiCol_Text,          CanvaPalette::Accent);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 6.0f));
 
     if (ImGui::Button("+ Importar fuente", ImVec2(colWidth, importBtnH)))
@@ -139,8 +139,8 @@ void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
                                        : CanvaPalette::ToU32(CanvaPalette::Surface1);
         ImU32 border = selected ? CanvaPalette::ToU32(CanvaPalette::Accent) : CanvaPalette::ToU32(CanvaPalette::Border);
 
-        dl->AddRectFilled(p0, p1, bg, 6.0f);
-        dl->AddRect(p0, p1, border, 6.0f, 0, selected ? 1.6f : 1.0f);
+        dl->AddRectFilled(p0, p1, bg, 4.0f);
+        dl->AddRect(p0, p1, border, 4.0f, 0, selected ? 1.6f : 1.0f);
 
         ImFont* previewFont = core.GetImGuiFont(name, previewSz);
         ImU32   textCol     = CanvaPalette::ToU32(selected ? CanvaPalette::Accent : CanvaPalette::Text);

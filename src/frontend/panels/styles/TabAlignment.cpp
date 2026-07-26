@@ -6,9 +6,12 @@ namespace ProyecThor::UI {
 
 void TabAlignment::Render(StyleData& data, float colWidth, ImDrawList* /*dl*/) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    CanvaStyleEditor::Badge("ALINEACION", CanvaPalette::Green);
+    CanvaStyleEditor::Badge("ALINEACION", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
+    // Las 3 secciones usan el mismo acento -- antes cada una tenia su
+    // propio color (Accent/Green/Gold), look "confeti" innecesario ya que
+    // el titulo de cada seccion ya las distingue.
     RenderAlignSection("Base / Preview", "base",
                         CanvaPalette::Accent,
                         data.textAlignment, data.vAlignment, colWidth);
@@ -16,13 +19,13 @@ void TabAlignment::Render(StyleData& data, float colWidth, ImDrawList* /*dl*/) {
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
     RenderAlignSection("Canciones", "song",
-                        CanvaPalette::Green,
+                        CanvaPalette::Accent,
                         data.songTextAlignment, data.songVAlignment, colWidth);
 
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
     RenderAlignSection("Biblia", "bible",
-                        CanvaPalette::Gold,
+                        CanvaPalette::Accent,
                         data.bibleTextAlignment, data.bibleVAlignment, colWidth);
 }
 
