@@ -45,6 +45,7 @@ text.txt
 # ── IDEs / editores ───────────────────────────────────────────────────────────
 .vscode/
 .idea/
+.claude/
 *.user
 
 # ── Herramientas externas (cache local, nunca va a git) ──────────────────────
