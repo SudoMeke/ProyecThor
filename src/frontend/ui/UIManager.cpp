@@ -50,6 +50,14 @@ bool UIManager::Initialize(GLFWwindow* window)
     m_TransitionPanelOwned = std::make_shared<TransitionPanel>();
     m_TransitionPanel      = m_TransitionPanelOwned.get();
 
+    // Yggdrasil muestra Red/Chat/Streaming, pero no los posee (ver
+    // GetRedPanel/GetChatPanel/GetBroadcastPanel en UIManager.h) -- se
+    // cablean con la MISMA instancia aca. LibraryPanel/ViewToolsPanel se
+    // cablean aparte desde main.cpp (son externos a UIManager).
+    m_YggdrasilPanel.SetRedPanel(&m_Red);
+    m_YggdrasilPanel.SetChatPanel(&m_Chat);
+    m_YggdrasilPanel.SetBroadcastPanel(&m_Broadcast);
+
     ApplyProfessionalTheme();
     m_SettingsPanel.InitializeTheme();
 int fbWidth, fbHeight;

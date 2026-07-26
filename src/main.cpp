@@ -809,6 +809,9 @@ homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     ProyecThor::Core::PresentationCore::Get().SetAudioPanelRef(libraryPanel->GetAudioPanel());
     homePanel->m_UIManagerRef = &uiManager;
     libraryPanel->SetUIManager(&uiManager);
+    // Red tambien vive en Yggdrasil -- misma instancia (ver
+    // UIManager::GetRedPanel), nunca dos servidores independientes.
+    libraryPanel->SetStreamingPanelRef(&uiManager.GetRedPanel());
 
     uiManager.AddPanel(libraryPanel);
     uiManager.AddPanel(homePanel);
@@ -821,7 +824,11 @@ homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     // "Herramientas" — Control Overlays (antes dentro de ViewPanel) + Red/
     // Notas/Reloj (antes secciones de Home), agrupados en un hub propio
     // debajo de "Vista en Vivo" (ver UIManager::BeginDockspace/dock_right_*).
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewToolsPanel>(&uiManager));
+    auto viewToolsPanel = std::make_shared<ProyecThor::UI::ViewToolsPanel>(&uiManager);
+    // Chat tambien vive en Yggdrasil -- misma instancia (ver
+    // UIManager::GetChatPanel), nunca dos chats independientes.
+    viewToolsPanel->SetTeamChatPanelRef(&uiManager.GetChatPanel());
+    uiManager.AddPanel(viewToolsPanel);
 
     auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
     stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());

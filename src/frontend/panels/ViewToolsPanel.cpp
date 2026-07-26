@@ -10,6 +10,7 @@
 #include "backend/settings/SettingsManager.h"
 #include "MonitorTheme.h"
 #include "MonitorUIHelpers.h"
+#include "TeamChatPanel.h"
 #include <imgui.h>
 #include <string>
 #include <vector>
@@ -498,11 +499,12 @@ void ViewToolsPanel::Render()
         static const IconRailItem kItems[] = {
             { (int)ViewToolsSection::ControlOverlays, AppIcons::DrawIcon_Mixer,    "Overlays" },
             { (int)ViewToolsSection::QuickNotes,      HomeIcons::DrawIcon_Notepad, "Notas"    },
+            { (int)ViewToolsSection::Chat,             HomeIcons::DrawIcon_Chat,     "Chat"    },
             { (int)ViewToolsSection::Pads,             AppIcons::DrawIcon_Pads,      "Pads"    },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().viewTools;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 4, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (ViewToolsSection)currentIndex;
     }
 
@@ -538,6 +540,9 @@ void ViewToolsPanel::Render()
             RenderControlOverlays(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
             break;
         case ViewToolsSection::QuickNotes: m_QuickNotes.Render();                     break;
+        case ViewToolsSection::Chat:
+            if (m_TeamChatPanelRef) m_TeamChatPanelRef->RenderContent();
+            break;
         case ViewToolsSection::Pads:
             RenderPads(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
             break;
