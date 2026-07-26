@@ -9,9 +9,6 @@ void TabAlignment::Render(StyleData& data, float colWidth, ImDrawList* /*dl*/) {
     CanvaStyleEditor::Badge("ALINEACION", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
-    // Las 3 secciones usan el mismo acento -- antes cada una tenia su
-    // propio color (Accent/Green/Gold), look "confeti" innecesario ya que
-    // el titulo de cada seccion ya las distingue.
     RenderAlignSection("Base / Preview", "base",
                         CanvaPalette::Accent,
                         data.textAlignment, data.vAlignment, colWidth);
@@ -40,8 +37,6 @@ void TabAlignment::RenderAlignSection(const char* sectionTitle,
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    // FIXED: Use only the prefix (no visible label text) so IDs are unique
-    // across sections. SegmentedButtons appends "##index" internally.
     std::string hPrefix = std::string(idPrefix) + "_h";
     std::string vPrefix = std::string(idPrefix) + "_v";
 

@@ -69,12 +69,6 @@ static std::string ExtractJsonString(const std::string& json, const std::string&
     return json.substr(pos, end - pos);
 }
 
-// Busca dentro del array "assets" del release el asset llamado exactamente
-// assetName y devuelve su browser_download_url. Antes se tomaba a ciegas el
-// primer "browser_download_url" del JSON entero, lo cual dependia de que el
-// release tuviera un unico asset -- desde que se empaqueta con WiX (.msi) en
-// vez del .exe de Inno Setup, hace falta apuntar al asset correcto por
-// nombre (mismo criterio que GitHubRelease::ExtractAssetUrl).
 static std::string ExtractAssetDownloadUrl(const std::string& json, const std::string& assetName) {
     std::string marker = "\"name\": \"" + assetName + "\"";
     auto pos = json.find(marker);

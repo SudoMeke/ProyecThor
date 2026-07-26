@@ -265,13 +265,7 @@ void Hub::UpdateAnimations(float dt) {
     }
 }
 
-// ── "Que hay de nuevo" — carrusel que se muestra UNA vez por version nueva ──
-// Antes la unica forma de ver las novedades era abrir el modal de
-// "Actualizacion" y elegir la version en la lista (ver kUpdateRegistry) --
-// ahi la 0.5.0 quedaba mezclada con versiones viejas. Esto la separa: al
-// abrir ProyecThor con una version que todavia no se vio (comparado contra
-// general.dismissedChangelog, guardado en settings.json), aparece este
-// carrusel una sola vez con las novedades resumidas en varias tarjetas.
+// Carrusel de novedades — se muestra una vez por version nueva.
 void Hub::RenderWhatsNewIfNeeded() {
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
     if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) return;
@@ -339,7 +333,6 @@ void Hub::RenderWhatsNewIfNeeded() {
         ImGui::TextWrapped("%s", slide.body);
         ImGui::PopStyleColor();
 
-        // Puntos indicadores de progreso
         ImGui::SetCursorPosY(winSize.y - 96.0f);
         float dotsW = kSlideCount * 16.0f;
         ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
@@ -351,12 +344,9 @@ void Hub::RenderWhatsNewIfNeeded() {
         }
         ImGui::Dummy(ImVec2(dotsW, 14.0f));
 
-        // Fila de botones: Configuracion inicial (placeholder) | Anterior | Siguiente/Entendido | Saltar
         ImGui::SetCursorPosY(winSize.y - 60.0f);
 
         if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
-            // Todavia no hace nada -- punto de entrada reservado para un
-            // futuro asistente de primera configuracion.
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Proximamente");
@@ -1179,12 +1169,6 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            // ── Bloque de contenido condicional por versión ──────────────────
-            // Seis entradas: la 0.5.0 (mas reciente, todavia sin publicar),
-            // la 0.4.2, la 0.4.1, la 0.4.0, la 0.3.5 (estable, con TODO lo
-            // acumulado desde la 0.3.1 hasta la 0.3.5, incluidas las betas) y
-            // la 0.3.0 original. Cualquier otro id cae en el bloque "else" de
-            // la 0.3.0 por seguridad.
             if (selectedUpdateVer == 10) { // v0.5.0
                 Cat("Nueva seccion: Yggdrasil");
                 Bul("Toolbar nueva arriba de todo (Hub / Proyector / Yggdrasil / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");

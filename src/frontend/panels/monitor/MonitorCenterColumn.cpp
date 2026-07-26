@@ -9,20 +9,13 @@
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
 
-// =============================================================================
-//  MonitorCenterColumn.cpp
-//  Columna central con botones TRANSMITIR y LOOP. (Iconos Puros)
-//
-//  CONTENER/ESTIRAR se quito de aca -- ya vive a la derecha de ViewPanel,
-//  no hace falta duplicarlo en el Monitor.
-// =============================================================================
-
 namespace ProyecThor::UI {
 
 namespace MT = MonitorTheme;
 using namespace Design;
 using namespace Components;
 
+// Columna central: botones TRANSMITIR y LOOP.
 void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* previewPlayer)
 {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.0f, 0.0f, 0.0f, 0.0f });
@@ -32,9 +25,6 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
     const float hPad    = 8.0f;
     const float btnW    = w - hPad * 2.0f;
 
-    // Altos "ideales" -- si el alto disponible (h) no alcanza, se escalan
-    // proporcionalmente hacia abajo (con un piso minimo) en vez de
-    // desbordar/cortarse contra el borde del child (columna resizable).
     const float baseMainH   = 50.0f;
     const float baseLoopH   = 32.0f;
     const float baseSpacing = 8.0f;
@@ -49,7 +39,6 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
 
     ImGui::SetCursorPosY(startY);
 
-    // ── TRANSMITIR ────────────────────────────────────────────────────────────
     ImGui::SetCursorPosX(hPad);
     ImGui::PushID("btn_transmit");
     if (DrawIconButton("arrow_forward", mainH * 0.56f, MT::k_LiveBtn, MT::k_LiveBtnHov, MT::k_LiveBtnAct, { btnW, mainH }))
@@ -57,18 +46,10 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
         auto sel = Core::PresentationCore::Get().PeekSelection();
         if (!sel.title.empty())
         {
-            // FIX: sin Stop() previo (corte a negro) — SetVideo() ya
-            // maneja carga en frio o crossfade, y el guard de reentrancia
-            // en Play() necesita que no se le limpie la ruta actual en
-            // cada click repetido de "TRANSMITIR".
             std::string finalPath = sel.title;
             if (finalPath.rfind("http", 0) != 0)
                 finalPath = VideosPath() + finalPath;
 
-            // El target de mute/volumen se fija ANTES de proyectar. Asi
-            // BackgroundLayer lo guarda como estado propio y lo respeta en
-            // cualquier swap futuro (doble buffer, siguiente clip de cola),
-            // en vez de perderse si se tocara el player directo.
             Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
             Core::PresentationCore::Get().SetLiveVolume(
                 m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
@@ -90,12 +71,6 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + spacing);
 
-    // ── LOOP ──────────────────────────────────────────────────────────────────
-    // El estado vive en PresentationCore (GetLiveLoop/SetLiveLoop) en vez de
-    // un bool local: el enforcement (auto-restart al llegar al final) ahora
-    // corre en ViewPanel::RenderLiveTransport, junto al resto de los
-    // controles del player "general" — este boton y ese enforcement
-    // necesitan ver el mismo flag aunque vivan en clases distintas.
     bool loopEnabled = Core::PresentationCore::Get().GetLiveLoop();
     ImGui::SetCursorPosX(hPad);
     ImVec4 loopBase = loopEnabled ? MT::k_AmberBtn    : MT::k_NeutBtn;

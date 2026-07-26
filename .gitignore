@@ -9,11 +9,18 @@ cmake_install.cmake
 CTestTestfile.cmake
 Makefile
 generated/
+compile_commands.json
+.ninja_log
+.ninja_deps
 
 # ── Instaladores / paquetes generados ────────────────────────────────────────
 iss/installer_output/
 *.exe
 *.obj
+*.o
+*.pdb
+*.ilk
+*.exp
 *.pkg.tar.zst
 *.pkg.tar.xz
 *.deb
@@ -21,12 +28,11 @@ iss/installer_output/
 *.log
 *.msi
 *.wixpdb
+*.wixobj
 
 # ── Carpetas de distribución alternativa (si no van en el repo principal) ───
 web/
 lite/
-# ── Copia suelta de shaders en la raiz (leftover de builds viejos; el
-# codigo real vive en src/backend/shaders/, este NO) ─────────────────────────
 /shaders/
 
 # ── Recursos pesados que se distribuyen aparte, no en git ────────────────────
@@ -40,6 +46,15 @@ text.txt
 .vscode/
 .idea/
 *.user
+
+# ── Herramientas externas (cache local, nunca va a git) ──────────────────────
+.firebase/
+.cache/
+
+# ── Archivos del sistema operativo ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # ── Configuracion local del usuario (puede contener API keys, ej. Pexels) ────
 settings.json

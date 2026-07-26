@@ -20,13 +20,7 @@ namespace fs = std::filesystem;
 namespace ProyecThor::UI {
 
 #ifndef _WIN32
-// ─────────────────────────────────────────────────────────────────────────
-//  Selector de archivos para Linux/macOS.
-//  No existe un dialogo nativo unico en estos sistemas, asi que se delega
-//  en herramientas externas ampliamente disponibles (zenity/kdialog). Si
-//  ninguna esta instalada, se devuelve una cadena vacia (equivalente a que
-//  el usuario cancele el dialogo en Windows).
-// ─────────────────────────────────────────────────────────────────────────
+// Selector de archivos para Linux/macOS via zenity/kdialog.
 static std::string OpenFontFileDialogUnix() {
     const char* commands[] = {
         "zenity --file-selection --title=\"Seleccionar fuente\" "
@@ -45,7 +39,7 @@ static std::string OpenFontFileDialogUnix() {
             result += buffer.data();
 
         int status = pclose(pipe);
-        if (status != 0) continue; // el usuario cancelo o la herramienta no existe
+        if (status != 0) continue;
 
         while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
             result.pop_back();
@@ -100,10 +94,6 @@ void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
     ImGui::PopStyleColor(4);
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-    // ── Grid de fuentes con preview (en vez de una lista de nombres) ────
-    // Cada tarjeta dibuja el propio nombre CON esa fuente (todas ya estan
-    // precargadas en el atlas de ImGui, ver PresentationCore::LoadFontsIntoImGui
-    // -- cero costo extra de carga, solo un AddText con el ImFont de cada una).
     auto& core = Core::PresentationCore::Get();
 
     const int   cols     = 2;
@@ -183,7 +173,6 @@ void TabTypography::RenderColorPicker(StyleData& data, float colWidth) {
 }
 
 void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
-    // ── Tamanio principal ─────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::Text("Tamanio inicial   %.0f px", data.textSize);
     ImGui::PopStyleColor();
@@ -192,7 +181,6 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    // ── Tamanio de la referencia biblica ──────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::Text("Referencia (nombre + version)   %.0f px", data.refTextSize);
     ImGui::PopStyleColor();
@@ -201,7 +189,6 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    // ── Tamanio del cuerpo del versiculo ──────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::Text("Versiculo (cuerpo del texto)   %.0f px", data.verseTextSize);
     ImGui::PopStyleColor();
@@ -240,7 +227,6 @@ void TabTypography::ImportFont() {
     if (!GetOpenFileNameA(&ofn)) return;
     selectedPath = filename;
 #else
-    // En Linux delegamos en zenity/kdialog (ver OpenFontFileDialogUnix arriba).
     selectedPath = OpenFontFileDialogUnix();
     if (selectedPath.empty()) return;
 #endif

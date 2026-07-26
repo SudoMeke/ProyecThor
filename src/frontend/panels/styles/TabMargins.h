@@ -4,14 +4,11 @@
 
 namespace ProyecThor::UI {
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  TabMargins — contenido del tab "Margenes" del editor de estilos
-// ─────────────────────────────────────────────────────────────────────────────
+// TabMargins — tab "Margenes" del editor de estilos.
 class TabMargins {
 public:
     TabMargins() = default;
 
-    // Renderiza todo el contenido del tab dentro del child ya abierto
     void Render(StyleData& data, float colWidth, ImDrawList* dl);
 
 private:

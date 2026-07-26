@@ -15,10 +15,6 @@
 
 namespace ProyecThor::UI {
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  CanvaPalette — Sync()
-// ─────────────────────────────────────────────────────────────────────────────
-
 ImU32 CanvaPalette::ToU32(const ImVec4& c) {
     return ImGui::ColorConvertFloat4ToU32(c);
 }
@@ -40,10 +36,6 @@ void CanvaPalette::Sync(const ProyecThor::Settings::ThemeSettings& t) {
     Text         = CanvaV(t.textPrimary);
     TextMuted    = CanvaV(t.textDim);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers de widgets estilizados
-// ─────────────────────────────────────────────────────────────────────────────
 
 bool CanvaStyleEditor::PrimaryButton(const char* label, ImVec2 size) {
     ImGui::PushStyleColor(ImGuiCol_Button,        CanvaPalette::Accent);
@@ -96,9 +88,6 @@ void CanvaStyleEditor::SectionLabel(const char* label) {
     ImGui::PopStyleColor();
 }
 
-// FIXED: IDs are built as "prefix##index" — never include visible label text
-// in the ID string. This prevents collisions when multiple sections share
-// labels like "Centro" or "Arriba".
 void CanvaStyleEditor::SegmentedButtons(const char* prefix,
                                          const char** labels, int count, int* current,
                                          float totalWidth, float height,
@@ -122,10 +111,6 @@ void CanvaStyleEditor::SegmentedButtons(const char* prefix,
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
 
-        // FIXED: ID = visible label + "##" + prefix + index
-        // The "##" separator hides everything after it from the display,
-        // but the full string (including prefix+index) is used for hashing.
-        // This guarantees uniqueness across sections even if labels are identical.
         std::string id = std::string(labels[i])
                        + "##" + std::string(prefix)
                        + "_" + std::to_string(i);
@@ -137,10 +122,6 @@ void CanvaStyleEditor::SegmentedButtons(const char* prefix,
         ImGui::PopStyleColor(3);
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Constructor / Destructor
-// ─────────────────────────────────────────────────────────────────────────────
 
 CanvaStyleEditor::CanvaStyleEditor(std::vector<std::string>* fontList,
                                    OnFontImportedCallback    onFontImported)
@@ -155,10 +136,6 @@ CanvaStyleEditor::CanvaStyleEditor(std::vector<std::string>* fontList,
 }
 
 CanvaStyleEditor::~CanvaStyleEditor() = default;
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Apertura del editor
-// ─────────────────────────────────────────────────────────────────────────────
 
 void CanvaStyleEditor::OpenNew(const StyleData& defaults) {
     m_IsEditingExisting = false;
@@ -181,22 +158,12 @@ void CanvaStyleEditor::OpenEdit(const std::string& existingName, const StyleData
     m_Name[len] = '\0';
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Render principal
-// ─────────────────────────────────────────────────────────────────────────────
-
 bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
     if (!m_IsOpen) return false;
 
     bool open           = true;
     bool savedThisFrame = false;
 
-    // embedded=true: nada de ventana propia -- se dibuja adentro de la
-    // ventana que el caller ya tiene abierta (HomePanel llama esto desde
-    // dentro de su propio ImGui::Begin("Home"), asi el editor se siente
-    // "otra seccion de Library" en vez de un panel nuevo encima). El cierre
-    // sigue andando igual: el boton "Cancelar"/"Guardar" del footer pone
-    // m_IsOpen=false (ver RenderFooter), no depende de la X nativa de Begin.
     if (!embedded) {
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -242,14 +209,9 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
         float contentH       = winSize.y - kHeaderH - kFooterH - kPadH * 2.0f;
         const float tabH     = 32.0f;
 
-        // ── Columna izquierda ────────────────────────────────────────────
         ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
-            // Un solo acento para las 4 pestañas (antes cada una tenia su
-            // propio color/hue — look "confeti" que no calzaba con el resto
-            // de la app, donde el estado activo se marca con brillo/barra,
-            // no con un color distinto por seccion).
             const char* tabLabels[] = { "Tipografia", "Alineacion", "Margenes", "Efectos" };
 
             ImVec4 bgActive = ImVec4(
@@ -269,7 +231,6 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
 
-                // FIXED: Tab IDs use index suffix to guarantee uniqueness
                 std::string tabId = std::string(tabLabels[t]) + "##mainTab" + std::to_string(t);
                 if (ImGui::Button(tabId.c_str(), ImVec2(tW, tabH)))
                     m_ActiveTab = t;
@@ -300,7 +261,6 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
         }
         ImGui::EndGroup();
 
-        // ── Columna derecha: preview ─────────────────────────────────────
         ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH + kColLeft + kColGap, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
@@ -339,10 +299,6 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
     return savedThisFrame;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderActiveTab
-// ─────────────────────────────────────────────────────────────────────────────
-
 void CanvaStyleEditor::RenderActiveTab(float colWidth, float /*contentH*/,
                                         float /*tabH*/, ImDrawList* dl) {
     switch (m_ActiveTab) {
@@ -354,16 +310,7 @@ void CanvaStyleEditor::RenderActiveTab(float colWidth, float /*contentH*/,
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderHeader
-// ─────────────────────────────────────────────────────────────────────────────
-
 void CanvaStyleEditor::RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize) {
-    // Header plano de un solo tono + linea de acento fina abajo -- mismo
-    // lenguaje que el resto de la app (ver DrawStatusDot/DrawAccentLine en
-    // MonitorUIHelpers.cpp). Antes tenia un degrade multicolor + una fila de
-    // puntos de color duplicando la navegacion de pestañas de la columna
-    // izquierda; se saca esa navegacion redundante.
     const float kHeaderH = 60.0f;
 
     dl->AddRectFilled(
@@ -391,10 +338,6 @@ void CanvaStyleEditor::RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSiz
 
     ImGui::Dummy(ImVec2(0.0f, kHeaderH));
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderPreview
-// ─────────────────────────────────────────────────────────────────────────────
 
 void CanvaStyleEditor::RenderPreview(ImVec2 pos, ImVec2 sz, ImDrawList* dl) {
     dl->AddRectFilled(pos, ImVec2(pos.x + sz.x, pos.y + sz.y),
@@ -467,10 +410,6 @@ void CanvaStyleEditor::RenderPreview(ImVec2 pos, ImVec2 sz, ImDrawList* dl) {
         CanvaPalette::ToU32(CanvaPalette::TextMuted),
         "1920 x 1080");
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderFooter
-// ─────────────────────────────────────────────────────────────────────────────
 
 void CanvaStyleEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
                                      OnSaveCallback& onSave, bool& savedThisFrame) {

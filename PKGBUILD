@@ -27,8 +27,7 @@ arch=('x86_64')
 url="https://github.com/tuusuario/proyecthor"
 license=('custom')
 depends=('vlc' 'glfw-x11' 'mesa' 'glibc' 'gcc-libs' 'curl')
-optdepends=('yt-dlp: reproducir enlaces de YouTube directamente'
-            'foudrevue: editor profesional de Overlays (app hermana, opcional)')
+optdepends=('yt-dlp: reproducir enlaces de YouTube directamente')
 makedepends=('cmake' 'ninja' 'git' 'pkgconf')
 options=('!lto')
 source=()

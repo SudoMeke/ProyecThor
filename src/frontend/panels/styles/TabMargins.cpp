@@ -1,4 +1,3 @@
-
 #include "TabMargins.h"
 #include <imgui.h>
 #include <string>
@@ -6,10 +5,6 @@
 #include <cmath>
 
 namespace ProyecThor::UI {
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Render principal
-// ─────────────────────────────────────────────────────────────────────────────
 
 void TabMargins::Render(StyleData& data, float colWidth, ImDrawList* dl) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
@@ -29,10 +24,6 @@ void TabMargins::Render(StyleData& data, float colWidth, ImDrawList* dl) {
 
     RenderAutoScaleCheckbox(data);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Cuatro inputs de margen en grid 2x2
-// ─────────────────────────────────────────────────────────────────────────────
 
 void TabMargins::RenderMarginInputs(StyleData& data, float colWidth) {
     const char* marginNames[] = { "Izquierda", "Arriba", "Derecha", "Abajo" };
@@ -63,10 +54,6 @@ void TabMargins::RenderMarginInputs(StyleData& data, float colWidth) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Diagrama visual de margenes (rectangulo con zona segura)
-// ─────────────────────────────────────────────────────────────────────────────
-
 void TabMargins::RenderMarginDiagram(StyleData& data, float colWidth, ImDrawList* dl) {
     ImVec2 p    = ImGui::GetCursorScreenPos();
     float diagW = colWidth;
@@ -78,11 +65,9 @@ void TabMargins::RenderMarginDiagram(StyleData& data, float colWidth, ImDrawList
     float mR = data.margins[2] * scale;
     float mB = data.margins[3] * scale;
 
-    // Fondo de pantalla
     dl->AddRectFilled(p, ImVec2(p.x + diagW, p.y + diagH),
         CanvaPalette::ToU32(CanvaPalette::Surface1), 4.0f);
 
-    // Zona segura
     float sx = p.x + mL;
     float sy = p.y + mT;
     float sw = std::max(4.0f, diagW - mL - mR);
@@ -96,8 +81,6 @@ void TabMargins::RenderMarginDiagram(StyleData& data, float colWidth, ImDrawList
     dl->AddRectFilled(ImVec2(sx, sy), ImVec2(sx + sw, sy + sh), accentFill);
     dl->AddRect(ImVec2(sx, sy), ImVec2(sx + sw, sy + sh), accentLine, 3.0f, 0, 1.2f);
 
-    // Etiquetas L T R B — la posicion ya las distingue, no hace falta un
-    // color distinto por margen.
     const char* marginSigns[] = { "L", "T", "R", "B" };
     ImU32       labelCol      = CanvaPalette::ToU32(CanvaPalette::TextMuted);
 
@@ -124,10 +107,6 @@ void TabMargins::RenderMarginDiagram(StyleData& data, float colWidth, ImDrawList
 
     ImGui::Dummy(ImVec2(0.0f, diagH + 6.0f));
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Checkbox auto-escala (duplicado en el tab de tipografia, pero util aqui)
-// ─────────────────────────────────────────────────────────────────────────────
 
 void TabMargins::RenderAutoScaleCheckbox(StyleData& data) {
     ImGui::PushStyleColor(ImGuiCol_CheckMark,      CanvaPalette::Accent);

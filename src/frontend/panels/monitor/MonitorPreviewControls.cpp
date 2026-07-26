@@ -28,7 +28,6 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 
     const float innerW = w - MT::k_PadLg * 2.0f;
 
-    // ── Cabecera ──────────────────────────────────────────────────────────────
     {
         ImVec2 headerPos = ImGui::GetCursorScreenPos();
         DrawStatusDot(
@@ -90,9 +89,6 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 
     float gap = MT::k_Gap;
     float btnH = MT::k_TransportH;
-    // 5 botones en una sola fila (INICIO | -10s | PLAY/PAUSA | +10s | STOP) —
-    // el play/pausa ya no tiene fila propia: entra al centro de la barra de
-    // navegacion para ahorrar el alto de una fila completa.
     float navBtnW = (innerW - (gap * 4.0f)) / 5.0f;
     float iconSize = 14.0f;
 

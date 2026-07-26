@@ -23,13 +23,11 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
     dl->AddRectFilled(p0, p1, bg, 5.0f);
     dl->AddRect(p0, p1, border, 5.0f, 0, enabled ? 1.4f : 1.0f);
 
-    // Titulo
     ImGui::SetCursorScreenPos({ p0.x + 12.0f, p0.y + 10.0f });
     ImGui::PushStyleColor(ImGuiCol_Text, enabled ? accent : CanvaPalette::TextMuted);
     ImGui::TextUnformatted(title);
     ImGui::PopStyleColor();
 
-    // Toggle: checkbox chico arriba a la derecha de la tarjeta
     ImGui::SetCursorScreenPos({ p1.x - 34.0f, p0.y + 8.0f });
     ImGui::PushStyleColor(ImGuiCol_CheckMark,      accent);
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        CanvaPalette::Surface1);
@@ -56,12 +54,8 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
         DS::ModernSlider("##intensity", intensity, 0.0f, 1.0f, colWidth - 24.0f, CanvaPalette::ToU32(accent));
     }
 
-    // Los widgets de arriba (Checkbox/ColorEdit4/slider) se dibujaron en
-    // posiciones absolutas via SetCursorScreenPos, asi que el cursor
-    // "logico" de auto-layout quedo en cualquier lado -- hay que resetearlo
-    // a p0 y recien ahi someter un Dummy() del tamaño real de la tarjeta
-    // para que ImGui registre el limite correcto (ver aviso de Dear ImGui:
-    // "SetCursorPos sin un item despues no hace crecer la ventana/parent").
+    // Resetear cursor a p0 antes del Dummy final: los widgets de arriba se
+    // posicionaron con SetCursorScreenPos, asi que el auto-layout quedo desalineado.
     ImGui::SetCursorScreenPos(p0);
     ImGui::Dummy({ colWidth, cardH + 8.0f });
     ImGui::PopID();
@@ -77,9 +71,6 @@ void TabEffects::Render(StyleData& data, float colWidth) {
 
     auto& fx = data.effects;
 
-    // Las 7 tarjetas usan el mismo acento -- antes cada una tenia su propio
-    // hue (Gold/TextMuted/Red/Green/cyan/Pink), look "confeti" que no
-    // calzaba con el resto de la app; el titulo ya distingue cada efecto.
     RenderEffectCard("Fondo", CanvaPalette::Accent, colWidth,
                       fx.bgEnabled, fx.bgColor, nullptr, nullptr);
 

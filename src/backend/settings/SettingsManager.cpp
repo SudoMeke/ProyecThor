@@ -717,8 +717,6 @@ void SettingsManager::SaveSettings() {
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
 
-    j["foudrevue"]["releaseChannel"] = m_Settings.foudrevue.releaseChannel;
-
     j["theme"]["preset"]         = ThemePresetToKey(t.preset);
     j["theme"]["windowRounding"] = t.windowRounding;
     j["theme"]["frameRounding"]  = t.frameRounding;
@@ -1029,11 +1027,6 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
-        }
-
-        if (j.contains("foudrevue")) {
-            const auto& jf = j["foudrevue"];
-            m_Settings.foudrevue.releaseChannel = jf.value("releaseChannel", "stable");
         }
 
         if (j.contains("theme")) {
