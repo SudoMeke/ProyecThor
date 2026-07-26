@@ -13,10 +13,12 @@ namespace ProyecThor::UI {
 // ── YggdrasilPanel ───────────────────────────────────────────────────────────
 // El "arbol del mundo" que conecta ProyecThor con el resto: OSC (luces/
 // controladores externos), Red (transmision LAN), Chat y Streaming (RTMP,
-// con sus propios Capture/Layer/Iniciar), todo en un unico rail -- Red y
-// Chat vivian antes en Biblioteca/Herramientas, Streaming era su propio
-// modo de workspace; se combinaron aca porque son todas formas de conectar
-// ProyecThor con algo externo (mismo espiritu que el nombre "Yggdrasil").
+// con sus propios Capture/Layer/Iniciar), todo en un unico rail. Red/Chat
+// tambien siguen disponibles donde vivian antes (Biblioteca/Herramientas)
+// -- por eso NO son miembros propios aca, sino PUNTEROS a las instancias
+// que posee UIManager (ver SetRedPanel/SetChatPanel/SetBroadcastPanel,
+// cableado en main.cpp): la misma StreamingPanel/TeamChatPanel se muestra
+// en ambos lugares, nunca dos servidores/chats independientes.
 // Es su propio modo de workspace (ver WorkspaceMode en UIManager.h/
 // RenderAll), no un panel dockeado: al activarlo reemplaza TODO el
 // contenido de abajo, dibujando a pantalla completa (mismo criterio que
@@ -37,6 +39,10 @@ public:
 
     void        Render()  override;
     std::string GetName() const override { return "Yggdrasil"; }
+
+    void SetRedPanel(StreamingPanel* p)      { m_Red       = p; }
+    void SetChatPanel(TeamChatPanel* p)      { m_Chat       = p; }
+    void SetBroadcastPanel(BroadcastPanel* p) { m_Broadcast = p; }
 
 private:
     enum class Section { OSC, Red, Chat, Capture, Layer, Start };
@@ -65,12 +71,12 @@ private:
     int         m_LearningIndex = -1; // indice en m_Params en modo "Aprender"
     std::string m_ListenStatus;       // texto de estado de la escucha (error o "Escuchando en puerto N")
 
-    // Mudados desde LibraryPanel/ViewToolsPanel (ver comentario de arriba).
-    StreamingPanel m_Red;
-    TeamChatPanel  m_Chat;
-
-    // Streaming RTMP, antes su propio WorkspaceMode -- ver BroadcastPanel.h.
-    BroadcastPanel m_Broadcast;
+    // Punteros a las instancias que posee UIManager (ver comentario de
+    // arriba) -- nulos hasta que main.cpp los cablee con SetRedPanel/
+    // SetChatPanel/SetBroadcastPanel, justo despues de crear la UIManager.
+    StreamingPanel* m_Red       = nullptr;
+    TeamChatPanel*  m_Chat       = nullptr;
+    BroadcastPanel* m_Broadcast = nullptr;
 };
 
 } // namespace ProyecThor::UI

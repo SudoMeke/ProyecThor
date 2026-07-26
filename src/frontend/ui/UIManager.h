@@ -16,6 +16,9 @@
 #include "panels/YggdrasilPanel.h"
 #include "panels/LibraryManagerPanel.h"
 #include "panels/BibleFullscreenPanel.h"
+#include "panels/StreamingPanel.h"
+#include "panels/TeamChatPanel.h"
+#include "panels/BroadcastPanel.h"
 
 namespace ProyecThor::UI {
 
@@ -72,6 +75,17 @@ uint64_t m_LastTransitionTrigger = 0;
 
     void OpenHub();
 
+    // Red (LAN)/Chat/Streaming viven aca (no en Yggdrasil ni en Biblioteca/
+    // Herramientas) para que Update() corra SIEMPRE, sin importar el
+    // WorkspaceMode activo -- una transmision o el chat no se pueden pausar
+    // solo porque el operador esta mirando Proyector. Yggdrasil,
+    // LibraryPanel (grupo "Red") y ViewToolsPanel (pestaña "Chat") reciben
+    // un puntero a la MISMA instancia (ver main.cpp), asi que aparecen "en
+    // las dos partes" pero comparten un unico servidor de verdad.
+    StreamingPanel& GetRedPanel()      { return m_Red; }
+    TeamChatPanel&  GetChatPanel()     { return m_Chat; }
+    BroadcastPanel& GetBroadcastPanel() { return m_Broadcast; }
+
 private:
     void BeginDockspace();
     void EndDockspace();
@@ -84,6 +98,11 @@ private:
     YggdrasilPanel      m_YggdrasilPanel;
     LibraryManagerPanel m_LibraryManagerPanel;
     BibleFullscreenPanel m_BiblePanel;
+
+    // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel).
+    StreamingPanel m_Red;
+    TeamChatPanel  m_Chat;
+    BroadcastPanel m_Broadcast;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;

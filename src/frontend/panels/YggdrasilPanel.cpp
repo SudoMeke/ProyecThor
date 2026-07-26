@@ -383,14 +383,10 @@ void YggdrasilPanel::RenderOSCSection() {
 
 void YggdrasilPanel::Render() {
     ApplyReceivedMessages();
-
-    // Red y Chat comparten servidor/puerto (ver TeamChatPanel.h) y deben
-    // seguir corriendo sin importar que pestaña este activa -- mismo
-    // criterio que ya usaban en sus hogares anteriores (LibraryPanel/
-    // ViewToolsPanel).
-    m_Red.Update();
-    m_Chat.Update();
-    m_Broadcast.Update();
+    // Red/Chat/Streaming ya no se actualizan aca: UIManager les llama
+    // Update() de forma incondicional en cada frame (ver UIManager.h,
+    // GetRedPanel/GetChatPanel/GetBroadcastPanel), sin importar el
+    // WorkspaceMode activo.
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
@@ -427,12 +423,12 @@ void YggdrasilPanel::Render() {
     ImGui::BeginChild("##yggdrasilSection", ImVec2(0.0f, 0.0f));
 
     switch (m_Section) {
-        case Section::OSC:     RenderOSCSection();               break;
-        case Section::Red:     m_Red.RenderContent();             break;
-        case Section::Chat:    m_Chat.RenderContent();            break;
-        case Section::Capture: m_Broadcast.RenderCaptureSection(); break;
-        case Section::Layer:   m_Broadcast.RenderLayerSection();   break;
-        case Section::Start:   m_Broadcast.RenderStartSection();   break;
+        case Section::OSC:     RenderOSCSection();                                          break;
+        case Section::Red:     if (m_Red)       m_Red->RenderContent();                     break;
+        case Section::Chat:    if (m_Chat)      m_Chat->RenderContent();                    break;
+        case Section::Capture: if (m_Broadcast) m_Broadcast->RenderCaptureSection();        break;
+        case Section::Layer:   if (m_Broadcast) m_Broadcast->RenderLayerSection();          break;
+        case Section::Start:   if (m_Broadcast) m_Broadcast->RenderStartSection();          break;
     }
 
     ImGui::EndChild();

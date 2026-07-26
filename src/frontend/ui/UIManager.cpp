@@ -231,6 +231,14 @@ void UIManager::RenderAll()
             ToggleFullscreen();
     }
 
+    // Red/Chat/Streaming corren SIEMPRE, sin importar el WorkspaceMode
+    // activo (ver comentario de los getters en UIManager.h) -- si esto
+    // dependiera de estar en modo Yggdrasil, una transmision o el chat se
+    // pausarian solos apenas el operador volviera a Proyector.
+    m_Red.Update();
+    m_Chat.Update();
+    m_Broadcast.Update();
+
     // Toolbar de segundo nivel (Hub/Proyector/Streaming/Yggdrasil) — se
     // dibuja siempre, sea cual sea el modo activo, y reduce el area de
     // trabajo del viewport (ver RenderModeToolbar) para que lo que se

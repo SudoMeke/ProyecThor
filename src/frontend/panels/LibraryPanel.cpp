@@ -6,6 +6,7 @@
 #include "biblio/LibraryVideos.h"
 #include "biblio/LibraryDocuments.h"
 #include "biblio/LibraryModals.h"
+#include "StreamingPanel.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -517,7 +518,11 @@ void LibraryPanel::Render()
     {
         Library::LibraryContext ctx = BuildContext();
 
-        if (m_SideMode == LibrarySideMode::Clock)
+        if (m_SideMode == LibrarySideMode::Streaming)
+        {
+            if (m_StreamingPanelRef) m_StreamingPanelRef->RenderContent();
+        }
+        else if (m_SideMode == LibrarySideMode::Clock)
         {
             if (m_UIManagerRef) m_OClock.Render(m_UIManagerRef->GetGlassRenderer());
         }
