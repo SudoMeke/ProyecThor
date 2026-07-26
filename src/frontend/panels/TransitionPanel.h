@@ -17,7 +17,7 @@ enum class TransitionType
     SlideDown,
     CoverLeft,      // Entra por la derecha cubriendo al anterior
     CoverRight,     // Entra por la izquierda cubriendo al anterior
-    CoverUp,        // Entra desde abajo cubriendo al anterior
+    CoverUp,        // Entra desde abajo cubriendo al a interior
     CoverDown,      // Entra desde arriba cubriendo al anterior
     UncoverLeft,    // El anterior sale hacia la izquierda revelando el nuevo
     UncoverRight,   // El anterior sale hacia la derecha revelando el nuevo

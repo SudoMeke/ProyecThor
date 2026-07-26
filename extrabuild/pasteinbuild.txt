@@ -1,1 +1,0 @@
-Debes intalar VLC y colocar lua and plugins en esta seccion

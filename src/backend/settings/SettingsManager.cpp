@@ -370,11 +370,18 @@ void SettingsManager::ApplyProjection() {
 
     core.UpdateTextStyle(p.textSize, tc, p.textAlignment, p.vAlignment,
                           margins, p.autoScale, p.selectedFont);
+    {
+        Core::TextEffectsData fx;
+        Core::UnpackTextEffects(p.textEffectsPacked, fx);
+        core.SetTextEffects(fx);
+    }
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
     core.SetLoadingLogoPath(p.loadingLogoPath);
 
     core.SetFSREnabled(p.fsrEnabled);
     core.SetFSRSharpness(p.fsrSharpness);
+    core.SetNISEnabled(p.nisEnabled);
+    core.SetNISSharpness(p.nisSharpness);
     core.SetCRTEnabled(p.crtEnabled);
     core.SetCRTScanlineIntensity(p.crtScanlineIntensity);
     core.SetGrainEnabled(p.grainEnabled);
@@ -384,6 +391,25 @@ void SettingsManager::ApplyProjection() {
     core.SetSaturationAmount(p.saturationAmount);
     core.SetVignetteEnabled(p.vignetteEnabled);
     core.SetVignetteIntensity(p.vignetteIntensity);
+    core.SetBlurEnabled(p.blurEnabled);
+    core.SetBlurIntensity(p.blurIntensity);
+    core.SetSharpenEnabled(p.sharpenEnabled);
+    core.SetSharpenIntensity(p.sharpenIntensity);
+    core.SetBloomEnabled(p.bloomEnabled);
+    core.SetBloomIntensity(p.bloomIntensity);
+    core.SetChromaticAberrationEnabled(p.chromaticAberrationEnabled);
+    core.SetChromaticAberrationIntensity(p.chromaticAberrationIntensity);
+    core.SetVHSEnabled(p.vhsEnabled);
+    core.SetVHSIntensity(p.vhsIntensity);
+    core.SetCineEnabled(p.cineEnabled);
+    core.SetCineIntensity(p.cineIntensity);
+    core.SetCineTint(p.cineTint);
+    core.SetContrastEnabled(p.contrastEnabled);
+    core.SetContrastAmount(p.contrastAmount);
+    core.SetLuminosityEnabled(p.luminosityEnabled);
+    core.SetLuminosityAmount(p.luminosityAmount);
+    core.SetTAAEnabled(p.taaEnabled);
+    core.SetTAAIntensity(p.taaIntensity);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetVideoRenderEngine(p.videoRenderEngine);
@@ -514,6 +540,7 @@ void SettingsManager::SaveSettings() {
     j["projection"]["marginRight"]   = p.marginRight;
     j["projection"]["autoScale"]     = p.autoScale;
     j["projection"]["selectedFont"]  = p.selectedFont;
+    j["projection"]["textEffectsPacked"] = p.textEffectsPacked;
     j["projection"]["defaultBgR"]    = p.defaultBgR;
     j["projection"]["defaultBgG"]    = p.defaultBgG;
     j["projection"]["defaultBgB"]    = p.defaultBgB;
@@ -525,6 +552,8 @@ void SettingsManager::SaveSettings() {
     j["projection"]["loadingLogoPath"]    = p.loadingLogoPath;
     j["projection"]["fsrEnabled"]           = p.fsrEnabled;
     j["projection"]["fsrSharpness"]         = p.fsrSharpness;
+    j["projection"]["nisEnabled"]           = p.nisEnabled;
+    j["projection"]["nisSharpness"]         = p.nisSharpness;
     j["projection"]["crtEnabled"]           = p.crtEnabled;
     j["projection"]["crtScanlineIntensity"] = p.crtScanlineIntensity;
     j["projection"]["grainEnabled"]         = p.grainEnabled;
@@ -534,6 +563,25 @@ void SettingsManager::SaveSettings() {
     j["projection"]["saturationAmount"]     = p.saturationAmount;
     j["projection"]["vignetteEnabled"]      = p.vignetteEnabled;
     j["projection"]["vignetteIntensity"]    = p.vignetteIntensity;
+    j["projection"]["blurEnabled"]          = p.blurEnabled;
+    j["projection"]["blurIntensity"]        = p.blurIntensity;
+    j["projection"]["sharpenEnabled"]       = p.sharpenEnabled;
+    j["projection"]["sharpenIntensity"]     = p.sharpenIntensity;
+    j["projection"]["bloomEnabled"]         = p.bloomEnabled;
+    j["projection"]["bloomIntensity"]       = p.bloomIntensity;
+    j["projection"]["chromaticAberrationEnabled"]   = p.chromaticAberrationEnabled;
+    j["projection"]["chromaticAberrationIntensity"] = p.chromaticAberrationIntensity;
+    j["projection"]["vhsEnabled"]           = p.vhsEnabled;
+    j["projection"]["vhsIntensity"]         = p.vhsIntensity;
+    j["projection"]["cineEnabled"]          = p.cineEnabled;
+    j["projection"]["cineIntensity"]        = p.cineIntensity;
+    j["projection"]["cineTint"]             = p.cineTint;
+    j["projection"]["contrastEnabled"]      = p.contrastEnabled;
+    j["projection"]["contrastAmount"]       = p.contrastAmount;
+    j["projection"]["luminosityEnabled"]    = p.luminosityEnabled;
+    j["projection"]["luminosityAmount"]     = p.luminosityAmount;
+    j["projection"]["taaEnabled"]           = p.taaEnabled;
+    j["projection"]["taaIntensity"]         = p.taaIntensity;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
@@ -597,8 +645,14 @@ void SettingsManager::SaveSettings() {
         jc["x1"] = p.capture.x1; jc["y1"] = p.capture.y1;
         jc["opacity"] = p.capture.opacity;
 
-        jp["hasStyle"]  = p.hasStyle;
-        jp["styleName"] = p.styleName;
+        jp["hasStyle"]       = p.hasStyle;
+        jp["styleSize"]      = p.styleSize;
+        for (int c = 0; c < 4; c++) jp["styleColor"][c] = p.styleColor[c];
+        jp["styleHAlign"]    = p.styleHAlign;
+        jp["styleVAlign"]    = p.styleVAlign;
+        for (int c = 0; c < 4; c++) jp["styleMargins"][c] = p.styleMargins[c];
+        jp["styleAutoScale"] = p.styleAutoScale;
+        jp["styleFontName"]  = p.styleFontName;
         jp["bgType"]    = p.bgType;
         jp["bgPath"]    = p.bgPath;
         for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
@@ -608,6 +662,32 @@ void SettingsManager::SaveSettings() {
         jp["macroCueIndex"]    = p.macroCueIndex;
         jp["macroAutoAdvance"] = p.macroAutoAdvance;
     }
+
+    j["yggdrasil"]["targetIp"]   = m_Settings.yggdrasil.targetIp;
+    j["yggdrasil"]["targetPort"] = m_Settings.yggdrasil.targetPort;
+    j["yggdrasil"]["listenPort"] = m_Settings.yggdrasil.listenPort;
+    j["yggdrasil"]["autoListen"] = m_Settings.yggdrasil.autoListen;
+    for (size_t i = 0; i < m_Settings.yggdrasil.messages.size(); i++) {
+        const auto& m = m_Settings.yggdrasil.messages[i];
+        auto& jm = j["yggdrasil"]["messages"][i];
+        jm["label"]    = m.label;
+        jm["address"]  = m.address;
+        jm["argsText"] = m.argsText;
+        // lastSendOk/lastSentAt son de sesion, no se persisten a proposito.
+    }
+    for (size_t i = 0; i < m_Settings.yggdrasil.bindings.size(); i++) {
+        const auto& b = m_Settings.yggdrasil.bindings[i];
+        auto& jb = j["yggdrasil"]["bindings"][i];
+        jb["paramName"]  = b.paramName;
+        jb["oscAddress"] = b.oscAddress;
+    }
+
+    j["streaming"]["serverUrl"]        = m_Settings.streaming.serverUrl;
+    j["streaming"]["streamKey"]        = m_Settings.streaming.streamKey;
+    j["streaming"]["videoBitrateKbps"] = m_Settings.streaming.videoBitrateKbps;
+    j["streaming"]["fps"]              = m_Settings.streaming.fps;
+    j["streaming"]["width"]            = m_Settings.streaming.width;
+    j["streaming"]["height"]           = m_Settings.streaming.height;
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -625,6 +705,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
+    j["general"]["showModeToolbar"]     = m_Settings.general.showModeToolbar;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -635,8 +716,6 @@ void SettingsManager::SaveSettings() {
     j["updates"]["autoDownload"]   = m_Settings.updates.autoDownload;
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
-
-    j["foudrevue"]["releaseChannel"] = m_Settings.foudrevue.releaseChannel;
 
     j["theme"]["preset"]         = ThemePresetToKey(t.preset);
     j["theme"]["windowRounding"] = t.windowRounding;
@@ -694,6 +773,7 @@ void SettingsManager::LoadSettings() {
             p.marginRight   = jp.value("marginRight",   50.0f);
             p.autoScale     = jp.value("autoScale",     true);
             p.selectedFont  = jp.value("selectedFont",  "default");
+            p.textEffectsPacked = jp.value("textEffectsPacked", "");
             p.defaultBgR    = jp.value("defaultBgR",    0.0f);
             p.defaultBgG    = jp.value("defaultBgG",    0.0f);
             p.defaultBgB    = jp.value("defaultBgB",    0.0f);
@@ -705,6 +785,8 @@ void SettingsManager::LoadSettings() {
             p.loadingLogoPath    = jp.value("loadingLogoPath",    "");
             p.fsrEnabled            = jp.value("fsrEnabled",            true);
             p.fsrSharpness          = jp.value("fsrSharpness",          0.2f);
+            p.nisEnabled            = jp.value("nisEnabled",            false);
+            p.nisSharpness          = jp.value("nisSharpness",          0.5f);
             p.crtEnabled            = jp.value("crtEnabled",            false);
             p.crtScanlineIntensity  = jp.value("crtScanlineIntensity",  0.5f);
             p.grainEnabled          = jp.value("grainEnabled",          false);
@@ -714,6 +796,25 @@ void SettingsManager::LoadSettings() {
             p.saturationAmount      = jp.value("saturationAmount",      1.3f);
             p.vignetteEnabled       = jp.value("vignetteEnabled",       false);
             p.vignetteIntensity     = jp.value("vignetteIntensity",     0.45f);
+            p.blurEnabled           = jp.value("blurEnabled",           false);
+            p.blurIntensity         = jp.value("blurIntensity",         0.35f);
+            p.sharpenEnabled        = jp.value("sharpenEnabled",        false);
+            p.sharpenIntensity      = jp.value("sharpenIntensity",      0.35f);
+            p.bloomEnabled          = jp.value("bloomEnabled",          false);
+            p.bloomIntensity        = jp.value("bloomIntensity",        0.35f);
+            p.chromaticAberrationEnabled   = jp.value("chromaticAberrationEnabled",   false);
+            p.chromaticAberrationIntensity = jp.value("chromaticAberrationIntensity", 0.35f);
+            p.vhsEnabled            = jp.value("vhsEnabled",            false);
+            p.vhsIntensity          = jp.value("vhsIntensity",          0.5f);
+            p.cineEnabled           = jp.value("cineEnabled",           false);
+            p.cineIntensity         = jp.value("cineIntensity",         0.5f);
+            p.cineTint              = jp.value("cineTint",              0);
+            p.contrastEnabled       = jp.value("contrastEnabled",       false);
+            p.contrastAmount        = jp.value("contrastAmount",        1.3f);
+            p.luminosityEnabled     = jp.value("luminosityEnabled",     false);
+            p.luminosityAmount      = jp.value("luminosityAmount",      1.2f);
+            p.taaEnabled            = jp.value("taaEnabled",            false);
+            p.taaIntensity          = jp.value("taaIntensity",          0.5f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
@@ -801,6 +902,44 @@ void SettingsManager::LoadSettings() {
             }
         }
 
+        if (j.contains("streaming")) {
+            const auto& js = j["streaming"];
+            m_Settings.streaming.serverUrl        = js.value("serverUrl", "rtmp://");
+            m_Settings.streaming.streamKey        = js.value("streamKey", "");
+            m_Settings.streaming.videoBitrateKbps = js.value("videoBitrateKbps", 4500);
+            m_Settings.streaming.fps              = js.value("fps", 30);
+            m_Settings.streaming.width            = js.value("width", 1280);
+            m_Settings.streaming.height           = js.value("height", 720);
+        }
+
+        if (j.contains("yggdrasil")) {
+            const auto& jy = j["yggdrasil"];
+            m_Settings.yggdrasil.targetIp   = jy.value("targetIp",   "127.0.0.1");
+            m_Settings.yggdrasil.targetPort = jy.value("targetPort", 9000);
+            m_Settings.yggdrasil.listenPort = jy.value("listenPort", 9001);
+            m_Settings.yggdrasil.autoListen = jy.value("autoListen", false);
+            m_Settings.yggdrasil.messages.clear();
+            if (jy.contains("messages") && jy["messages"].is_array()) {
+                for (const auto& jm : jy["messages"]) {
+                    OSCMessageDef m;
+                    m.label    = jm.value("label",    "Luz 1");
+                    m.address  = jm.value("address",  "/cue/1");
+                    m.argsText = jm.value("argsText", "");
+                    m_Settings.yggdrasil.messages.push_back(m);
+                }
+            }
+            m_Settings.yggdrasil.bindings.clear();
+            if (jy.contains("bindings") && jy["bindings"].is_array()) {
+                for (const auto& jb : jy["bindings"]) {
+                    OSCBinding b;
+                    b.paramName  = jb.value("paramName",  "");
+                    b.oscAddress = jb.value("oscAddress", "");
+                    if (!b.paramName.empty() && !b.oscAddress.empty())
+                        m_Settings.yggdrasil.bindings.push_back(b);
+                }
+            }
+        }
+
         if (j.contains("pads") && j["pads"].contains("pads") && j["pads"]["pads"].is_array()) {
             const auto& arr = j["pads"]["pads"];
             for (int i = 0; i < kPadCount && i < (int)arr.size(); i++) {
@@ -823,7 +962,21 @@ void SettingsManager::LoadSettings() {
                 }
 
                 p.hasStyle  = jp.value("hasStyle",  false);
-                p.styleName = jp.value("styleName", "");
+                p.styleSize = jp.value("styleSize", 60.0f);
+                if (jp.contains("styleColor") && jp["styleColor"].is_array()) {
+                    const auto& sc = jp["styleColor"];
+                    for (int c = 0; c < 4 && c < (int)sc.size(); c++)
+                        p.styleColor[c] = sc[c].get<float>();
+                }
+                p.styleHAlign = jp.value("styleHAlign", 1);
+                p.styleVAlign = jp.value("styleVAlign", 1);
+                if (jp.contains("styleMargins") && jp["styleMargins"].is_array()) {
+                    const auto& sm = jp["styleMargins"];
+                    for (int c = 0; c < 4 && c < (int)sm.size(); c++)
+                        p.styleMargins[c] = sm[c].get<float>();
+                }
+                p.styleAutoScale = jp.value("styleAutoScale", true);
+                p.styleFontName  = jp.value("styleFontName", "Predeterminada");
                 p.bgType    = jp.value("bgType",    0);
                 p.bgPath    = jp.value("bgPath",    "");
                 if (jp.contains("bgColor") && jp["bgColor"].is_array()) {
@@ -857,6 +1010,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
+            m_Settings.general.showModeToolbar      = jg.value("showModeToolbar",      false);
         }
 
         if (j.contains("audio")) {
@@ -873,11 +1027,6 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
-        }
-
-        if (j.contains("foudrevue")) {
-            const auto& jf = j["foudrevue"];
-            m_Settings.foudrevue.releaseChannel = jf.value("releaseChannel", "stable");
         }
 
         if (j.contains("theme")) {

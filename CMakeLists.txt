@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.4.1
+    VERSION 0.5.0
     LANGUAGES C CXX
 )
 
@@ -22,12 +22,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
-# PROYECTHOR_BUILD_NUMBER: "local" en builds de desarrollo (scripts/build.sh);
-# CI (.github/workflows/build.yml) lo pisa con -DPROYECTHOR_BUILD_NUMBER=<github.run_number>,
-# un numero que aumenta solo con cada build de GitHub Actions. Se muestra en
-# el splash (ver src/main.cpp) junto a la version.
-set(PROYECTHOR_BUILD_NUMBER "local" CACHE STRING "Numero de build (lo inyecta CI)")
-
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"
     "${CMAKE_BINARY_DIR}/generated/Version.h"
@@ -52,21 +46,6 @@ FetchContent_Declare(
     GIT_TAG 0.9.9.8
 )
 FetchContent_MakeAvailable(glm)
-
-# ── 1b. FOUDREVUE (app hermana, editor de overlays) ──────────────────────────
-# Vive como submodulo en la raiz (carpeta FoudreVue/, repo propio en
-# github.com/TheVixcho/FoudreVue). Se compila junto a ProyecThor como un
-# ejecutable aparte (target "FoudreVue"), no como libreria: cada app sigue
-# siendo standalone, solo comparten build system para facilitar desarrollo
-# en conjunto ("git submodule update --remote FoudreVue" trae los ultimos
-# cambios de la app hermana).
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FoudreVue/CMakeLists.txt")
-    add_subdirectory(FoudreVue)
-else()
-    message(WARNING
-        "FoudreVue/ no encontrado o vacio — corre 'git submodule update --init "
-        "--recursive' para traer el codigo de la app hermana.")
-endif()
 
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")

@@ -1,6 +1,7 @@
 #include <GL/glew.h>
 #include "UIManager.h"
 #include "backend/core/PresentationCore.h"
+#include "frontend/ui/TextEffectsRenderer.h"
 #include "backend/core/PerformanceGovernor.h"
 #include "../toolbar/ConfigPanel.h"
 #include "panels/HomePanel.h"
@@ -20,6 +21,10 @@
 #include "qrcodegen.hpp"
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/ProjectionQualityPresets.h"
+#include "AppIcons.h"
+#include "IconRail.h"
+#include "frontend/panels/home/HomeIcons.h"
+#include "biblio/LibraryIcons.h"
 #include "LiveContentRenderer.h"
 #include "LibrarySongs.h"
 #include <ctime>
@@ -44,6 +49,14 @@ bool UIManager::Initialize(GLFWwindow* window)
     // Crear el TransitionPanel aqui para que este disponible antes de AddPanel
     m_TransitionPanelOwned = std::make_shared<TransitionPanel>();
     m_TransitionPanel      = m_TransitionPanelOwned.get();
+
+    // Yggdrasil muestra Red/Chat/Streaming, pero no los posee (ver
+    // GetRedPanel/GetChatPanel/GetBroadcastPanel en UIManager.h) -- se
+    // cablean con la MISMA instancia aca. LibraryPanel/ViewToolsPanel se
+    // cablean aparte desde main.cpp (son externos a UIManager).
+    m_YggdrasilPanel.SetRedPanel(&m_Red);
+    m_YggdrasilPanel.SetChatPanel(&m_Chat);
+    m_YggdrasilPanel.SetBroadcastPanel(&m_Broadcast);
 
     ApplyProfessionalTheme();
     m_SettingsPanel.InitializeTheme();
@@ -192,7 +205,7 @@ void UIManager::AddPanel(std::shared_ptr<IPanel> panel)
 void UIManager::OpenHub()
 {
     m_Hub.ForceOpen();
-    m_HubMode = true;
+    m_Mode = WorkspaceMode::Hub;
 }
 
 void UIManager::RequestSettings()
@@ -225,14 +238,53 @@ void UIManager::RenderAll()
         if (ImGui::IsKeyPressed(ImGuiKey_F11, false))
             ToggleFullscreen();
     }
+
+    // Red/Chat/Streaming corren SIEMPRE, sin importar el WorkspaceMode
+    // activo (ver comentario de los getters en UIManager.h) -- si esto
+    // dependiera de estar en modo Yggdrasil, una transmision o el chat se
+    // pausarian solos apenas el operador volviera a Proyector.
+    m_Red.Update();
+    m_Chat.Update();
+    m_Broadcast.Update();
+
+    // Toolbar de segundo nivel (Hub/Proyector/Streaming/Yggdrasil) — se
+    // dibuja siempre, sea cual sea el modo activo, y reduce el area de
+    // trabajo del viewport (ver RenderModeToolbar) para que lo que se
+    // dibuje despues (Hub, dockspace o Yggdrasil) no quede tapado debajo.
+    RenderModeToolbar();
+
+    // ── Yggdrasil (OSC, Red, Chat y Streaming) ──────────────────────────────
+    if (m_Mode == WorkspaceMode::Yggdrasil)
+    {
+        m_YggdrasilPanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
+    // ── Biblioteca (ver/gestionar assets, sin proyectar) ────────────────────
+    if (m_Mode == WorkspaceMode::Biblioteca)
+    {
+        m_LibraryManagerPanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
+    // ── Biblia (el mismo BibleView de Home, a pantalla completa) ────────────
+    if (m_Mode == WorkspaceMode::Biblia)
+    {
+        m_BiblePanel.Render();
+        RenderMainMenuBar();
+        return;
+    }
+
     // ── Hub de inicio ────────────────────────────────────────────────────────
-if (m_HubMode)
+if (m_Mode == WorkspaceMode::Hub)
     {
         if (m_Hub.Render())
         {
             if (!m_Hub.SettingsRequested())
             {
-                m_HubMode     = false;
+                m_Mode        = WorkspaceMode::Projector;
                 m_ResetLayout = true;
             }
         }
@@ -604,8 +656,6 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             ImVec4(state.textColor[0], state.textColor[1],
                                    state.textColor[2], state.textColor[3] * alphaMult));
 
-                        ImU32 shadowCol = IM_COL32(0, 0, 0, static_cast<int>(220.0f * alphaMult));
-
                         bool isSong = (Core::PresentationCore::Get().PeekSelection().type
                                        == Core::ItemType::Song);
 
@@ -638,10 +688,9 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                                         targetFontSize, FLT_MAX, boxW, line.c_str());
                                     float lineX = boxX + (boxW - lineSize.x) * 0.5f;
 
-                                    drawList->AddText(activeFont, targetFontSize,
-                                        ImVec2(lineX + 3, currentY + 3), shadowCol, line.c_str());
-                                    drawList->AddText(activeFont, targetFontSize,
-                                        ImVec2(lineX, currentY), col, line.c_str());
+                                    DrawStyledText(drawList, activeFont, targetFontSize,
+                                        ImVec2(lineX, currentY), col, line.c_str(),
+                                        0.0f, screenScale, state.effects, alphaMult);
                                 }
 
                                 currentY += lineHeight;
@@ -664,12 +713,9 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             else if (state.vAlignment == 2)
                                 textY += (boxH - finalBlockSize.y);
 
-                            drawList->AddText(activeFont, targetFontSize,
-                                ImVec2(textX + 3, textY + 3), shadowCol,
-                                text.c_str(), nullptr, boxW);
-                            drawList->AddText(activeFont, targetFontSize,
-                                ImVec2(textX, textY), col,
-                                text.c_str(), nullptr, boxW);
+                            DrawStyledText(drawList, activeFont, targetFontSize,
+                                ImVec2(textX, textY), col, text.c_str(),
+                                boxW, screenScale, state.effects, alphaMult);
                         }
 
                         drawList->PopClipRect();
@@ -963,10 +1009,169 @@ void UIManager::ToggleFullscreen()
 }
 
 // ---------------------------------------------------------------------------
+// RenderModeToolbar
+// ---------------------------------------------------------------------------
+// Segunda toolbar, debajo del menu principal: 4 iconos que cambian el modo
+// completo del workspace (ver WorkspaceMode en UIManager.h) — no son
+// paneles dockeados, cada uno reemplaza TODO lo que se dibuja despues.
+// Reduce manualmente el area de trabajo del viewport (mismo mecanismo que
+// usa ImGui::BeginMainMenuBar internamente) para que el Hub/dockspace/
+// Yggdrasil que se dibuje a continuacion no quede tapado por esta barra.
+void UIManager::RenderModeToolbar()
+{
+    // Opcional (menu Vista > "Barra de modos...") y apagada por default:
+    // si esta apagada no se dibuja nada ni se reserva espacio -- el
+    // comportamiento queda identico al de antes de que esta barra existiera.
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    if (!general.showModeToolbar) return;
+
+    static const IconRailItem kItems[] = {
+        { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
+        { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
+        { (int)WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
+        { (int)WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
+        { (int)WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
+    };
+    static const float kColors[5][4] = {
+        { 0.55f, 0.60f, 0.68f, 1.0f }, // Hub
+        { 0.31f, 0.55f, 1.00f, 1.0f }, // Proyector
+        { 0.65f, 0.31f, 0.94f, 1.0f }, // Yggdrasil
+        { 0.35f, 0.80f, 0.55f, 1.0f }, // Biblioteca
+        { 0.86f, 0.67f, 0.16f, 1.0f }, // Biblia
+    };
+
+    ImGuiViewport* vp     = ImGui::GetMainViewport();
+    float          railH  = IconRailThickness(false);
+
+    ImGui::SetNextWindowPos(vp->WorkPos);
+    ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, railH));
+    ImGui::SetNextWindowViewport(vp->ID);
+
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove       |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("##ModeToolbar", nullptr, flags);
+    ImGui::PopStyleVar();
+
+    int currentIndex = (int)m_Mode;
+    RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, kColors);
+    WorkspaceMode newMode = (WorkspaceMode)currentIndex;
+    if (newMode != m_Mode)
+    {
+        m_Mode = newMode;
+        if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
+        if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+    }
+
+    ImGui::End();
+
+    // Reserva el alto de esta barra para lo que se dibuje despues en el
+    // mismo frame (Hub/dockspace/Yggdrasil ya leen vp->WorkPos/WorkSize).
+    vp->WorkPos.y  += railH;
+    vp->WorkSize.y -= railH;
+}
+
+// ---------------------------------------------------------------------------
 // RenderMainMenuBar
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// RenderQuickSwitcher
+// ---------------------------------------------------------------------------
+// Alt+Espacio: paleta flotante para saltar entre las 5 secciones del
+// workspace (Hub/Proyector/Streaming/Yggdrasil/Biblioteca) con las flechas
+// + Enter, sin depender de que la toolbar de modos este visible (ver
+// GeneralSettings::showModeToolbar) — funciona igual este prendida o no.
+void UIManager::RenderQuickSwitcher()
+{
+    struct QSItem { WorkspaceMode mode; DrawIconFn icon; const char* label; };
+    static const QSItem kItems[] = {
+        { WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
+        { WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
+        { WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
+        { WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
+        { WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
+    };
+    constexpr int kCount = 5;
+
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Space, false))
+    {
+        m_QuickSwitchOpen  = !m_QuickSwitchOpen;
+        for (int i = 0; i < kCount; i++)
+            if (kItems[i].mode == m_Mode) m_QuickSwitchIndex = i;
+    }
+    if (!m_QuickSwitchOpen) return;
+
+    auto Activate = [&](int idx) {
+        m_Mode = kItems[idx].mode;
+        if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
+        if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+        m_QuickSwitchOpen = false;
+    };
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) m_QuickSwitchOpen = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true))
+        m_QuickSwitchIndex = (m_QuickSwitchIndex + 1) % kCount;
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true))
+        m_QuickSwitchIndex = (m_QuickSwitchIndex + kCount - 1) % kCount;
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
+        Activate(m_QuickSwitchIndex);
+    if (!m_QuickSwitchOpen) return; // Enter/Escape ya lo cerraron este mismo frame
+
+    const ImVec2 winSize(340.0f, 44.0f + kCount * 42.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
+                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
+    ImGui::SetNextWindowSize(winSize);
+    ImGui::SetNextWindowFocus();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(10.0f, 10.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.070f, 0.075f, 0.100f, 0.97f));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.300f, 0.320f, 0.420f, 0.90f));
+
+    ImGui::Begin("##QuickSwitcher", &m_QuickSwitchOpen,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
+                 ImGuiWindowFlags_NoDocking    | ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoResize     | ImGuiWindowFlags_NoNav);
+
+    ImGui::TextDisabled("Ir a...   (flechas + Enter, Esc para cerrar)");
+    ImGui::Spacing();
+
+    for (int i = 0; i < kCount; i++)
+    {
+        bool sel = (i == m_QuickSwitchIndex);
+        ImGui::PushID(i);
+
+        ImVec2 rowPos = ImGui::GetCursorScreenPos();
+        const float rowH = 38.0f;
+
+        if (sel) ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.30f, 0.45f, 0.90f, 0.55f));
+        if (ImGui::Selectable("##qsRow", sel, 0, ImVec2(0.0f, rowH)))
+            Activate(i);
+        if (sel) ImGui::PopStyleColor();
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImU32 col = sel ? IM_COL32(255, 255, 255, 255) : IM_COL32(180, 182, 198, 255);
+        kItems[i].icon(dl, ImVec2(rowPos.x + 8.0f, rowPos.y + (rowH - 22.0f) * 0.5f), 22.0f, col);
+        dl->AddText(ImVec2(rowPos.x + 42.0f, rowPos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f),
+                    col, kItems[i].label);
+
+        ImGui::PopID();
+    }
+
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+}
+
 void UIManager::RenderMainMenuBar()
 {
+    RenderQuickSwitcher();
+
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(12.0f, 10.0f));
@@ -1058,6 +1263,14 @@ void UIManager::RenderMainMenuBar()
             if (ImGui::MenuItem("Botones de limpieza (Vista en Vivo)", nullptr, general.showViewQuickActions))
             {
                 general.showViewQuickActions = !general.showViewQuickActions;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+
+            // Toolbar de modos (Hub/Proyector/Streaming/Yggdrasil/Biblioteca)
+            // — opcional y apagada por default, ver GeneralSettings::showModeToolbar.
+            if (ImGui::MenuItem("Barra de modos (Streaming/Yggdrasil/Biblioteca)", nullptr, general.showModeToolbar))
+            {
+                general.showModeToolbar = !general.showModeToolbar;
                 ProyecThor::Settings::SettingsManager::Get().Save();
             }
 

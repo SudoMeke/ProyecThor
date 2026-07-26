@@ -89,6 +89,180 @@ ImVec4 Brighten(const ImVec4& c, float amount)
         c.w);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  DrawPadButton — pad cuadrado tipo controlador MIDI (Launchpad): color fijo
+//  por accion en vez del esquema neutro/rojo de DrawIconButton, con un halo
+//  de brillo cuando esta "encendido" (ej. Play mientras esta en vivo) para
+//  que se sienta como un boton fisico iluminado en vez de un icono chico
+//  sobre un rectangulo plano.
+// ─────────────────────────────────────────────────────────────────────────────
+bool DrawPadButton(const char* iconName, float iconSize, ImVec4 padColor, ImVec2 btnSize, bool lit,
+                    DrawIconFn vectorIcon = nullptr)
+{
+    ImVec4 offCol  = ImVec4(padColor.x * 0.30f, padColor.y * 0.30f, padColor.z * 0.30f, 1.0f);
+    ImVec4 baseCol = lit ? padColor : offCol;
+    ImVec4 hovCol  = Brighten(baseCol, 0.12f);
+    ImVec4 actCol  = Brighten(padColor, -0.10f);
+
+    ImGui::PushStyleColor(ImGuiCol_Button,        baseCol);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  hovCol);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,   actCol);
+    ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.0f, 1.0f, 1.0f, lit ? 0.40f : 0.10f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.3f);
+
+    ImVec2 p0      = ImGui::GetCursorScreenPos();
+    bool   pressed = ImGui::Button("", btnSize);
+    bool   isHeld  = ImGui::IsItemActive();
+    ImVec2 p1      = { p0.x + btnSize.x, p0.y + btnSize.y };
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Halo suave detras del icono cuando el pad esta prendido -- sensacion
+    // de luz interna en vez de un simple resaltado de hover.
+    if (lit)
+    {
+        ImVec2 center = { (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f };
+        dl->AddCircleFilled(center, btnSize.y * 0.55f,
+            ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.10f)), 24);
+    }
+
+    auto it = StyleGeneralApp::Icons.find(iconName);
+    bool hasTexture = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
+
+    float  offsetY = isHeld ? 2.0f : 0.0f;
+    ImVec2 center  = { (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f + offsetY };
+
+    // Guarda de textura: antes se le pasaba a AddImage un ImTextureID nulo
+    // cuando la textura no estaba cargada, y algunos backends lo dibujan
+    // como un icono de basura en vez de nada (ver captura del usuario en el
+    // pad de mute). Con vectorIcon como respaldo -- mismo criterio que
+    // QuickActionButton -- y si tampoco hay uno, se deja el pad solo con su
+    // color, sin icono, que es preferible a mostrar basura.
+    if (hasTexture)
+    {
+        dl->AddImage((ImTextureID)(intptr_t)it->second.textureID,
+            { center.x - iconSize * 0.5f, center.y - iconSize * 0.5f },
+            { center.x + iconSize * 0.5f, center.y + iconSize * 0.5f },
+            ImVec2(0, 0), ImVec2(1, 1),
+            IM_COL32(255, 255, 255, 255));
+    }
+    else if (vectorIcon)
+    {
+        ImVec2 origin = { center.x - iconSize * 0.5f, center.y - iconSize * 0.5f };
+        vectorIcon(dl, origin, iconSize, IM_COL32(255, 255, 255, 255));
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(4);
+    return pressed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HorizontalFader — deslizante estilo canal de mesa de sonido: surco angosto
+//  con marcas de escala + un "cap" vertical que se arrastra, en vez de un
+//  slider generico. Horizontal (no vertical): en este panel el ancho sobra
+//  pero el alto es escaso (fila baja y ancha debajo del video), asi que una
+//  columna vertical no entraba sin recortarse -- ver captura del usuario.
+//  Click/arrastre mapea directo la posicion X del mouse al valor (mismo
+//  criterio inmediato que DS::ModernSlider). Vive aca y no en
+//  MonitorUIHelpers porque por ahora solo lo pide este panel.
+// ─────────────────────────────────────────────────────────────────────────────
+bool HorizontalFader(const char* id, float* value, float lo, float hi, ImVec2 size,
+                      ImU32 trackCol, ImU32 fillCol, ImU32 capCol)
+{
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, size);
+    bool hovered = ImGui::IsItemHovered();
+    bool active  = ImGui::IsItemActive();
+    bool changed = false;
+
+    const float capW       = 14.0f;
+    const float trackLeft  = pos.x + capW * 0.5f;
+    const float trackRight = pos.x + size.x - capW * 0.5f;
+    const float trackWpx   = std::max(1.0f, trackRight - trackLeft);
+
+    if (active && ImGui::IsMouseDown(ImGuiMouseButton_Left) && hi > lo)
+    {
+        float t = std::clamp((ImGui::GetIO().MousePos.x - trackLeft) / trackWpx, 0.0f, 1.0f);
+        float newVal = lo + t * (hi - lo);
+        if (newVal != *value) { *value = newVal; changed = true; }
+    }
+
+    float frac = (hi > lo) ? std::clamp((*value - lo) / (hi - lo), 0.0f, 1.0f) : 0.0f;
+    float capX = trackLeft + frac * trackWpx;
+
+    ImDrawList* dl      = ImGui::GetWindowDrawList();
+    const float trackH  = 6.0f;
+    float       cy      = pos.y + size.y * 0.5f;
+
+    dl->AddRectFilled({ trackLeft, cy - trackH * 0.5f }, { trackRight, cy + trackH * 0.5f },
+                       trackCol, trackH * 0.5f);
+
+    if (capX - trackLeft > 0.5f)
+        dl->AddRectFilled({ trackLeft, cy - trackH * 0.5f }, { capX, cy + trackH * 0.5f },
+                           fillCol, trackH * 0.5f);
+
+    // Marcas de escala, como en una consola real.
+    for (int i = 0; i <= 4; i++)
+    {
+        float mx = trackLeft + trackWpx * (float)i / 4.0f;
+        dl->AddLine({ mx, cy - size.y * 0.30f }, { mx, cy - trackH * 0.7f },
+                     IM_COL32(255, 255, 255, 35), 1.0f);
+    }
+
+    float  capHalfH = size.y * 0.40f;
+    ImVec2 capMin   = { capX - capW * 0.5f, cy - capHalfH };
+    ImVec2 capMax   = { capX + capW * 0.5f, cy + capHalfH };
+    ImU32  capBody  = (hovered || active)
+        ? ImGui::GetColorU32(Brighten(ToVec4(capCol), 0.10f))
+        : capCol;
+
+    dl->AddRectFilled(capMin, capMax, capBody, 3.0f);
+    dl->AddRect(capMin, capMax, IM_COL32(0, 0, 0, 110), 3.0f, 0, 1.2f);
+    dl->AddLine({ capX, capMin.y + 4.0f }, { capX, capMax.y - 4.0f }, IM_COL32(0, 0, 0, 130), 1.5f);
+
+    return changed;
+}
+
+// Altavoz — para el pad de Mute del transporte. No hay textura
+// "volume_up"/"no_sound" cargada en StyleGeneralApp::Icons (el pad
+// terminaba pasandole un ImTextureID nulo a AddImage, que en este backend
+// se ve como basura -- ver captura del usuario). Caja + cono triangular a
+// mano, mismo criterio que DrawIcon_Disc/DrawIcon_Gear; una linea diagonal
+// en vez de las ondas de sonido cuando esta muteado.
+void DrawSpeakerShape(ImDrawList* dl, ImVec2 o, float sz, ImU32 col, bool muted)
+{
+    ImVec2 c = { o.x + sz * 0.5f, o.y + sz * 0.5f };
+
+    float  boxHalfH = sz * 0.16f;
+    ImVec2 boxMin   = { c.x - sz * 0.42f, c.y - boxHalfH };
+    ImVec2 boxMax   = { c.x - sz * 0.16f, c.y + boxHalfH };
+    dl->AddRectFilled(boxMin, boxMax, col, 1.0f);
+
+    ImVec2 apex    = { boxMax.x, c.y };
+    ImVec2 baseTop = { c.x + sz * 0.16f, c.y - sz * 0.34f };
+    ImVec2 baseBot = { c.x + sz * 0.16f, c.y + sz * 0.34f };
+    dl->AddTriangleFilled(apex, baseTop, baseBot, col);
+
+    if (muted)
+    {
+        dl->AddLine({ o.x + sz * 0.06f, o.y + sz * 0.94f },
+                    { o.x + sz * 0.94f, o.y + sz * 0.06f }, col, sz * 0.09f);
+    }
+    else
+    {
+        for (int i = 1; i <= 2; i++)
+        {
+            float r = sz * (0.14f + 0.13f * (float)i);
+            dl->PathArcTo({ c.x + sz * 0.10f, c.y }, r, -0.62f, 0.62f, 10);
+            dl->PathStroke(col, 0, sz * 0.055f);
+        }
+    }
+}
+void DrawIcon_SpeakerOn(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)    { DrawSpeakerShape(dl, o, sz, col, false); }
+void DrawIcon_SpeakerMuted(ImDrawList* dl, ImVec2 o, float sz, ImU32 col) { DrawSpeakerShape(dl, o, sz, col, true);  }
+
 // Disco/vinilo — para "Detener disco en vivo" (no hay textura "album" cargada
 // en StyleGeneralApp::Icons; se dibuja a mano con el mismo estilo geometrico
 // que HomeIcons::DrawIcon_Clock/DrawIcon_Broadcast en vez de agregar un PNG).
@@ -683,16 +857,39 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     DrawTimeRow(innerW, MT::k_PadLg, liveCurMs, liveLen);
     ImGui::Spacing();
 
-    // ── Fila unica: transporte + volumen (todo inline, hay ancho de sobra) ────
-    const float gap      = MT::k_Gap;
-    const float btnH     = MT::k_TransportH;
-    const float navBtnW  = 34.0f;
-    const float iconSize = 15.0f;
+    // ── Transporte (pads MIDI) + fader horizontal de volumen, en una fila ────
+    // Todo en una sola fila: pads de colores (estilo controlador MIDI, un
+    // color fijo por accion) + mute + fader. Se probo con el fader en una
+    // columna vertical a la derecha, pero en este panel el ancho sobra y el
+    // alto es el que esta justo (fila baja debajo del video) -- una columna
+    // vertical no entraba sin recortarse. Ademas, si el ancho disponible es
+    // chico (panel angosto, riel de acciones activado), los pads y el fader
+    // se ACHICAN en vez de cortarse: todo se calcula a partir de innerW en
+    // vez de usar tamaños fijos.
+    const float rowH      = std::clamp(ImGui::GetContentRegionAvail().y, 30.0f, 56.0f);
+    const float gap       = MT::k_Gap * 1.5f;
+    const float muteW     = std::clamp(rowH, 28.0f, 34.0f);
+    const float minFaderW = 50.0f;
+    const float minPad    = 26.0f;
+    const float maxPad    = rowH;
+
+    // 4 pads + mute + fader = 6 elementos => 5 espacios entre ellos.
+    const float gapsTotal = gap * 5.0f;
+    const float padSize   = std::clamp((innerW - gapsTotal - muteW - minFaderW) / 4.0f, minPad, maxPad);
+    const float faderW    = std::max(minFaderW, innerW - gapsTotal - muteW - padSize * 4.0f);
+
+    static const ImVec4 kAmber   = { 0.90f, 0.55f, 0.10f, 1.0f };
+    // Rojo vivo para Play/Pausa -- coherente con el resto del panel, donde
+    // rojo ya significa "en vivo" (PROGRAM - ON AIR, k_LiveAccent). Un poco
+    // mas brillante que el rojo de Stop para distinguirlos entre si.
+    static const ImVec4 kLiveRed = { 0.95f, 0.20f, 0.28f, 1.0f };
+    static const ImVec4 kBlue    = { 0.20f, 0.55f, 0.90f, 1.0f };
+    static const ImVec4 kRed     = { 0.80f, 0.16f, 0.16f, 1.0f };
 
     ImGui::SetCursorPosX(MT::k_PadLg);
 
-    ImGui::PushID("vp_btn_replay");
-    if (DrawIconButton("replay_10", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
+    ImGui::PushID("vp_pad_replay");
+    if (DrawPadButton("replay_10", padSize * 0.34f, kAmber, { padSize, padSize }, false)) {
         float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
         core.SetLivePosition(std::max(0.0f, np));
     }
@@ -700,8 +897,8 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     ImGui::SameLine(0.0f, gap);
 
     const char* mainIcon = m_LivePlaying ? "pause" : "play";
-    ImGui::PushID("vp_btn_main_transport");
-    if (DrawIconButton(mainIcon, 20.0f, MT::k_LiveBtn, MT::k_LiveBtnHov, MT::k_LiveBtnAct, {navBtnW * 1.6f, btnH}, m_LivePlaying)) {
+    ImGui::PushID("vp_pad_main");
+    if (DrawPadButton(mainIcon, padSize * 0.40f, kLiveRed, { padSize, padSize }, m_LivePlaying)) {
         if (bg) {
             if (m_LivePlaying) {
                 bg->SetPause(true);
@@ -715,28 +912,28 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
-    ImGui::PushID("vp_btn_fwd");
-    if (DrawIconButton("forward_10", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
+    ImGui::PushID("vp_pad_fwd");
+    if (DrawPadButton("forward_10", padSize * 0.34f, kBlue, { padSize, padSize }, false)) {
         float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
         core.SetLivePosition(std::min(1.0f, np));
     }
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
-    ImGui::PushID("vp_btn_stop");
-    if (DrawIconButton("stop", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
+    ImGui::PushID("vp_pad_stop");
+    if (DrawPadButton("stop", padSize * 0.34f, kRed, { padSize, padSize }, false)) {
         core.SetLivePosition(0.0f);
         if (bg) { bg->SetPosition(0.0f); bg->SetPause(true); }
     }
     ImGui::PopID();
-    ImGui::SameLine(0.0f, gap * 2.0f);
+    ImGui::SameLine(0.0f, gap);
 
-    bool isDanger = (m_LiveVolume > 1.0f);
-    ImVec4 volBtnBg = isDanger ? ImVec4(0.36f, 0.08f, 0.08f, 1.0f) : MT::k_NeutBtn;
-    const char* volIcon = m_LiveMuted ? "no_sound" : "volume_up";
+    bool        isDanger  = (m_LiveVolume > 1.0f);
+    DrawIconFn  speakerFn = m_LiveMuted ? DrawIcon_SpeakerMuted : DrawIcon_SpeakerOn;
 
-    ImGui::PushID("vp_btn_mute");
-    if (DrawIconButton(volIcon, iconSize, volBtnBg, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH}, m_LiveMuted)) {
+    ImGui::PushID("vp_pad_mute");
+    if (DrawPadButton(m_LiveMuted ? "no_sound" : "volume_up", muteW * 0.44f, kRed,
+                      { muteW, padSize }, m_LiveMuted, speakerFn)) {
         m_LiveMuted = !m_LiveMuted;
         core.SetLiveMute(m_LiveMuted);
         core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
@@ -744,12 +941,12 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
-    const float volSliderW = 130.0f;
-    ImVec4 slBg   = isDanger ? ImVec4(0.36f, 0.08f, 0.08f, 1.0f) : MT::k_NeutBtn;
-    ImVec4 slGrab = isDanger ? ImVec4(0.92f, 0.20f, 0.20f, 1.0f) : MT::k_LiveGrab;
-    ImVec4 slAct  = isDanger ? ImVec4(1.00f, 0.30f, 0.30f, 1.0f) : ImVec4(MT::k_LiveGrab.x * 1.1f, MT::k_LiveGrab.y * 1.1f, MT::k_LiveGrab.z * 1.1f, 1.0f);
+    ImU32 trackCol = ImGui::GetColorU32(MT::k_NeutBtn);
+    ImU32 fillCol  = isDanger ? IM_COL32(235, 70, 70, 255) : ImGui::GetColorU32(MT::k_LiveGrab);
+    ImU32 capCol   = isDanger ? IM_COL32(255, 90, 90, 255) : IM_COL32(225, 228, 235, 255);
 
-    if (BMSlider("##vp_vol_l", &m_LiveVolume, 0.0f, 2.0f, "", slBg, slGrab, slAct, volSliderW)) {
+    if (HorizontalFader("##vp_vol_fader", &m_LiveVolume, 0.0f, 2.0f, { faderW, padSize },
+                         trackCol, fillCol, capCol)) {
         core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
     }
 

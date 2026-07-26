@@ -2,6 +2,7 @@
 #include <GL/glew.h>
 #include "backend/media/VLCBasePlayer.h"
 #include "backend/shaders/PostProcessorFSR.h"
+#include "backend/shaders/PostProcessorNIS.h"
 #include "backend/shaders/BackgroundFillBlur.h"
 #include "backend/core/PreviewLoadWorker.h"
 #include "frontend/windowing/NativeVideoOutputWindow.h"
@@ -122,6 +123,14 @@ namespace ProyecThor::Core {
         ProyecThor::Shaders::PostProcessorFSR m_FSR;
         bool  m_FSREnabled   = true;
         float m_FSRSharpness = 0.2f;
+
+        // Escalador alternativo exclusivo de NVIDIA (ver PostProcessorNIS.h).
+        // Mutuamente excluyente con FSR -- la UI (ShadersPanel) y
+        // PresentationCore::SetNISEnabled se encargan de que activar uno
+        // apague el otro, aca simplemente se corre el que este habilitado.
+        ProyecThor::Shaders::PostProcessorNIS m_NIS;
+        bool  m_NISEnabled   = false;
+        float m_NISSharpness = 0.5f;
 
         // "Rellenado" de las barras de letterbox/pillarbox: ver
         // GetBlurredFillTexture(). Vive aca (no en CompositePostChain) por
@@ -269,6 +278,11 @@ namespace ProyecThor::Core {
         bool  GetFSREnabled() const;
         void  SetFSRSharpness(float sharpness);
         float GetFSRSharpness() const;
+
+        void  SetNISEnabled(bool enabled);
+        bool  GetNISEnabled() const;
+        void  SetNISSharpness(float sharpness);
+        float GetNISSharpness() const;
 
         // "Rellenado": en vez de barras negras de letterbox/pillarbox,
         // llena ese espacio con el mismo contenido estirado a pantalla

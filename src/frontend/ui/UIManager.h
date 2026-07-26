@@ -13,6 +13,12 @@
 #include "panels/DatabasePanel.h"
 #include "panels/WikiPanel.h"
 #include "panels/PerformancePanel.h"
+#include "panels/YggdrasilPanel.h"
+#include "panels/LibraryManagerPanel.h"
+#include "panels/BibleFullscreenPanel.h"
+#include "panels/StreamingPanel.h"
+#include "panels/TeamChatPanel.h"
+#include "panels/BroadcastPanel.h"
 
 namespace ProyecThor::UI {
 
@@ -20,6 +26,28 @@ enum class ActiveLeftPanel {
     Library,
     Canva,
     None
+};
+
+// ── Modo de workspace ────────────────────────────────────────────────────────
+// La toolbar de segundo nivel (ver RenderModeToolbar) reemplaza TODO el
+// contenido de abajo segun el modo activo -- no son paneles dockeados mas,
+// son secciones completas de la app:
+//  - Hub: pantalla de inicio/novedades (Hub.cpp), tal cual ya existia.
+//  - Projector: el workspace de siempre (Biblioteca/Home/Vista en Vivo/
+//    Herramientas/Diseño dockeados), antes controlado por el bool m_HubMode.
+//  - Yggdrasil: OSC, Red, Chat y Streaming (RTMP), todo en un rail propio
+//    (YggdrasilPanel) -- Streaming fue su propio modo un tiempo, se
+//    combino aca por pedido.
+//  - Biblioteca: ver/gestionar (renombrar, borrar) Video/Imagen/Audio ya
+//    importados, sin seleccionar nada para Vista en Vivo (LibraryManagerPanel).
+//  - Biblia: el mismo BibleView de Home, a pantalla completa
+//    (BibleFullscreenPanel).
+enum class WorkspaceMode {
+    Hub,
+    Projector,
+    Yggdrasil,
+    Biblioteca,
+    Biblia,
 };
 
 class UIManager {
@@ -47,13 +75,34 @@ uint64_t m_LastTransitionTrigger = 0;
 
     void OpenHub();
 
+    // Red (LAN)/Chat/Streaming viven aca (no en Yggdrasil ni en Biblioteca/
+    // Herramientas) para que Update() corra SIEMPRE, sin importar el
+    // WorkspaceMode activo -- una transmision o el chat no se pueden pausar
+    // solo porque el operador esta mirando Proyector. Yggdrasil,
+    // LibraryPanel (grupo "Red") y ViewToolsPanel (pestaña "Chat") reciben
+    // un puntero a la MISMA instancia (ver main.cpp), asi que aparecen "en
+    // las dos partes" pero comparten un unico servidor de verdad.
+    StreamingPanel& GetRedPanel()      { return m_Red; }
+    TeamChatPanel&  GetChatPanel()     { return m_Chat; }
+    BroadcastPanel& GetBroadcastPanel() { return m_Broadcast; }
+
 private:
     void BeginDockspace();
     void EndDockspace();
     void ApplyProfessionalTheme();
     void RenderMainMenuBar();
+    void RenderModeToolbar();
+    void RenderQuickSwitcher();
  DatabasePanel m_DatabasePanel;
     WikiPanel     m_WikiPanel;
+    YggdrasilPanel      m_YggdrasilPanel;
+    LibraryManagerPanel m_LibraryManagerPanel;
+    BibleFullscreenPanel m_BiblePanel;
+
+    // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel).
+    StreamingPanel m_Red;
+    TeamChatPanel  m_Chat;
+    BroadcastPanel m_Broadcast;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;
@@ -74,8 +123,12 @@ private:
     int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
     void ToggleFullscreen();
 
-    Hub   m_Hub;
-    bool  m_HubMode = true;
+    Hub           m_Hub;
+    WorkspaceMode m_Mode = WorkspaceMode::Hub;
+
+    // Selector rapido (Alt+Espacio) — ver RenderQuickSwitcher.
+    bool m_QuickSwitchOpen  = false;
+    int  m_QuickSwitchIndex = 0;
 };
 
 } // namespace ProyecThor::UI

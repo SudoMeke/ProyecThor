@@ -56,32 +56,8 @@ static fs::path OverlaysDir() {
     return dir;
 }
 
-// Carpeta de overlays de FoudreVue (app hermana) — mismo calculo XDG /
-// %APPDATA% que GetAppDataDir() pero para "FoudreVue" en vez de
-// "ProyecThor". A diferencia de OverlaysDir(), nunca la crea: solo se lee
-// si FoudreVue ya la creo por su cuenta (ver ReloadList).
-static fs::path FoudreVueOverlaysDir() {
-#ifdef _WIN32
-    const char* appData = std::getenv("APPDATA");
-    fs::path dir = fs::path(appData ? appData : ".") / "FoudreVue";
-#else
-    fs::path base;
-    if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg) {
-        base = xdg;
-    } else if (const char* home = std::getenv("HOME"); home && *home) {
-        base = fs::path(home) / ".local" / "share";
-    } else if (struct passwd* pw = getpwuid(getuid())) {
-        base = fs::path(pw->pw_dir) / ".local" / "share";
-    } else {
-        base = fs::current_path();
-    }
-    fs::path dir = base / "FoudreVue";
-#endif
-    return dir / "assets" / "overlays";
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-//  Thumbnails (PNG ya rasterizado del overlay, generado por FoudreVue)
+//  Thumbnails
 // ─────────────────────────────────────────────────────────────────────────────
 static ImTextureID LoadImageThumb(const char* path) {
     int w, h, n;
@@ -108,8 +84,7 @@ ImTextureID LayersOverlayTab::GetThumbnail(const std::string& path) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Listado — un overlay = un .png en la carpeta de overlays (lo genera
-//  FoudreVue; ver ImportBundle para traer uno desde un paquete exportado).
+//  Listado — un overlay = un .png en la carpeta de overlays.
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersOverlayTab::ReloadList() {
     m_Overlays.clear();
@@ -117,33 +92,10 @@ void LayersOverlayTab::ReloadList() {
         for (const auto& e : fs::directory_iterator(OverlaysDir())) {
             if (!e.is_regular_file()) continue;
             if (e.path().extension() != ".png") continue;
-            m_Overlays.push_back({ e.path().stem().string(), e.path().string(), false });
+            m_Overlays.push_back({ e.path().stem().string(), e.path().string() });
         }
     } catch (const std::exception& ex) {
         std::cerr << "[LayersOverlayTab] " << ex.what() << "\n";
-    }
-
-    // Suite unificada: si FoudreVue esta instalado en esta misma maquina,
-    // sus overlays ya rasterizados se leen directo de su carpeta (sin
-    // copiar) — no hace falta pasar por "Importar overlay..." a mano. Un
-    // nombre ya presente entre los overlays propios gana (no se pisa la
-    // copia local del usuario).
-    std::error_code ec;
-    fs::path fvDir = FoudreVueOverlaysDir();
-    if (fs::exists(fvDir, ec)) {
-        try {
-            for (const auto& e : fs::directory_iterator(fvDir)) {
-                if (!e.is_regular_file()) continue;
-                if (e.path().extension() != ".png") continue;
-                std::string name = e.path().stem().string();
-                bool alreadyMine = std::any_of(m_Overlays.begin(), m_Overlays.end(),
-                    [&](const OverlayEntry& o) { return o.name == name; });
-                if (alreadyMine) continue;
-                m_Overlays.push_back({ name, e.path().string(), true });
-            }
-        } catch (const std::exception& ex) {
-            std::cerr << "[LayersOverlayTab] " << ex.what() << "\n";
-        }
     }
 
     std::sort(m_Overlays.begin(), m_Overlays.end(),
@@ -175,29 +127,10 @@ bool LayersOverlayTab::RenameOverlay(const std::string& oldName, const std::stri
     return !ec;
 }
 
-// Duplica un overlay leido desde la carpeta de FoudreVue a la carpeta
-// propia de ProyecThor, para que a partir de ahi se pueda renombrar/borrar
-// como cualquier overlay propio (FoudreVue sigue siendo el dueño de su
-// copia original, que no se toca).
-bool LayersOverlayTab::CopyExternalToMine(const OverlayEntry& e) {
-    if (!e.external) return false;
-    std::error_code ec;
-    fs::copy_file(e.pngPath, ResolvePngPath(e.name), fs::copy_options::overwrite_existing, ec);
-    if (ec) return false;
-    m_ThumbnailCache.erase(ResolvePngPath(e.name));
-    ReloadList();
-    return true;
-}
-
 void LayersOverlayTab::SetStatus(const std::string& msg) {
     m_StatusMsg   = msg;
     m_StatusTimer = 5.0f;
 }
-
-// FoudreVue ya no tiene botones de creacion/instalacion/importacion manual
-// en este panel (ver LayersOverlayTab.h): solo se sigue leyendo su carpeta
-// de overlays automaticamente si esta instalada (ReloadList) — eso se
-// mantiene tal cual, es la parte "que se importen solos".
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Toolbar superior — compacta, solo iconos
@@ -256,7 +189,7 @@ void LayersOverlayTab::RenderTopBar() {
 
         ImGui::SameLine(0, gap*2);
         if (LPCornerIconBtn("##ovrefresh", LPDrawRefresh,
-                "Refrescar (vuelve a leer mis overlays y los de FoudreVue)", {btnSz,btnSz}))
+                "Refrescar", {btnSz,btnSz}))
             ReloadList();
     } else {
         const float rowW  = btnSz + gap;
@@ -305,9 +238,6 @@ void LayersOverlayTab::RenderCard(const OverlayEntry& e, float W, float H, int c
     ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
     dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, LPU32(LP::Text), dn.c_str());
 
-    if (e.external)
-        LPBadge(dl, {p0.x+6.0f, p0.y+6.0f}, "FV", LP::AccentDim, LP::Accent);
-
     ImGui::InvisibleButton(("##ovc_"+e.name).c_str(), {W, H});
     if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         Core::PresentationCore::Get().SetBackgroundMedia(e.pngPath, /*isVideo*/false, /*allowAudio*/false);
@@ -317,16 +247,11 @@ void LayersOverlayTab::RenderCard(const OverlayEntry& e, float W, float H, int c
         ImGui::Text("%s", e.name.c_str());
         ImGui::PopStyleColor();
         ImGui::Separator();
-        if (e.external) {
-            if (ImGui::Selectable("  Copiar a mis overlays"))
-                CopyExternalToMine(e);
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-            if (ImGui::Selectable("  Eliminar")) {
-                if (DeleteOverlay(e.name)) ReloadList();
-            }
-            ImGui::PopStyleColor();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+        if (ImGui::Selectable("  Eliminar")) {
+            if (DeleteOverlay(e.name)) ReloadList();
         }
+        ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
 
@@ -358,11 +283,6 @@ void LayersOverlayTab::RenderRow(const OverlayEntry& e, float W, float rowH) {
     std::string dn = e.name.length() > 32 ? e.name.substr(0,29) + "..." : e.name;
     float labelX = tx+thumbSz+10.0f;
     dl->AddText({labelX, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f}, LPU32(LP::Text), dn.c_str());
-    if (e.external) {
-        ImVec2 lsz = ImGui::CalcTextSize(dn.c_str());
-        LPBadge(dl, {labelX+lsz.x+10.0f, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f},
-                "FV", LP::AccentDim, LP::Accent);
-    }
 
     ImGui::InvisibleButton(("##ovrow_"+e.name).c_str(), {W, rowH});
     if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
@@ -373,16 +293,11 @@ void LayersOverlayTab::RenderRow(const OverlayEntry& e, float W, float rowH) {
         ImGui::Text("%s", e.name.c_str());
         ImGui::PopStyleColor();
         ImGui::Separator();
-        if (e.external) {
-            if (ImGui::Selectable("  Copiar a mis overlays"))
-                CopyExternalToMine(e);
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-            if (ImGui::Selectable("  Eliminar")) {
-                if (DeleteOverlay(e.name)) ReloadList();
-            }
-            ImGui::PopStyleColor();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
+        if (ImGui::Selectable("  Eliminar")) {
+            if (DeleteOverlay(e.name)) ReloadList();
         }
+        ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
 
@@ -563,7 +478,7 @@ void LayersOverlayTab::RenderGallery() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x+w,p.y+64}, LPU32(LP::Surface1), 10.0f);
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* msg = "Sin overlays ni macros aun. Los overlays estaticos se leen automaticamente de FoudreVue si esta instalado; los macros se crean con el boton + de la pestaña Macros.";
+        const char* msg = "Sin overlays ni macros aun. Los macros se crean con el boton + de la pestaña Macros.";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
         ImGui::Text("%s", msg);

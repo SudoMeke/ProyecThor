@@ -208,7 +208,12 @@ void RenderCategoryButtons(LibraryContext& ctx)
         ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
     }
 
+    // "Red" se mudo a Yggdrasil (rail OSC/Red/Chat, ver YggdrasilPanel.cpp)
+    // -- solo queda "Reloj" en este grupo aparte.
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
+    // "Red" tambien esta disponible en Yggdrasil (misma StreamingPanel,
+    // ver LibraryPanel::SetStreamingPanelRef) -- por pedido, no es
+    // exclusivo de uno de los dos lugares.
     static const SideDef k_SideItems[] = {
         { "Red",   ProyecThor::UI::HomeIcons::DrawIcon_Broadcast, kSideMode_Streaming },
         { "Reloj", ProyecThor::UI::HomeIcons::DrawIcon_Clock,     kSideMode_Clock     },

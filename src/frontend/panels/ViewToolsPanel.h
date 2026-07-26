@@ -1,13 +1,13 @@
 #pragma once
 #include "IPanel.h"
 #include "frontend/views/QuickNotes.h"
-#include "TeamChatPanel.h"
 #include "frontend/ui/GlassRenderer.h"
 #include <string>
 
 namespace ProyecThor::UI {
 
 class UIManager;
+class TeamChatPanel;
 
 // Hub debajo de "Vista en Vivo": Control Overlays (transporte de macros,
 // antes vivia adentro de ViewPanel) + Notas + Chat + Pads. Mismo patron de
@@ -15,7 +15,10 @@ class UIManager;
 //
 // Red y Reloj se mudaron al sidebar izquierdo de Biblioteca (ver
 // LibraryPanel::LibrarySideMode) — el operador las pedia "al lado de la
-// biblioteca de contenido" en vez de en este hub.
+// biblioteca de contenido" en vez de en este hub. Chat tambien esta
+// disponible en Yggdrasil (rail OSC/Red/Chat), por pedido: la MISMA
+// TeamChatPanel se muestra en los dos lugares (ver SetTeamChatPanelRef),
+// nunca dos chats independientes.
 //
 // Pads: 8 botones tipo pad MIDI con icono elegible — ver RenderPads() y
 // Settings::PadSettings.
@@ -29,12 +32,14 @@ public:
     void        Render()  override;
     std::string GetName() const override { return "Herramientas"; }
 
+    void SetTeamChatPanelRef(TeamChatPanel* ref) { m_TeamChatPanelRef = ref; }
+
 private:
     UIManager*        m_UIManager = nullptr;
     ViewToolsSection   m_CurrentSection = ViewToolsSection::ControlOverlays;
 
     QuickNotes     m_QuickNotes;
-    TeamChatPanel  m_TeamChatPanel;
+    TeamChatPanel* m_TeamChatPanelRef = nullptr;
 
     // "Control Overlays" — transporte para el macro en reproduccion (ver
     // backend/core/MacroTypes.h): elegir/arrancar un macro, y en modo

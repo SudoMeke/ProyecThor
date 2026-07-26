@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include "backend/core/PresentationCore.h"
 
 namespace ProyecThor::Settings { struct ThemeSettings; }
 
@@ -12,13 +13,8 @@ namespace ProyecThor::UI {
 class TabTypography;
 class TabAlignment;
 class TabMargins;
+class TabEffects;
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Paleta de colores del editor — no son const: se recalculan en Sync() a
-//  partir del tema activo (mismo patron que DS::/MonitorTheme::/HubTheme::),
-//  asi este editor deja de quedar fijo en un look violeta-oscuro sin
-//  importar el preset elegido en Preferencias.
-// ─────────────────────────────────────────────────────────────────────────────
 struct CanvaPalette {
     static inline ImVec4 Accent       = ImVec4(0.39f, 0.44f, 0.97f, 1.0f);
     static inline ImVec4 AccentHov    = ImVec4(0.49f, 0.54f, 1.00f, 1.0f);
@@ -31,31 +27,15 @@ struct CanvaPalette {
     static inline ImVec4 Border       = ImVec4(0.22f, 0.23f, 0.30f, 1.0f);
     static inline ImVec4 Text         = ImVec4(0.92f, 0.92f, 0.94f, 1.0f);
     static inline ImVec4 TextMuted    = ImVec4(0.50f, 0.52f, 0.60f, 1.0f);
-    // Gold/Pink quedan fijos a proposito: son acentos de badge ("PREVIEW EN
-    // VIVO", pestanas de tab) sin token equivalente en ThemeSettings, ya
-    // legibles sobre cualquier fondo claro u oscuro.
     static inline ImVec4 Gold         = ImVec4(0.95f, 0.72f, 0.20f, 1.0f);
     static inline ImVec4 Pink         = ImVec4(0.93f, 0.40f, 0.70f, 1.0f);
     static ImU32 ToU32(const ImVec4& c);
 
-    // Recalcula Accent/Surface*/Border/Text/TextMuted/Green/Red a partir del
-    // tema activo. Se llama desde SettingsManager::ApplyTheme().
     static void Sync(const ProyecThor::Settings::ThemeSettings& theme);
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  StyleData — todos los parametros de estilo de una presentacion
-//
-//  textAlignment / vAlignment : alineacion del estilo base (usado en preview
-//                               y como valor por defecto si no se sobreescribe)
-//  songTextAlignment          : alineacion horizontal para el modulo Canciones
-//  songVAlignment             : alineacion vertical  para el modulo Canciones
-//  bibleTextAlignment         : alineacion horizontal para el modulo Biblia
-//  bibleVAlignment            : alineacion vertical  para el modulo Biblia
-//
-//  Valores de alineacion horizontal: 0 = izquierda, 1 = centro, 2 = derecha
-//  Valores de alineacion vertical:   0 = arriba,    1 = centro, 2 = abajo
-// ─────────────────────────────────────────────────────────────────────────────
+// StyleData — parametros de estilo de una presentacion. Alineacion:
+// 0 = izquierda/arriba, 1 = centro, 2 = derecha/abajo.
 struct StyleData {
     std::string selectedFont  = "Predeterminada";
     float       textColor[4]  = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -64,19 +44,17 @@ struct StyleData {
     float       verseTextSize = 60.0f;   // tamano del cuerpo del versiculo
     bool        autoScale     = true;
     float       margins[4]    = { 80.0f, 60.0f, 80.0f, 60.0f }; // L T R B en px a 1920x1080
-    int         textAlignment = 1;   // alineacion base (preview)
+    int         textAlignment = 1;
     int         vAlignment    = 1;
 
-    // Alineacion especifica por modulo
     int         songTextAlignment  = 1;
     int         songVAlignment     = 1;
     int         bibleTextAlignment = 1;
     int         bibleVAlignment    = 1;
+
+    ProyecThor::Core::TextEffectsData effects;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  CanvaStyleEditor
-// ─────────────────────────────────────────────────────────────────────────────
 class CanvaStyleEditor {
 public:
     using OnSaveCallback         = std::function<void(const std::string&, const StyleData&)>;
@@ -89,18 +67,18 @@ public:
     void OpenNew(const StyleData& defaults = {});
     void OpenEdit(const std::string& existingName, const StyleData& existingData);
 
-    // Devuelve true el frame en que el usuario presiona Guardar
-    bool Render(OnSaveCallback onSave);
+    // Devuelve true el frame en que el usuario presiona Guardar.
+    // embedded=true: dibuja el contenido dentro de la ventana ya activa
+    // en vez de abrir una ventana flotante propia.
+    bool Render(OnSaveCallback onSave, bool embedded = false);
 
     bool IsOpen() const { return m_IsOpen; }
 
-    // Helpers de widgets estaticos (usados por los tabs)
     static bool PrimaryButton(const char* label, ImVec2 size = {});
     static bool GhostButton  (const char* label, ImVec2 size = {});
     static void Badge        (const char* label, ImVec4 color);
     static void SectionLabel (const char* label);
-    // Cambiar la firma de SegmentedButtons:
-static void SegmentedButtons(const char* prefix,
+    static void SegmentedButtons(const char* prefix,
                               const char** labels, int count, int* current,
                               float totalWidth, float height,
                               const ImVec4& activeColor);
@@ -115,6 +93,7 @@ private:
     std::unique_ptr<TabTypography> m_TabTypography;
     std::unique_ptr<TabAlignment>  m_TabAlignment;
     std::unique_ptr<TabMargins>    m_TabMargins;
+    std::unique_ptr<TabEffects>    m_TabEffects;
 
     std::vector<std::string>* m_FontList = nullptr;
 

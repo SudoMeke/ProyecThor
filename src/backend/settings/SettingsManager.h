@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <imgui.h>
 #include "Version.h"
 #include "StageLayoutTemplates.h"
@@ -45,6 +46,12 @@ namespace ProyecThor::Settings {
 
         std::string selectedFont = "Arial.ttf";
 
+        // Efectos visuales del texto proyectado (fondo/borde/sombra/
+        // aberracion cromatica/glow/neon/subrayado) -- empaquetados como una
+        // sola linea CSV, ver Core::PackTextEffects/UnpackTextEffects
+        // (PresentationCore.h) y TextEffectsRenderer.h para el dibujo.
+        std::string textEffectsPacked;
+
         float lineSpacing  = 1.2f;
         bool  fadeEnabled  = true;
         float fadeDuration = 0.3f;
@@ -73,6 +80,11 @@ namespace ProyecThor::Settings {
         // upscale.
         bool  fsrEnabled            = true;
         float fsrSharpness          = 0.2f;
+        // Escalador alternativo exclusivo de NVIDIA (ver PostProcessorNIS.h).
+        // Mutuamente excluyente con FSR -- activar uno apaga el otro (ver
+        // PresentationCore::SetFSREnabled/SetNISEnabled).
+        bool  nisEnabled            = false;
+        float nisSharpness          = 0.5f;
         bool  crtEnabled            = false;
         float crtScanlineIntensity  = 0.5f;
         bool  grainEnabled          = false;
@@ -82,6 +94,25 @@ namespace ProyecThor::Settings {
         float saturationAmount      = 1.3f;
         bool  vignetteEnabled       = false;
         float vignetteIntensity     = 0.45f;
+        bool  blurEnabled           = false;
+        float blurIntensity         = 0.35f;
+        bool  sharpenEnabled        = false;
+        float sharpenIntensity      = 0.35f;
+        bool  bloomEnabled          = false;
+        float bloomIntensity        = 0.35f;
+        bool  chromaticAberrationEnabled   = false;
+        float chromaticAberrationIntensity = 0.35f;
+        bool  vhsEnabled            = false;
+        float vhsIntensity          = 0.5f;
+        bool  cineEnabled           = false;
+        float cineIntensity         = 0.5f;
+        int   cineTint              = 0; // 0=rojo, 1=verde, 2=azul
+        bool  contrastEnabled       = false;
+        float contrastAmount        = 1.3f;
+        bool  luminosityEnabled     = false;
+        float luminosityAmount      = 1.2f;
+        bool  taaEnabled            = false;
+        float taaIntensity          = 0.5f;
         // "Rellenado": llena las barras de letterbox/pillarbox con el
         // mismo fondo estirado y muy desenfocado en vez de negro. Ver
         // BackgroundLayer::GetBlurredFillTexture / UIManager.cpp.
@@ -133,6 +164,12 @@ namespace ProyecThor::Settings {
         // el menu Vista para operadores que no lo necesitan y prefieren mas
         // ancho para el video.
         bool        showViewQuickActions = true;
+        // Toolbar de modos (Hub/Proyector/Streaming/Yggdrasil/Biblioteca,
+        // ver WorkspaceMode en UIManager.h), activable desde el menu Vista.
+        // Apagada por default: la mayoria de los operadores solo usa el
+        // workspace normal (Proyector) y no necesita el selector visible
+        // todo el tiempo.
+        bool        showModeToolbar      = false;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -199,13 +236,6 @@ namespace ProyecThor::Settings {
         std::string updateChannel  = "beta";
         bool        checkOnStartup = true;
         bool        autoDownload   = false;
-    };
-
-    // ── FoudreVue (app hermana de overlays) ──────────────────────────────
-    // Solo guarda el canal elegido para el chequeo de version en el modal
-    // de descarga (ver LayersOverlayTab::RenderFoudreVueDownloadModal).
-    struct FoudreVueSettings {
-        std::string releaseChannel = "stable"; // "stable" | "beta"
     };
 
     // ── Stage Display (monitor de control) ──────────────────────────────
@@ -326,10 +356,11 @@ namespace ProyecThor::Settings {
     // 8 botones tipo pad MIDI: cada uno guarda, de forma independiente,
     // una disposicion de Captura (mismos campos que CaptureSceneSettings —
     // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene), un
-    // estilo guardado + fondo, y el estado de Control Overlays (que macro
-    // y en que cue). Cualquiera de los tres puede faltar (hasCapture/
-    // hasStyle/hasMacro en false) — un pad no tiene por que tocar las tres
-    // cosas a la vez. Nunca guarda la letra/texto en pantalla.
+    // snapshot directo del estilo+fondo que esta en pantalla en ese momento
+    // (no una referencia por nombre a un estilo guardado), y el estado de
+    // Control Overlays (que macro y en que cue). hasCapture/hasMacro
+    // pueden faltar -- un pad no tiene por que tocar las tres cosas a la
+    // vez. Nunca guarda la letra/texto en pantalla.
     struct PadSettings {
         bool assigned  = false;
         int  iconIndex = 0; // indice en la tabla fija de iconos, ver ViewToolsPanel.cpp
@@ -338,7 +369,13 @@ namespace ProyecThor::Settings {
         CaptureSceneSettings  capture;
 
         bool        hasStyle = false;
-        std::string styleName;
+        float       styleSize       = 60.0f;
+        float       styleColor[4]   = { 1.0f, 1.0f, 1.0f, 1.0f };
+        int         styleHAlign     = 1;
+        int         styleVAlign     = 1;
+        float       styleMargins[4] = { 50.0f, 50.0f, 50.0f, 50.0f };
+        bool        styleAutoScale  = true;
+        std::string styleFontName   = "Predeterminada";
         int         bgType = 0; // espeja PresentationCore::PresentationState::BackgroundType
         std::string bgPath;
         float       bgColor[3] = { 0.0f, 0.0f, 0.0f };
@@ -353,13 +390,64 @@ namespace ProyecThor::Settings {
         PadSettings pads[kPadCount];
     };
 
+    // ── Yggdrasil: control de dispositivos externos (luces, etc.) por OSC ──
+    // ProyecThor solo emite (no escucha) — ver OSCSender.h. Cada mensaje
+    // guardado es una "cue" disparable a mano desde el panel: una direccion
+    // OSC (ej. "/cue/1") mas los argumentos, escritos tal cual los tipearia
+    // el operador (ver OSCSender::ParseOSCArgs para como se infiere el tipo
+    // de cada uno al enviar).
+    struct OSCMessageDef {
+        std::string label   = "Luz 1";
+        std::string address = "/cue/1";
+        std::string argsText;  // ej. "1, 0.5, hola" -- vacio = sin argumentos
+
+        // Ultimo resultado de envio (no persistido -- solo para que el
+        // operador vea de un vistazo que luz esta respondiendo, ver
+        // YggdrasilPanel). false + lastSentAt vacio = todavia no se probo.
+        bool        lastSendOk = false;
+        std::string lastSentAt;
+    };
+
+    // Vincula un parametro en vivo de ProyecThor (ver YggdrasilPanel::
+    // GetBindableParams) a una direccion OSC entrante, aprendida con el
+    // boton "Aprender" (se guarda la direccion del primer mensaje que
+    // llega mientras esa fila esta en modo aprendizaje). paramName debe
+    // matchear exactamente el "name" del registro de parametros.
+    struct OSCBinding {
+        std::string paramName;
+        std::string oscAddress;
+    };
+
+    struct YggdrasilSettings {
+        std::string targetIp    = "127.0.0.1";
+        int         targetPort  = 9000;   // hacia donde se envia (luces)
+        int         listenPort  = 9001;   // en donde se escucha (Control List)
+        bool        autoListen  = false;  // arrancar la escucha sola al abrir la app
+        std::vector<OSCMessageDef> messages;
+        std::vector<OSCBinding>    bindings;
+    };
+
+    // ── Streaming en vivo (RTMP, ver BroadcastPanel/StreamEncoder) ───────
+    // serverUrl + streamKey se concatenan como serverUrl + "/" + streamKey
+    // para armar la URL RTMP final (mismo criterio que OBS: "Servidor" y
+    // "Clave de stream" por separado, asi la clave no queda pegada a mano
+    // en una URL larga). videoBitrateKbps sigue la misma convencion de
+    // "kbps" que usan las plataformas de streaming (Twitch/YouTube).
+    struct StreamingSettings {
+        std::string serverUrl        = "rtmp://";
+        std::string streamKey        = "";
+        int         videoBitrateKbps = 4500;
+        int         fps              = 30;
+        int         width            = 1280;
+        int         height           = 720;
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
         GeneralSettings        general;
         ThemeSettings          theme;
         UpdatesSettings        updates;
-        FoudreVueSettings      foudrevue;
         StageDisplaySettings   stageDisplay;
         LibrarySidebarSettings librarySidebar;
         HomeSidebarSettings    homeSidebar;
@@ -368,6 +456,8 @@ namespace ProyecThor::Settings {
         ViewToolsSettings      viewTools;
         CaptureSettings        capture;
         PadsSettings           pads;
+        YggdrasilSettings      yggdrasil;
+        StreamingSettings      streaming;
     };
 
     class SettingsManager {

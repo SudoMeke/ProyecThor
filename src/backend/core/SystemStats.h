@@ -33,6 +33,12 @@ public:
     // contexto GL activo.
     const std::string& GpuName() const { return m_GpuName; }
 
+    // GL_VENDOR contiene "NVIDIA" (con fallback a buscarlo en GL_RENDERER
+    // por si algun driver raro no lo repite en vendor) -- usado por
+    // ShadersPanel para mostrar el escalador NIS solo en placas NVIDIA
+    // reales (ver PostProcessorNIS.h). Cacheado junto con m_GpuName.
+    bool IsNvidiaGpu() const { return m_IsNvidiaGpu; }
+
 private:
     SystemStats() = default;
 
@@ -45,6 +51,7 @@ private:
     float m_RamUsedMB  = 0.0f;
     float m_RamTotalMB = 0.0f;
     std::string m_GpuName;
+    bool        m_IsNvidiaGpu = false;
 
     // Contadores crudos de la muestra anterior, para calcular el delta de
     // uso de CPU entre dos lecturas (un snapshot puntual de los contadores

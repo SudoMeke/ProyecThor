@@ -1137,14 +1137,21 @@ void CapturePanel::RenderSceneButtons() {
     ImGui::Spacing();
     DS::GlassSeparator();
     ImGui::Spacing();
-    DS::GlassSectionHeader("ESCENAS RÁPIDAS");
-    // GlassSectionHeader dibuja el texto directo por ImDrawList (no
-    // registra un "item" de ImGui), asi que IsItemHovered() de aca no
-    // serviria para un tooltip -- el hint queda como texto siempre
-    // visible en su lugar.
+    DS::GlassSectionHeader("ESCENAS RÁPIDAS DE CAPTURA");
+    // Icono "(i)" al final de la misma fila del header (mismo truco de
+    // SameLine + SetCursorPosX que el boton de refresh en RenderContent):
+    // GlassSectionHeader dibuja su texto directo por ImDrawList y avanza el
+    // cursor con un Dummy de ancho completo, asi que alcanza para alinear
+    // algo mas a la derecha en esa misma linea. Reemplaza el texto de ayuda
+    // que antes quedaba siempre visible -- ahora solo aparece al pasar el
+    // mouse, para no saturar de letra un panel que ya tiene bastante.
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - 16.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
-    ImGui::TextWrapped("Click: aplicar. Click derecho: guardar la posicion libre actual o borrar.");
+    ImGui::TextUnformatted("(i)");
     ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Click: aplicar.\nClick derecho: guardar la posicion libre actual o borrar.");
     ImGui::Spacing();
 
     auto& scenes = Settings::SettingsManager::Get().GetSettings().capture.scenes;

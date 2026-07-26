@@ -6,6 +6,7 @@
 #include "biblio/LibraryVideos.h"
 #include "biblio/LibraryDocuments.h"
 #include "biblio/LibraryModals.h"
+#include "StreamingPanel.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -403,12 +404,11 @@ void LibraryPanel::RenderFileInUseToast()
 void LibraryPanel::Render()
 {
     // ── Pump incondicional ──────────────────────────────────────────────────
-    // Mudado desde ViewToolsPanel junto con m_OClock/m_StreamingPanel: deben
-    // seguir corriendo aunque el operador este mirando otra categoria de
-    // Biblioteca (Reloj alimenta LAN/pantalla, Streaming alimenta la
-    // transmision), sin importar si el grupo Red/Reloj esta activo ahora.
+    // Mudado desde ViewToolsPanel junto con m_OClock: debe seguir corriendo
+    // aunque el operador este mirando otra categoria de Biblioteca (Reloj
+    // alimenta LAN/pantalla), sin importar si el grupo Reloj esta activo
+    // ahora. StreamingPanel ("Red") se mudo a Yggdrasil.
     m_OClock.Update();
-    m_StreamingPanel.Update();
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
@@ -520,7 +520,7 @@ void LibraryPanel::Render()
 
         if (m_SideMode == LibrarySideMode::Streaming)
         {
-            m_StreamingPanel.RenderContent();
+            if (m_StreamingPanelRef) m_StreamingPanelRef->RenderContent();
         }
         else if (m_SideMode == LibrarySideMode::Clock)
         {

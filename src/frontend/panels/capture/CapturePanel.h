@@ -60,6 +60,14 @@ public:
 
     bool        IsLive()   const { return m_IsCapturing; }
 
+    // Para BroadcastPanel (Streaming > Capture -> "Mostrar en Layer"): la
+    // misma textura/tamaño que ya usa el preview interno de este panel,
+    // expuestos tal cual (sin disparar un grab nuevo -- GetCurrentTexture
+    // ya cachea por frame de ImGui, ver su comentario).
+    void* GetPreviewTexture() { return GetCurrentTexture(); }
+    int   GetFrameWidth()  const { return m_FrameW; }
+    int   GetFrameHeight() const { return m_FrameH; }
+
     // Para paneles externos (ej. ViewPanel > "Limpiar captura"/"Borrar
     // Todo") que necesitan cortarla sin pasar por los controles internos.
     void        Stop() { StopCapture(); }
@@ -75,6 +83,13 @@ public:
     // (datos, ver SettingsManager.h).
     bool        SnapshotCurrentCapture(::ProyecThor::Settings::CaptureSceneSettings& out) const;
     void        ApplyCaptureScene(const ::ProyecThor::Settings::CaptureSceneSettings& scene);
+
+    // Dibuja la grilla de "Escenas rápidas" (los mismos 8 slots de
+    // Settings::CaptureSettings::scenes que usa este panel). Publico para
+    // que ViewToolsPanel > Pads pueda mostrarla tal cual debajo de sus
+    // propios pads "General" -- son las mismas escenas, sincronizadas
+    // (un solo dato de fondo), no una copia aparte.
+    void        RenderSceneButtons();
 
 private:
     // ── Enumeración de fuentes ───────────────────────────────────────────────
@@ -127,8 +142,7 @@ private:
     // slot (fuente + recuadro + opacidad, ver SettingsManager::
     // CaptureSceneSettings), click derecho abre un menú para guardar la
     // posición libre actual ahí o borrarla. Persisten en Settings, no en
-    // memoria de sesión.
-    void RenderSceneButtons();
+    // memoria de sesión. (RenderSceneButtons es publico, ver mas arriba.)
     void SaveCurrentAsScene(int slot);
     void RecallScene(int slot);
     void ClearScene(int slot);

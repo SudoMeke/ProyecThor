@@ -1,5 +1,6 @@
 #include "TabTypography.h"
 #include "backend/core/AppPaths.h"
+#include "backend/core/PresentationCore.h"
 #include "DesignSystem.h"
 #include <imgui.h>
 #ifdef _WIN32
@@ -19,13 +20,7 @@ namespace fs = std::filesystem;
 namespace ProyecThor::UI {
 
 #ifndef _WIN32
-// ─────────────────────────────────────────────────────────────────────────
-//  Selector de archivos para Linux/macOS.
-//  No existe un dialogo nativo unico en estos sistemas, asi que se delega
-//  en herramientas externas ampliamente disponibles (zenity/kdialog). Si
-//  ninguna esta instalada, se devuelve una cadena vacia (equivalente a que
-//  el usuario cancele el dialogo en Windows).
-// ─────────────────────────────────────────────────────────────────────────
+// Selector de archivos para Linux/macOS via zenity/kdialog.
 static std::string OpenFontFileDialogUnix() {
     const char* commands[] = {
         "zenity --file-selection --title=\"Seleccionar fuente\" "
@@ -44,7 +39,7 @@ static std::string OpenFontFileDialogUnix() {
             result += buffer.data();
 
         int status = pclose(pipe);
-        if (status != 0) continue; // el usuario cancelo o la herramienta no existe
+        if (status != 0) continue;
 
         while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
             result.pop_back();
@@ -83,46 +78,76 @@ void TabTypography::Render(StyleData& data, float colWidth) {
 void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
     CanvaStyleEditor::SectionLabel("Fuente");
 
-    const float importBtnW = 90.0f;
-    const float gap        = 6.0f;
-    float comboW           = colWidth - importBtnW - gap;
+    const float importBtnH = 26.0f;
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        CanvaPalette::Surface1);
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, CanvaPalette::Surface2);
-    ImGui::PushStyleColor(ImGuiCol_PopupBg,        ImVec4(0.10f, 0.11f, 0.14f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Header,         ImVec4(0.20f, 0.22f, 0.38f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  CanvaPalette::Surface2);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-    ImGui::SetNextItemWidth(comboW);
-
-    if (ImGui::BeginCombo("##editFont", data.selectedFont.c_str())) {
-        if (m_FontList) {
-            for (const auto& f : *m_FontList) {
-                bool sel = (data.selectedFont == f);
-                if (ImGui::Selectable(f.c_str(), sel))
-                    data.selectedFont = f;
-                if (sel) ImGui::SetItemDefaultFocus();
-            }
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(5);
-
-    ImGui::SameLine(0.0f, gap);
-
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.20f, 0.32f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.28f, 0.46f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f, 0.16f, 0.26f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        CanvaPalette::Surface1);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CanvaPalette::Surface2);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  CanvaPalette::AccentActive);
     ImGui::PushStyleColor(ImGuiCol_Text,          CanvaPalette::Accent);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 6.0f));
 
-    if (ImGui::Button("+ Fuente", ImVec2(importBtnW, 0.0f)))
+    if (ImGui::Button("+ Importar fuente", ImVec2(colWidth, importBtnH)))
         ImportFont();
 
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    auto& core = Core::PresentationCore::Get();
+
+    const int   cols     = 2;
+    const float gap      = 6.0f;
+    const float cardW    = (colWidth - gap * (cols - 1)) / (float)cols;
+    const float cardH    = 46.0f;
+    const float previewSz = 17.0f;
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, CanvaPalette::Surface0);
+    ImGui::BeginChild("##fontGrid", ImVec2(colWidth, 172.0f), true);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    std::vector<std::string> allFonts = { "Predeterminada" };
+    if (m_FontList) allFonts.insert(allFonts.end(), m_FontList->begin(), m_FontList->end());
+
+    for (int i = 0; i < (int)allFonts.size(); i++) {
+        if (i % cols != 0) ImGui::SameLine(0.0f, gap);
+
+        const std::string& name = allFonts[i];
+        bool selected = (data.selectedFont == name);
+
+        ImGui::PushID(i);
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        ImVec2 p1 = { p0.x + cardW, p0.y + cardH };
+
+        ImGui::InvisibleButton("##fontCard", { cardW, cardH });
+        bool clicked = ImGui::IsItemClicked();
+        bool hovered = ImGui::IsItemHovered();
+
+        ImU32 bg = selected ? CanvaPalette::ToU32(ImVec4(CanvaPalette::Accent.x, CanvaPalette::Accent.y, CanvaPalette::Accent.z, 0.22f))
+                             : hovered ? CanvaPalette::ToU32(CanvaPalette::Surface2)
+                                       : CanvaPalette::ToU32(CanvaPalette::Surface1);
+        ImU32 border = selected ? CanvaPalette::ToU32(CanvaPalette::Accent) : CanvaPalette::ToU32(CanvaPalette::Border);
+
+        dl->AddRectFilled(p0, p1, bg, 4.0f);
+        dl->AddRect(p0, p1, border, 4.0f, 0, selected ? 1.6f : 1.0f);
+
+        ImFont* previewFont = core.GetImGuiFont(name, previewSz);
+        ImU32   textCol     = CanvaPalette::ToU32(selected ? CanvaPalette::Accent : CanvaPalette::Text);
+        ImVec2  tsz = previewFont ? previewFont->CalcTextSizeA(previewSz, FLT_MAX, cardW - 12.0f, name.c_str())
+                                  : ImGui::CalcTextSize(name.c_str());
+        ImVec2  tpos = { p0.x + (cardW - std::min(tsz.x, cardW - 12.0f)) * 0.5f, p0.y + (cardH - tsz.y) * 0.5f };
+        if (previewFont)
+            dl->AddText(previewFont, previewSz, tpos, textCol, name.c_str(), nullptr, cardW - 12.0f);
+        else
+            dl->AddText(tpos, textCol, name.c_str());
+
+        if (clicked) data.selectedFont = name;
+        ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
 
     if (m_ImportMsgTimer > 0.0f) {
         m_ImportMsgTimer -= ImGui::GetIO().DeltaTime;
@@ -148,7 +173,6 @@ void TabTypography::RenderColorPicker(StyleData& data, float colWidth) {
 }
 
 void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
-    // ── Tamanio principal ─────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::Text("Tamanio inicial   %.0f px", data.textSize);
     ImGui::PopStyleColor();
@@ -157,7 +181,6 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    // ── Tamanio de la referencia biblica ──────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::Text("Referencia (nombre + version)   %.0f px", data.refTextSize);
     ImGui::PopStyleColor();
@@ -166,7 +189,6 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    // ── Tamanio del cuerpo del versiculo ──────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::Text("Versiculo (cuerpo del texto)   %.0f px", data.verseTextSize);
     ImGui::PopStyleColor();
@@ -205,7 +227,6 @@ void TabTypography::ImportFont() {
     if (!GetOpenFileNameA(&ofn)) return;
     selectedPath = filename;
 #else
-    // En Linux delegamos en zenity/kdialog (ver OpenFontFileDialogUnix arriba).
     selectedPath = OpenFontFileDialogUnix();
     if (selectedPath.empty()) return;
 #endif

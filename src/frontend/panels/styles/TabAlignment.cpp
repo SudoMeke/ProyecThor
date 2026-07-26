@@ -6,7 +6,7 @@ namespace ProyecThor::UI {
 
 void TabAlignment::Render(StyleData& data, float colWidth, ImDrawList* /*dl*/) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    CanvaStyleEditor::Badge("ALINEACION", CanvaPalette::Green);
+    CanvaStyleEditor::Badge("ALINEACION", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
     RenderAlignSection("Base / Preview", "base",
@@ -16,13 +16,13 @@ void TabAlignment::Render(StyleData& data, float colWidth, ImDrawList* /*dl*/) {
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
     RenderAlignSection("Canciones", "song",
-                        CanvaPalette::Green,
+                        CanvaPalette::Accent,
                         data.songTextAlignment, data.songVAlignment, colWidth);
 
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
     RenderAlignSection("Biblia", "bible",
-                        CanvaPalette::Gold,
+                        CanvaPalette::Accent,
                         data.bibleTextAlignment, data.bibleVAlignment, colWidth);
 }
 
@@ -37,8 +37,6 @@ void TabAlignment::RenderAlignSection(const char* sectionTitle,
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    // FIXED: Use only the prefix (no visible label text) so IDs are unique
-    // across sections. SegmentedButtons appends "##index" internally.
     std::string hPrefix = std::string(idPrefix) + "_h";
     std::string vPrefix = std::string(idPrefix) + "_v";
 

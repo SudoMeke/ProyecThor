@@ -20,6 +20,11 @@ void SystemStats::EnsureGpuName()
     if (!m_GpuName.empty()) return;
     const GLubyte* renderer = glGetString(GL_RENDERER);
     m_GpuName = renderer ? reinterpret_cast<const char*>(renderer) : "Desconocida";
+
+    const GLubyte* vendor = glGetString(GL_VENDOR);
+    std::string vendorStr = vendor ? reinterpret_cast<const char*>(vendor) : "";
+    m_IsNvidiaGpu = vendorStr.find("NVIDIA") != std::string::npos
+                 || m_GpuName.find("NVIDIA") != std::string::npos; // fallback si algun driver no lo repite en vendor
 }
 
 void SystemStats::Update()

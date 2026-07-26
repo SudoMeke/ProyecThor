@@ -7,11 +7,10 @@
 #include "frontend/views/Audio.h"
 #include "frontend/views/DocumentView.h"
 #include "frontend/views/OClock.h"
-#include "StreamingPanel.h"
 #include "IPanel.h"
 #include "biblio/LibraryContext.h"
 
-namespace ProyecThor::UI { class UIManager; class MonitorView; }
+namespace ProyecThor::UI { class UIManager; class MonitorView; class StreamingPanel; }
 enum class ActiveLeftPanel;
 
 namespace ProyecThor::UI {
@@ -30,8 +29,10 @@ enum class LibraryCategory {
 // LibraryCategory/m_CurrentCategory -- es un modo de vista independiente.
 enum class LibrarySideMode {
     Categories = 0,
-    Streaming  = 1, // "Red" — antes vivia en ViewToolsPanel
-    Clock      = 2, // "Reloj" — antes vivia en ViewToolsPanel
+    Streaming  = 1, // "Red" — antes vivia en ViewToolsPanel; tambien
+                    // disponible en Yggdrasil (misma instancia, ver
+                    // SetStreamingPanelRef mas abajo).
+    Clock      = 2, // "Reloj" — antes vivia en ViewToolsPanel.
 };
 
 class LibraryPanel : public IPanel {
@@ -44,6 +45,11 @@ public:
     void Render() override;
     void SetUIManager(UIManager* manager) { m_UIManagerRef = manager; }
     void SetMonitorView(MonitorView* monitor) { m_MonitorRef = monitor; }
+
+    // Misma instancia que UIManager::GetRedPanel() (Yggdrasil) -- Red
+    // aparece "en las dos partes" pero es un unico servidor real. Ver
+    // cableado en main.cpp.
+    void SetStreamingPanelRef(StreamingPanel* ref) { m_StreamingPanelRef = ref; }
 
 private:
     Library::LibraryContext BuildContext();
@@ -77,12 +83,13 @@ private:
     std::string              m_LoadedDocPath;
 
     // ── Grupo "Red"/"Reloj" del sidebar (ver LibrarySideMode) ────────────
-    // Mudados desde ViewToolsPanel: la propiedad de OClock/StreamingPanel
-    // (y el registro en PresentationCore::SetOClockRef) se movio junto con
-    // el boton, para que ambos vivan donde el operador los usa ahora.
-    LibrarySideMode m_SideMode = LibrarySideMode::Categories;
-    OClock          m_OClock;
-    StreamingPanel  m_StreamingPanel;
+    // Mudados desde ViewToolsPanel: la propiedad de OClock (y el registro
+    // en PresentationCore::SetOClockRef) se movio junto con el boton. Red
+    // NO se posee aca -- es un puntero a la misma StreamingPanel que
+    // tambien vive en Yggdrasil (ver SetStreamingPanelRef).
+    LibrarySideMode  m_SideMode = LibrarySideMode::Categories;
+    OClock           m_OClock;
+    StreamingPanel*  m_StreamingPanelRef = nullptr;
 
     bool m_ShowSongEditor = false;
     char m_EditTitle  [256]{};

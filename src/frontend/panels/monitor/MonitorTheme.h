@@ -5,7 +5,6 @@ namespace ProyecThor::Settings { struct ThemeSettings; }
 
 namespace ProyecThor::UI::MonitorTheme {
 
-// Ya no son constexpr: se recalculan en Sync() a partir del tema activo.
 inline ImVec4 k_Bg0           = { 0.055f, 0.060f, 0.075f, 1.00f };
 inline ImVec4 k_Bg1           = { 0.075f, 0.082f, 0.100f, 1.00f };
 inline ImVec4 k_Bg2           = { 0.090f, 0.098f, 0.120f, 1.00f };
@@ -60,17 +59,16 @@ inline ImVec4 k_BtnNeutralH   = { 0.18f, 0.20f, 0.26f, 1.00f };
 inline ImVec4 k_BtnNeutralA   = { 0.08f, 0.09f, 0.12f, 1.00f };
 inline ImVec4 k_BtnNeutralT   = { 0.60f, 0.63f, 0.78f, 1.00f };
 
-// Layout: esto sí puede quedar constexpr, no depende del tema.
 inline constexpr float k_R          = 7.0f;
 inline constexpr float k_RLg        = 10.0f;
 inline constexpr float k_Pad        = 6.0f;
 inline constexpr float k_PadLg      = 10.0f;
 inline constexpr float k_Gap        = 5.0f;
-inline constexpr float k_ControlsH  = 310.0f;
-inline constexpr float k_TransportH = 30.0f;
+inline constexpr float k_ControlsH  = 150.0f;
+inline constexpr float k_TransportH = 26.0f;
 inline constexpr float k_VolumeH    = 24.0f;
 inline constexpr float k_Meters_H   = 48.0f;
-inline constexpr float k_CenterW    = 100.0f;
+inline constexpr float k_CenterW    = 86.0f;
 
 // Recalcula la paleta de MonitorView a partir del tema activo.
 void Sync(const ProyecThor::Settings::ThemeSettings& theme);

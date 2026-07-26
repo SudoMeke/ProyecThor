@@ -69,6 +69,17 @@ static std::string ExtractJsonString(const std::string& json, const std::string&
     return json.substr(pos, end - pos);
 }
 
+static std::string ExtractAssetDownloadUrl(const std::string& json, const std::string& assetName) {
+    std::string marker = "\"name\": \"" + assetName + "\"";
+    auto pos = json.find(marker);
+    if (pos == std::string::npos) {
+        marker = "\"name\":\"" + assetName + "\""; // por si viene minificado
+        pos = json.find(marker);
+        if (pos == std::string::npos) return "";
+    }
+    return ExtractJsonString(json.substr(pos), "browser_download_url");
+}
+
 #if defined(_WIN32)
 static void ParseURL(const std::wstring& url, std::wstring& host, std::wstring& path) {
     URL_COMPONENTS urlComp;
@@ -150,7 +161,7 @@ static void DoCheckUpdate(const std::string& currentVersion,
     }
     if (tag[0] == 'v') tag = tag.substr(1);
 
-    s_DownloadUrl    = ExtractJsonString(body, "browser_download_url");
+    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.msi");
     s_LatestVersion  = tag;
 
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -205,7 +216,11 @@ static void DoDownloadAndInstall(const std::string& urlStr) {
 
         char tempPath[MAX_PATH];
         GetTempPathA(MAX_PATH, tempPath);
-        s_InstallerPath = std::string(tempPath) + "ProyecThor_Update.exe";
+        // .msi, no .exe: desde que se empaqueta con WiX, "abrir" este archivo
+        // (ShellExecute con verbo "open") invoca msiexec via la asociacion
+        // por defecto de Windows para .msi, igual que hacia antes con el
+        // instalador .exe de Inno Setup.
+        s_InstallerPath = std::string(tempPath) + "ProyecThor_Update.msi";
 
         std::ofstream outFile(s_InstallerPath, std::ios::binary);
         float  downloadedBytes = 0.0f;

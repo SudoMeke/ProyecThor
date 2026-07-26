@@ -9,10 +9,7 @@ namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersOverlayTab — dos modos:
-//   - Galeria: overlays estaticos (.png), propios o leidos automaticamente
-//     de la carpeta de datos de FoudreVue si esta instalado (sigue siendo
-//     posible generarlos ahi, pero ya no hay boton para abrir/instalar
-//     FoudreVue ni para importar un paquete a mano — solo auto-deteccion).
+//   - Galeria: overlays estaticos (.png).
 //   - Macros: secuencias de cues con tiempo (fondo/overlay/estilo de
 //     reloj/texto) que se ejecutan en orden al reproducir, tipo "playlist
 //     de comandos" (ver backend/core/MacroTypes.h). La reproduccion en si
@@ -32,10 +29,6 @@ private:
     struct OverlayEntry {
         std::string name;
         std::string pngPath;
-        // true = leido directo de la carpeta de overlays de FoudreVue (no
-        // copiado); no se ofrece Eliminar/Renombrar sobre estas entradas,
-        // solo "Copiar a mis overlays" (ver CopyExternalToMine).
-        bool external = false;
     };
 
     std::vector<OverlayEntry> m_Overlays;
@@ -59,7 +52,6 @@ private:
     bool DeleteOverlay(const std::string& name);
     bool RenameOverlay(const std::string& oldName, const std::string& newName);
     std::string ResolvePngPath(const std::string& name);
-    bool CopyExternalToMine(const OverlayEntry& e);
 
     // ── Modo: Galeria / Macros ───────────────────────────────────────────
     enum class TabMode { Gallery, Macros };

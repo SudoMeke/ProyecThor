@@ -67,6 +67,27 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        10, "0.5.0",
+        "ACTUALIZACION MAYOR", "ACTUALIZACION MAYOR",
+        "splash_bg6.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Nueva seccion Yggdrasil (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
+        "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
+        "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
+        "en Vivo mas compacto, editor de Estilos renovado, nuevo instalador para "
+        "Windows (.msi) y varias correcciones de estabilidad."
+    },
+    {
+        9, "0.4.2",
+        "ACTUALIZACION", "ACTUALIZACION",
+        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
+        "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
+        "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
+        "fuentes en grilla y nuevos efectos de texto (fondo, borde, sombra, glow, neon, "
+        "subrayado), y un monton de efectos nuevos en Shaders: NIS (NVIDIA), VHS, Cine, "
+        "Contraste, Luminosidad, Blur, Sharpen, Bloom, Aberracion cromatica y TAA."
+    },
+    {
         8, "0.4.1",
         "ACTUALIZACION", "ACTUALIZACION",
         "splash_bg4.png",
@@ -244,6 +265,124 @@ void Hub::UpdateAnimations(float dt) {
     }
 }
 
+// Carrusel de novedades — se muestra una vez por version nueva.
+void Hub::RenderWhatsNewIfNeeded() {
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) return;
+
+    struct Slide { const char* title; const char* body; };
+    static const Slide kSlides[] = {
+        { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
+          "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
+        { "Nuevo instalador",
+          "ProyecThor ahora se instala con un instalador moderno (.msi) que reemplaza solo cualquier version anterior, sin pasos extra." },
+        { "Yggdrasil",
+          "Nueva seccion que reune todo lo que conecta ProyecThor con el exterior: OSC (luces/controladores externos, con \"Aprender\"), Red y Chat (los mismos de siempre, ahora disponibles tambien aca), y Streaming en vivo por RTMP (Twitch, YouTube, etc. con captura de camara/pantalla y preview tipo OBS) -- todo en un mismo rail." },
+        { "Biblioteca",
+          "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo. Incluye un panel \"Render\" para convertir formatos con ffmpeg." },
+        { "Biblia a pantalla completa",
+          "El mismo buscador de Biblia de siempre, ahora tambien disponible como su propia seccion a pantalla completa: libros/capitulos a la izquierda, texto grande a la derecha." },
+        { "Selector rapido (Alt+Espacio)",
+          "Apreta Alt+Espacio en cualquier momento para saltar entre secciones con el teclado, sin tocar el mouse." },
+        { "Monitor mas compacto",
+          "El panel de Preview del Monitor de Vista en Vivo ahora ocupa menos espacio y le deja mas lugar al video, con botones mas chicos y prolijos." },
+        { "Editor de Estilos renovado",
+          "El editor de estilos de texto (Diseño > Estilos) cambio de look: menos colores por seccion, bordes mas rectos, mas parecido al resto de ProyecThor." },
+    };
+    constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
+
+    static int  s_Index      = 0;
+    static bool s_OpenedOnce = false;
+    if (!s_OpenedOnce) {
+        ImGui::OpenPopup("##WhatsNewCarousel");
+        s_OpenedOnce = true;
+        s_Index      = 0;
+    }
+
+    ImGuiViewport* vp      = ImGui::GetMainViewport();
+    const ImVec2   winSize = ImVec2(580.0f, 400.0f);
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
+                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
+    ImGui::SetNextWindowSize(winSize);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(30.0f, 28.0f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.055f, 0.060f, 0.085f, 0.99f));
+
+    if (ImGui::BeginPopupModal("##WhatsNewCarousel", nullptr,
+                               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.75f, 0.30f, 1.0f));
+        ImGui::TextUnformatted("NOVEDADES");
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        const Slide& slide = kSlides[s_Index];
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97f, 1.0f));
+        ImGui::SetWindowFontScale(1.18f);
+        ImGui::TextWrapped("%s", slide.title);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.74f, 0.85f, 1.0f));
+        ImGui::TextWrapped("%s", slide.body);
+        ImGui::PopStyleColor();
+
+        ImGui::SetCursorPosY(winSize.y - 96.0f);
+        float dotsW = kSlideCount * 16.0f;
+        ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2      dp = ImGui::GetCursorScreenPos();
+        for (int i = 0; i < kSlideCount; i++) {
+            ImU32 col = (i == s_Index) ? IM_COL32(120, 150, 255, 255) : IM_COL32(70, 72, 90, 255);
+            dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y + 5.0f), 5.0f, col);
+        }
+        ImGui::Dummy(ImVec2(dotsW, 14.0f));
+
+        ImGui::SetCursorPosY(winSize.y - 60.0f);
+
+        if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Proximamente");
+
+        ImGui::SameLine();
+        if (s_Index == 0) ImGui::BeginDisabled();
+        if (ImGui::Button("< Anterior", ImVec2(100, 34))) s_Index--;
+        if (s_Index == 0) ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (s_Index == kSlideCount - 1) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
+            if (ImGui::Button("Entendido", ImVec2(110, 34))) {
+                general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopStyleColor();
+        } else {
+            if (ImGui::Button("Siguiente >", ImVec2(110, 34))) s_Index++;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Saltar", ImVec2(70, 34))) {
+            general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 bool Hub::Render() {
     if (!m_Open) return false;
 
@@ -311,6 +450,8 @@ bool Hub::Render() {
     ImGui::PopStyleVar(); // Alpha
     ImGui::End();
     ImGui::PopStyleVar(2);
+
+    RenderWhatsNewIfNeeded();
 
     if (m_LaunchRequested) {
         m_LaunchRequested = false;
@@ -540,7 +681,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 8; // id de kUpdateRegistry (8 = v0.4.1, la mas reciente)
+    static int    selectedUpdateVer = 10; // id de kUpdateRegistry (10 = v0.5.0, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -799,58 +940,6 @@ void Hub::RenderMainContent(float w, float h) {
     DrawMetricCard("Proyecciones totales", std::to_string(totalProjections), "Cuentas locales registradas", HT::Success);
     DrawMetricCard("FPS promedio", std::to_string(perfSummary.first), fpsHint.c_str(), HT::AccentBlue, &fpsSpark);
 
-    // ── Banner "app hermana" — FoudreVue ─────────────────────────────────────
-    // Cross-sell dentro de la propia suite (mismo violeta que usa la pestana
-    // de Overlays para todo lo relacionado a FoudreVue): promociona la app
-    // hermana de creacion de overlays y linkea directo a sus releases.
-    {
-        const ImU32 fvAccent = IM_COL32(107, 122, 255, 255);
-        const float bannerH  = 100.0f;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild("##FoudreVueBanner", ImVec2(rightColWidth, bannerH), false);
-
-        const float bannerHoverT = HubHoverLerp(ImGui::GetID("##FoudreVueBanner"), ImGui::IsWindowHovered());
-
-        ImVec2 bp = ImGui::GetWindowPos();
-        if (bannerHoverT > 0.001f)
-            ImGui::GetWindowDrawList()->AddRectFilled(bp, ImVec2(bp.x + rightColWidth, bp.y + bannerH),
-                ColAf(fvAccent, 0.05f * bannerHoverT), HT::RadiusMd);
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            bp, ImVec2(bp.x + 4.0f, bp.y + bannerH), fvAccent, HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
-
-        ImGui::SetCursorPos(ImVec2(16.0f, 12.0f));
-        ImGui::BeginGroup();
-        ImGui::PushStyleColor(ImGuiCol_Text, fvAccent);
-        ImGui::Text("FoudreVue");
-        ImGui::PopStyleColor();
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rightColWidth - 32.0f);
-        ImGui::TextWrapped(
-            "Editor de overlays: capas de texto, imagenes de Pexels, "
-            "tipografia y rotacion. App hermana, open source.");
-        ImGui::PopTextWrapPos();
-        ImGui::PopStyleColor();
-        ImGui::EndGroup();
-
-        ImGui::SetCursorPos(ImVec2(16.0f, bannerH - 38.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button,        fvAccent);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(127, 140, 255, 255));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   IM_COL32(87, 100, 220, 255));
-        ImGui::PushStyleColor(ImGuiCol_Text,           IM_COL32(255, 255, 255, 255));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
-        if (ImGui::Button("Descargar FoudreVue", ImVec2(200.0f, 28.0f)))
-            ProyecThor::External::OpenURL("https://github.com/TheVixcho/FoudreVue");
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(4);
-
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    }
-
     ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
     ImGui::BeginChild("##SongStats", ImVec2(rightColWidth, 240.0f), false);
@@ -1080,13 +1169,82 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            // ── Bloque de contenido condicional por versión ──────────────────
-            // Cuatro entradas: la 0.4.1 (mas reciente, todavia sin publicar),
-            // la 0.4.0, la 0.3.5 (estable, con TODO lo acumulado desde la
-            // 0.3.1 hasta la 0.3.5, incluidas las betas) y la 0.3.0 original.
-            // Cualquier otro id cae en el bloque "else" de la 0.3.0 por
-            // seguridad.
-            if (selectedUpdateVer == 8) { // v0.4.1
+            if (selectedUpdateVer == 10) { // v0.5.0
+                Cat("Nueva seccion: Yggdrasil");
+                Bul("Toolbar nueva arriba de todo (Hub / Proyector / Yggdrasil / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
+                Bul("OSC: enviar mensajes a luces/controladores externos con direccion IP y puerto configurables, mas \"Aprender\" (OSC Learn) para vincular un fader externo a parametros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");
+                Bul("Red y Chat, disponibles ahora en dos lugares a la vez (Yggdrasil y su ubicacion original en Biblioteca/Herramientas): es la misma conexion y el mismo chat, no hay que elegir uno.");
+                Bul("Streaming en vivo real por RTMP (Twitch, YouTube, Facebook, etc.), con captura de camara/pantalla, preview y control de capas tipo OBS, todo integrado en el mismo rail.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Nueva seccion: Biblioteca");
+                Bul("Ver, renombrar y borrar tus archivos de Video, Imagen y Audio ya importados, separado de Vista en Vivo para no arriesgar nada de lo que este proyectando.");
+                Bul("Nuevo panel \"Render\": convierte tus videos y audios a otros formatos aprovechando ffmpeg, sin instalar nada aparte.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblia a pantalla completa");
+                Bul("El mismo buscador de Biblia de siempre, ahora tambien como su propia seccion a pantalla completa: libros/capitulos a la izquierda, texto grande a la derecha.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Selector rapido y novedades");
+                Bul("Alt+Espacio abre un selector para saltar entre Hub, Yggdrasil, Biblioteca y Biblia con el teclado, sin tocar el mouse.");
+                Bul("Al abrir una version nueva de ProyecThor aparece un carrusel de novedades en el Hub, en vez de tener que buscarlas en esta misma pantalla.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Monitor de Vista en Vivo, mas compacto");
+                Bul("El panel de Preview del Monitor ocupaba mucho mas alto del que en realidad necesitaba: se redujo para darle bastante mas espacio al video.");
+                Bul("El boton de Play/Pausa se integro en la misma fila que Inicio / -10s / +10s / Detener, en vez de tener su propia fila completa aparte.");
+                Bul("Botones e iconos del Preview mas chicos y prolijos; la columna central (Transmitir/Loop) ahora se achica sola si el espacio disponible es menor al habitual, en vez de cortarse.");
+                Bul("Sacado el boton de Contener/Estirar de esa columna: ya estaba disponible a la derecha de Vista en Vivo, no hacia falta duplicarlo.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Estilos renovado");
+                Bul("Se le bajo el tono \"arcoiris\" que tenia (cada pestaña/tarjeta con un color distinto) a favor de un solo acento consistente con el resto de la app.");
+                Bul("Encabezado, bordes y esquinas mas sobrios y rectos, en linea con el resto de los paneles en vez de un look aparte tipo Canva.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Nuevo instalador para Windows");
+                Bul("ProyecThor ahora se instala con un instalador moderno (.msi) en vez del anterior (.exe): mas rapido, mas prolijo y con menos falsos positivos de antivirus.");
+                Bul("Si ya tenias ProyecThor instalado con una version anterior, no hace falta que la desinstales a mano: el instalador nuevo la reemplaza solo.");
+                Bul("Corregido: el icono de la aplicacion no se veia bien (aparecia en blanco) en el acceso directo y en el instalador.");
+                Bul("Las actualizaciones automaticas de esta pantalla tambien se actualizaron para descargar el instalador nuevo correctamente.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Correcciones de estabilidad");
+                Bul("Corregido un cierre inesperado de la app relacionado con ffmpeg: antes podia abrir brevemente una consola negra y cerrarse sin avisar el motivo; ahora corre oculto y muestra el error real si algo falla (por ejemplo, al convertir un video en Biblioteca > Render).");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 9) { // v0.4.2
+                Cat("Pads de Vista en Vivo");
+                Bul("Corregido el problema por el cual guardar un pad (click derecho > Guardar aqui) podia no aplicar nada al presionarlo despues: ahora siempre captura estilo, fondo y captura de pantalla tal cual estan en pantalla.");
+                Bul("El panel de Pads se reorganizo en dos secciones: \"General\" (los pads de siempre) y \"Captura\", que ahora muestra las mismas escenas rapidas del panel Captura, sincronizadas — guardar o aplicar una desde cualquiera de los dos lados es lo mismo.");
+                Bul("El texto de ayuda de \"Escenas rapidas\" se reemplazo por un icono de informacion, para no saturar el panel de letra.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Transporte y volumen de Vista en Vivo");
+                Bul("Los botones de Play/Pausa, Retroceder, Avanzar y Detener ahora son pads de colores tipo controlador MIDI, con el boton de reproduccion iluminado en rojo mientras esta en vivo.");
+                Bul("El control de volumen pasa a ser un fader horizontal estilo consola de sonido en vez del slider de siempre.");
+                Bul("Corregido un icono roto en el boton de silenciar (mute) de Vista en Vivo.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblia: buscador por palabras");
+                Bul("Nuevo boton (lupa + \"Aa\") junto al buscador rapido: permite escribir una o mas palabras y muestra todos los versiculos de la Biblia activa que las contienen, para cuando no te acordas la cita exacta.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Estilos renovado");
+                Bul("El editor de un estilo ya no abre una ventana flotante encima de todo: ahora se muestra acoplado dentro de Home, ocupando todo ese espacio, como una seccion mas de la Biblioteca.");
+                Bul("El selector de fuente pasa de una lista de texto a una grilla con la vista previa real de cada tipografia.");
+                Bul("Nueva pestaña \"Efectos\": fondo, borde, sombra, aberracion cromatica, glow (bloom), neon y subrayado, todo configurable por separado para el texto proyectado.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Shaders: muchos efectos nuevos");
+                Bul("NIS: escalador alternativo a FSR, exclusivo para placas NVIDIA (se detecta automaticamente).");
+                Bul("VHS: sangrado de color, scanlines, bamboleo y ruido de estatica, como una cinta de video vieja.");
+                Bul("Cine: gradacion de color tipo cine, con tinte a elegir entre rojo, verde o azul.");
+                Bul("Contraste y Luminosidad: ajuste directo de contraste y brillo de la salida en vivo.");
+                Bul("Blur, Sharpen, Bloom y Aberracion cromatica: desenfoque, nitidez, resplandor de brillos y desfase de color, respectivamente.");
+                Bul("TAA (antialiasing temporal): suaviza bordes mezclando con el frame anterior, a costa de un poco de desenfoque de movimiento.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 8) { // v0.4.1
                 Cat("Editor de canciones (rediseño total)");
                 Bul("Editar una cancion ya no abre una ventana flotante encima: el mismo panel de Canciones pasa a modo edicion, con letra a la izquierda (mucho mas grande) y preview de las diapositivas a la derecha.");
                 Bul("Titulo y Autor quedan siempre a la vista; Nota, Derechos de autor y Extra se movieron detras de un boton de informacion para no restarle espacio a la letra.");

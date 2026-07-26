@@ -28,7 +28,6 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 
     const float innerW = w - MT::k_PadLg * 2.0f;
 
-    // ── Cabecera ──────────────────────────────────────────────────────────────
     {
         ImVec2 headerPos = ImGui::GetCursorScreenPos();
         DrawStatusDot(
@@ -90,12 +89,11 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 
     float gap = MT::k_Gap;
     float btnH = MT::k_TransportH;
-    float navBtnW = (innerW - (gap * 3.0f)) / 4.0f;
-    float iconSize = 16.0f;
+    float navBtnW = (innerW - (gap * 4.0f)) / 5.0f;
+    float iconSize = 14.0f;
 
     ImGui::Spacing();
 
-    // FILA 1: Controles de Navegación (INICIO | -10s | +10s | STOP)
     ImGui::PushID("btn_inicio_prev");
     if (DrawIconButton("skip_prev", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         player->SetPosition(0.0f);
@@ -107,6 +105,22 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     if (DrawIconButton("replay_10", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         int64_t t = std::max(static_cast<int64_t>(0), curMs - 10000);
         player->SetPosition(lenMs > 0 ? static_cast<float>(t) / static_cast<float>(lenMs) : 0.0f);
+    }
+    ImGui::PopID();
+    ImGui::SameLine(0.0f, gap);
+
+    const char* iconToUse = m_PreviewPlaying ? "pause" : "play";
+    ImGui::PushID("btn_main_transport_prev");
+    if (DrawIconButton(iconToUse, iconSize, MT::k_PrevBtn, MT::k_PrevBtnHov, MT::k_PrevBtnAct, {navBtnW, btnH}, m_PreviewPlaying)) {
+        if (m_PreviewPlaying) {
+            player->SetPause(true);
+            m_PreviewPlaying = false;
+        } else {
+            player->SetMute(true);
+            player->SetVolume(0);
+            player->SetPause(false);
+            m_PreviewPlaying = true;
+        }
     }
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
@@ -125,25 +139,6 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
         player->SetPosition(0.0f);
         player->SetPause(true);
         m_PreviewPlaying = false;
-    }
-    ImGui::PopID();
-
-    ImGui::Spacing();
-
-    // FILA 2: Botón principal de PLAY / PAUSA
-    const char* iconToUse = m_PreviewPlaying ? "pause" : "play";
-
-    ImGui::PushID("btn_main_transport_prev");
-    if (DrawIconButton(iconToUse, 24.0f, MT::k_PrevBtn, MT::k_PrevBtnHov, MT::k_PrevBtnAct, {innerW, btnH * 1.2f}, m_PreviewPlaying)) {
-        if (m_PreviewPlaying) {
-            player->SetPause(true);
-            m_PreviewPlaying = false;
-        } else {
-            player->SetMute(true);
-            player->SetVolume(0);
-            player->SetPause(false);
-            m_PreviewPlaying = true;
-        }
     }
     ImGui::PopID();
 
