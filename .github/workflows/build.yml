@@ -59,6 +59,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64 ninja-build
 
+      # ffmpeg.exe NO esta trackeado en git (100+MB, ver .gitignore) -- se
+      # baja aca en vez de comitearlo, y extrabuild/ (ya presente en el
+      # repo) lo copia solo al build junto con el resto (ver CMakeLists.txt,
+      # seccion "COPIA DE extrabuild/"). Sin este paso, el instalador que
+      # sale de CI le faltaria ffmpeg y Streaming quedaria roto para
+      # cualquiera que lo instale.
+      - name: Descargar ffmpeg (para Streaming/BroadcastPanel)
+        run: |
+          curl -L -f -o /tmp/ffmpeg.zip "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          unzip -j /tmp/ffmpeg.zip "*/bin/ffmpeg.exe" -d extrabuild
+          test -f extrabuild/ffmpeg.exe
+
       - name: Configurar
         run: |
           cmake -B build-win -G Ninja \

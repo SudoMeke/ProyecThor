@@ -75,6 +75,7 @@ private:
     void ApplyProfessionalTheme();
     void RenderMainMenuBar();
     void RenderModeToolbar();
+    void RenderQuickSwitcher();
  DatabasePanel m_DatabasePanel;
     WikiPanel     m_WikiPanel;
     YggdrasilPanel      m_YggdrasilPanel;
@@ -102,6 +103,10 @@ private:
 
     Hub           m_Hub;
     WorkspaceMode m_Mode = WorkspaceMode::Hub;
+
+    // Selector rapido (Alt+Espacio) — ver RenderQuickSwitcher.
+    bool m_QuickSwitchOpen  = false;
+    int  m_QuickSwitchIndex = 0;
 };
 
 } // namespace ProyecThor::UI

@@ -1060,8 +1060,101 @@ void UIManager::RenderModeToolbar()
 // ---------------------------------------------------------------------------
 // RenderMainMenuBar
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// RenderQuickSwitcher
+// ---------------------------------------------------------------------------
+// Alt+Espacio: paleta flotante para saltar entre las 5 secciones del
+// workspace (Hub/Proyector/Streaming/Yggdrasil/Biblioteca) con las flechas
+// + Enter, sin depender de que la toolbar de modos este visible (ver
+// GeneralSettings::showModeToolbar) — funciona igual este prendida o no.
+void UIManager::RenderQuickSwitcher()
+{
+    struct QSItem { WorkspaceMode mode; DrawIconFn icon; const char* label; };
+    static const QSItem kItems[] = {
+        { WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
+        { WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
+        { WorkspaceMode::Streaming,  HomeIcons::DrawIcon_Broadcast, "Streaming"  },
+        { WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
+        { WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
+    };
+    constexpr int kCount = 5;
+
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Space, false))
+    {
+        m_QuickSwitchOpen  = !m_QuickSwitchOpen;
+        for (int i = 0; i < kCount; i++)
+            if (kItems[i].mode == m_Mode) m_QuickSwitchIndex = i;
+    }
+    if (!m_QuickSwitchOpen) return;
+
+    auto Activate = [&](int idx) {
+        m_Mode = kItems[idx].mode;
+        if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
+        if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+        m_QuickSwitchOpen = false;
+    };
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) m_QuickSwitchOpen = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true))
+        m_QuickSwitchIndex = (m_QuickSwitchIndex + 1) % kCount;
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true))
+        m_QuickSwitchIndex = (m_QuickSwitchIndex + kCount - 1) % kCount;
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
+        Activate(m_QuickSwitchIndex);
+    if (!m_QuickSwitchOpen) return; // Enter/Escape ya lo cerraron este mismo frame
+
+    const ImVec2 winSize(340.0f, 44.0f + kCount * 42.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
+                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
+    ImGui::SetNextWindowSize(winSize);
+    ImGui::SetNextWindowFocus();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(10.0f, 10.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.070f, 0.075f, 0.100f, 0.97f));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.300f, 0.320f, 0.420f, 0.90f));
+
+    ImGui::Begin("##QuickSwitcher", &m_QuickSwitchOpen,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
+                 ImGuiWindowFlags_NoDocking    | ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoResize     | ImGuiWindowFlags_NoNav);
+
+    ImGui::TextDisabled("Ir a...   (flechas + Enter, Esc para cerrar)");
+    ImGui::Spacing();
+
+    for (int i = 0; i < kCount; i++)
+    {
+        bool sel = (i == m_QuickSwitchIndex);
+        ImGui::PushID(i);
+
+        ImVec2 rowPos = ImGui::GetCursorScreenPos();
+        const float rowH = 38.0f;
+
+        if (sel) ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.30f, 0.45f, 0.90f, 0.55f));
+        if (ImGui::Selectable("##qsRow", sel, 0, ImVec2(0.0f, rowH)))
+            Activate(i);
+        if (sel) ImGui::PopStyleColor();
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImU32 col = sel ? IM_COL32(255, 255, 255, 255) : IM_COL32(180, 182, 198, 255);
+        kItems[i].icon(dl, ImVec2(rowPos.x + 8.0f, rowPos.y + (rowH - 22.0f) * 0.5f), 22.0f, col);
+        dl->AddText(ImVec2(rowPos.x + 42.0f, rowPos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f),
+                    col, kItems[i].label);
+
+        ImGui::PopID();
+    }
+
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+}
+
 void UIManager::RenderMainMenuBar()
 {
+    RenderQuickSwitcher();
+
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(12.0f, 10.0f));
