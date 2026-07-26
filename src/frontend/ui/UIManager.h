@@ -15,7 +15,6 @@
 #include "panels/PerformancePanel.h"
 #include "panels/YggdrasilPanel.h"
 #include "panels/LibraryManagerPanel.h"
-#include "panels/BroadcastPanel.h"
 #include "panels/BibleFullscreenPanel.h"
 
 namespace ProyecThor::UI {
@@ -33,8 +32,9 @@ enum class ActiveLeftPanel {
 //  - Hub: pantalla de inicio/novedades (Hub.cpp), tal cual ya existia.
 //  - Projector: el workspace de siempre (Biblioteca/Home/Vista en Vivo/
 //    Herramientas/Diseño dockeados), antes controlado por el bool m_HubMode.
-//  - Streaming: todavia no hace nada (placeholder).
-//  - Yggdrasil: control OSC de dispositivos externos (YggdrasilPanel), solo.
+//  - Yggdrasil: OSC, Red, Chat y Streaming (RTMP), todo en un rail propio
+//    (YggdrasilPanel) -- Streaming fue su propio modo un tiempo, se
+//    combino aca por pedido.
 //  - Biblioteca: ver/gestionar (renombrar, borrar) Video/Imagen/Audio ya
 //    importados, sin seleccionar nada para Vista en Vivo (LibraryManagerPanel).
 //  - Biblia: el mismo BibleView de Home, a pantalla completa
@@ -42,7 +42,6 @@ enum class ActiveLeftPanel {
 enum class WorkspaceMode {
     Hub,
     Projector,
-    Streaming,
     Yggdrasil,
     Biblioteca,
     Biblia,
@@ -84,7 +83,6 @@ private:
     WikiPanel     m_WikiPanel;
     YggdrasilPanel      m_YggdrasilPanel;
     LibraryManagerPanel m_LibraryManagerPanel;
-    BroadcastPanel      m_BroadcastPanel;
     BibleFullscreenPanel m_BiblePanel;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;

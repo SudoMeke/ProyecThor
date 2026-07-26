@@ -1,5 +1,4 @@
 #pragma once
-#include "IPanel.h"
 #include "capture/CapturePanel.h"
 #include "backend/core/StreamEncoder.h"
 #include <string>
@@ -8,8 +7,10 @@
 namespace ProyecThor::UI {
 
 // ── BroadcastPanel ───────────────────────────────────────────────────────────
-// Seccion "Streaming" del workspace (ver WorkspaceMode en UIManager.h):
-// transmision en vivo por RTMP, estilo OBS, con 3 pasos en un rail propio:
+// Transmision en vivo por RTMP, estilo OBS. Vive dentro del rail de
+// Yggdrasil (Capture/Layer/Iniciar, ver YggdrasilPanel.cpp) -- no es un
+// IPanel/modo propio, mismo criterio que StreamingPanel ("Red") y
+// TeamChatPanel ("Chat") dentro de ese mismo rail.
 //  - Capture: la MISMA fuente de captura que ya usa el resto de ProyecThor
 //    (CapturePanel — camara/ventana/monitor), pero el boton clave aca es
 //    "Mostrar en Layer" en vez de "Enviar a Proyector".
@@ -23,24 +24,21 @@ namespace ProyecThor::UI {
 // "escena" con varios items; ProyecThor::UI::CapturePanel ya modela eso
 // para el proyector via CaptureSceneSettings, pero extenderlo a multiples
 // fuentes SIMULTANEAS en Streaming es un paso aparte, no incluido aca.
-class BroadcastPanel : public IPanel {
+class BroadcastPanel {
 public:
-    ~BroadcastPanel() override;
+    ~BroadcastPanel();
 
-    void        Render()  override;
-    std::string GetName() const override { return "Streaming"; }
+    // Llamar UNA VEZ POR FRAME sin importar que pestaña de Yggdrasil este
+    // activa: si hay una transmision en curso, sigue empujando frames
+    // aunque el operador este mirando OSC/Red/Chat -- mismo criterio que
+    // StreamingPanel::Update()/TeamChatPanel::Update().
+    void Update();
 
-private:
-    enum class Section { Capture, Layer, Start };
-
-    void RenderRail();
     void RenderCaptureSection();
     void RenderLayerSection();
     void RenderStartSection();
-    void PumpEncoder(); // si esta transmitiendo, lee la textura activa y la empuja a ffmpeg
 
-    Section m_Section = Section::Capture;
-
+private:
     CapturePanel m_Capture;      // instancia propia, independiente de la de Diseño/Captura
     bool         m_ShowInLayer = false;
 

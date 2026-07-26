@@ -237,15 +237,7 @@ void UIManager::RenderAll()
     // dibuje despues (Hub, dockspace o Yggdrasil) no quede tapado debajo.
     RenderModeToolbar();
 
-    // ── Streaming (transmision RTMP en vivo, ver BroadcastPanel) ────────────
-    if (m_Mode == WorkspaceMode::Streaming)
-    {
-        m_BroadcastPanel.Render();
-        RenderMainMenuBar();
-        return;
-    }
-
-    // ── Yggdrasil (control OSC de dispositivos externos) ───────────────────
+    // ── Yggdrasil (OSC, Red, Chat y Streaming) ──────────────────────────────
     if (m_Mode == WorkspaceMode::Yggdrasil)
     {
         m_YggdrasilPanel.Render();
@@ -1020,15 +1012,13 @@ void UIManager::RenderModeToolbar()
     static const IconRailItem kItems[] = {
         { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
-        { (int)WorkspaceMode::Streaming,  HomeIcons::DrawIcon_Broadcast, "Streaming"  },
         { (int)WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
         { (int)WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
         { (int)WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
     };
-    static const float kColors[6][4] = {
+    static const float kColors[5][4] = {
         { 0.55f, 0.60f, 0.68f, 1.0f }, // Hub
         { 0.31f, 0.55f, 1.00f, 1.0f }, // Proyector
-        { 0.30f, 0.80f, 0.85f, 1.0f }, // Streaming
         { 0.65f, 0.31f, 0.94f, 1.0f }, // Yggdrasil
         { 0.35f, 0.80f, 0.55f, 1.0f }, // Biblioteca
         { 0.86f, 0.67f, 0.16f, 1.0f }, // Biblia
@@ -1051,7 +1041,7 @@ void UIManager::RenderModeToolbar()
     ImGui::PopStyleVar();
 
     int currentIndex = (int)m_Mode;
-    RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Horizontal, kColors);
+    RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, kColors);
     WorkspaceMode newMode = (WorkspaceMode)currentIndex;
     if (newMode != m_Mode)
     {
@@ -1084,12 +1074,11 @@ void UIManager::RenderQuickSwitcher()
     static const QSItem kItems[] = {
         { WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
-        { WorkspaceMode::Streaming,  HomeIcons::DrawIcon_Broadcast, "Streaming"  },
         { WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Yggdrasil,  "Yggdrasil"  },
         { WorkspaceMode::Biblioteca, AppIcons::DrawIcon_Layers,     "Biblioteca" },
         { WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
     };
-    constexpr int kCount = 6;
+    constexpr int kCount = 5;
 
     ImGuiIO& io = ImGui::GetIO();
     if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Space, false))

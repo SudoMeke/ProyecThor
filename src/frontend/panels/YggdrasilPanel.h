@@ -3,6 +3,7 @@
 #include "backend/core/OSCReceiver.h"
 #include "StreamingPanel.h"
 #include "TeamChatPanel.h"
+#include "BroadcastPanel.h"
 #include <functional>
 #include <string>
 #include <vector>
@@ -11,12 +12,14 @@ namespace ProyecThor::UI {
 
 // ── YggdrasilPanel ───────────────────────────────────────────────────────────
 // El "arbol del mundo" que conecta ProyecThor con el resto: OSC (luces/
-// controladores externos), Red (transmision LAN) y Chat, en un rail propio
-// -- Red y Chat vivian antes en Biblioteca/Herramientas respectivamente, se
-// mudaron aca por pedido (comparten servidor/puerto entre si, ver
-// TeamChatPanel.h). Es su propio modo de workspace (ver WorkspaceMode en
-// UIManager.h/RenderAll), no un panel dockeado: al activarlo reemplaza TODO
-// el contenido de abajo, dibujando a pantalla completa (mismo criterio que
+// controladores externos), Red (transmision LAN), Chat y Streaming (RTMP,
+// con sus propios Capture/Layer/Iniciar), todo en un unico rail -- Red y
+// Chat vivian antes en Biblioteca/Herramientas, Streaming era su propio
+// modo de workspace; se combinaron aca porque son todas formas de conectar
+// ProyecThor con algo externo (mismo espiritu que el nombre "Yggdrasil").
+// Es su propio modo de workspace (ver WorkspaceMode en UIManager.h/
+// RenderAll), no un panel dockeado: al activarlo reemplaza TODO el
+// contenido de abajo, dibujando a pantalla completa (mismo criterio que
 // Hub.cpp).
 //
 // OSC tiene dos direcciones independientes:
@@ -36,7 +39,7 @@ public:
     std::string GetName() const override { return "Yggdrasil"; }
 
 private:
-    enum class Section { OSC, Red, Chat };
+    enum class Section { OSC, Red, Chat, Capture, Layer, Start };
 
     struct BindableParam {
         std::string                name;  // debe matchear OSCBinding::paramName
@@ -65,6 +68,9 @@ private:
     // Mudados desde LibraryPanel/ViewToolsPanel (ver comentario de arriba).
     StreamingPanel m_Red;
     TeamChatPanel  m_Chat;
+
+    // Streaming RTMP, antes su propio WorkspaceMode -- ver BroadcastPanel.h.
+    BroadcastPanel m_Broadcast;
 };
 
 } // namespace ProyecThor::UI

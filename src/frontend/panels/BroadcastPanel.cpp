@@ -1,9 +1,6 @@
 #include <GL/glew.h>
 #include "BroadcastPanel.h"
-#include "AppIcons.h"
-#include "IconRail.h"
 #include "backend/settings/SettingsManager.h"
-#include "home/HomeIcons.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cstdio>
@@ -12,29 +9,6 @@ namespace ProyecThor::UI {
 
 BroadcastPanel::~BroadcastPanel() {
     m_Encoder.Stop();
-}
-
-void BroadcastPanel::RenderRail() {
-    static const IconRailItem kItems[] = {
-        { (int)Section::Capture, HomeIcons::DrawIcon_Camera,    "Capture" },
-        { (int)Section::Layer,   AppIcons::DrawIcon_Layers,     "Layer"   },
-        { (int)Section::Start,   HomeIcons::DrawIcon_Broadcast, "Iniciar" },
-    };
-    static const float kColors[3][4] = {
-        { 0.90f, 0.35f, 0.45f, 1.0f }, // Capture
-        { 0.35f, 0.80f, 0.55f, 1.0f }, // Layer
-        { 0.90f, 0.28f, 0.28f, 1.0f }, // Iniciar
-    };
-
-    float railW = IconRailThickness(true);
-    ImGui::BeginChild("##broadcastRail", ImVec2(railW, 0.0f), false,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-    int currentIndex = (int)m_Section;
-    RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Vertical, kColors);
-    m_Section = (Section)currentIndex;
-
-    ImGui::EndChild();
 }
 
 void BroadcastPanel::RenderCaptureSection() {
@@ -177,7 +151,7 @@ void BroadcastPanel::RenderStartSection() {
     }
 }
 
-void BroadcastPanel::PumpEncoder() {
+void BroadcastPanel::Update() {
     if (!m_Encoder.IsStreaming()) return;
     if (!m_ShowInLayer || !m_Capture.IsLive()) return;
 
@@ -200,44 +174,6 @@ void BroadcastPanel::PumpEncoder() {
     glBindTexture(GL_TEXTURE_2D, (GLuint)prevTex);
 
     m_Encoder.PushFrame(m_ReadbackBuffer.data(), w, h);
-}
-
-void BroadcastPanel::Render() {
-    PumpEncoder();
-
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->WorkPos);
-    ImGui::SetNextWindowSize(vp->WorkSize);
-    ImGui::SetNextWindowViewport(vp->ID);
-
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove       |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
-
-    ImGui::Begin("##BroadcastRoot", nullptr, flags);
-    ImGui::BeginChild("##broadcastContent", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AlwaysUseWindowPadding);
-
-    ImGui::TextUnformatted("Streaming");
-    ImGui::SameLine();
-    ImGui::TextDisabled("(transmision en vivo por RTMP)");
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    RenderRail();
-    ImGui::SameLine();
-    ImGui::BeginChild("##broadcastSection", ImVec2(0.0f, 0.0f));
-
-    switch (m_Section) {
-        case Section::Capture: RenderCaptureSection(); break;
-        case Section::Layer:   RenderLayerSection();   break;
-        case Section::Start:   RenderStartSection();   break;
-    }
-
-    ImGui::EndChild();
-    ImGui::EndChild();
-    ImGui::End();
 }
 
 } // namespace ProyecThor::UI

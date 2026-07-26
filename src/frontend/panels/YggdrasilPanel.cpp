@@ -349,13 +349,19 @@ void YggdrasilPanel::RenderSendSection() {
 void YggdrasilPanel::RenderRail() {
     static const IconRailItem kItems[] = {
         { (int)Section::OSC,  AppIcons::DrawIcon_Yggdrasil,  "OSC"  },
-        { (int)Section::Red,  HomeIcons::DrawIcon_Broadcast, "Red"  },
-        { (int)Section::Chat, HomeIcons::DrawIcon_Chat,      "Chat" },
+        { (int)Section::Red,     HomeIcons::DrawIcon_Broadcast, "Red"     },
+        { (int)Section::Chat,    HomeIcons::DrawIcon_Chat,      "Chat"    },
+        { (int)Section::Capture, HomeIcons::DrawIcon_Camera,    "Capture" },
+        { (int)Section::Layer,   AppIcons::DrawIcon_Layers,     "Layer"   },
+        { (int)Section::Start,   AppIcons::DrawIcon_Monitor,    "Iniciar" },
     };
-    static const float kColors[3][4] = {
+    static const float kColors[6][4] = {
         { 0.65f, 0.31f, 0.94f, 1.0f }, // OSC
         { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
         { 0.75f, 0.40f, 0.90f, 1.0f }, // Chat
+        { 0.90f, 0.35f, 0.45f, 1.0f }, // Capture
+        { 0.35f, 0.80f, 0.55f, 1.0f }, // Layer
+        { 0.90f, 0.28f, 0.28f, 1.0f }, // Iniciar
     };
 
     float railW = IconRailThickness(true);
@@ -363,7 +369,7 @@ void YggdrasilPanel::RenderRail() {
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     int currentIndex = (int)m_Section;
-    RenderIconRail(kItems, 3, currentIndex, IconRailOrientation::Vertical, kColors);
+    RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Vertical, kColors);
     m_Section = (Section)currentIndex;
 
     ImGui::EndChild();
@@ -384,6 +390,7 @@ void YggdrasilPanel::Render() {
     // ViewToolsPanel).
     m_Red.Update();
     m_Chat.Update();
+    m_Broadcast.Update();
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
@@ -409,7 +416,7 @@ void YggdrasilPanel::Render() {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (iconSz - ImGui::GetTextLineHeight()) * 0.5f);
         ImGui::TextUnformatted("Yggdrasil");
         ImGui::SameLine();
-        ImGui::TextDisabled("(OSC, Red y Chat)");
+        ImGui::TextDisabled("(OSC, Red, Chat y Streaming)");
     }
     ImGui::Spacing();
     ImGui::Separator();
@@ -420,9 +427,12 @@ void YggdrasilPanel::Render() {
     ImGui::BeginChild("##yggdrasilSection", ImVec2(0.0f, 0.0f));
 
     switch (m_Section) {
-        case Section::OSC:  RenderOSCSection();       break;
-        case Section::Red:  m_Red.RenderContent();     break;
-        case Section::Chat: m_Chat.RenderContent();    break;
+        case Section::OSC:     RenderOSCSection();               break;
+        case Section::Red:     m_Red.RenderContent();             break;
+        case Section::Chat:    m_Chat.RenderContent();            break;
+        case Section::Capture: m_Broadcast.RenderCaptureSection(); break;
+        case Section::Layer:   m_Broadcast.RenderLayerSection();   break;
+        case Section::Start:   m_Broadcast.RenderStartSection();   break;
     }
 
     ImGui::EndChild();
