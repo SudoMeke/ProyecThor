@@ -67,19 +67,21 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
-        10, "0.5.0",
-        "ACTUALIZACION MAYOR", "ACTUALIZACION MAYOR",
-        "splash_bg6.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Nueva seccion Yggdrasil (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
+        10, "0.4.3",
+        "ACTUALIZACION", "ACTUALIZACION",
+        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
         "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
         "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
         "en Vivo mas compacto, editor de Estilos renovado, nuevo instalador para "
-        "Windows (.msi) y varias correcciones de estabilidad."
+        "Windows, Biblioteca con Biblias y cancion de bienvenida incluidas de entrada, "
+        "corregido el titulo de las canciones al guardarlas, y varias correcciones de "
+        "estabilidad."
     },
     {
         9, "0.4.2",
         "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
+        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
         "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
         "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
         "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
@@ -90,7 +92,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         8, "0.4.1",
         "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg4.png",
+        "splash_bg2.png",
         "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
         "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
         "y vista en grilla/lista en Biblioteca > Videos, escenas rapidas "
@@ -274,9 +276,9 @@ void Hub::RenderWhatsNewIfNeeded() {
     static const Slide kSlides[] = {
         { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
           "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
-        { "Nuevo instalador",
-          "ProyecThor ahora se instala con un instalador moderno (.msi) que reemplaza solo cualquier version anterior, sin pasos extra." },
-        { "Yggdrasil",
+        { "Biblioteca con contenido de entrada",
+          "Canciones y Biblias ya no arrancan vacias: la Biblioteca viene con Biblias y una cancion de bienvenida cargadas de entrada, listas para usar." },
+        { "Conexiones",
           "Nueva seccion que reune todo lo que conecta ProyecThor con el exterior: OSC (luces/controladores externos, con \"Aprender\"), Red y Chat (los mismos de siempre, ahora disponibles tambien aca), y Streaming en vivo por RTMP (Twitch, YouTube, etc. con captura de camara/pantalla y preview tipo OBS) -- todo en un mismo rail." },
         { "Biblioteca",
           "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo. Incluye un panel \"Render\" para convertir formatos con ffmpeg." },
@@ -291,16 +293,22 @@ void Hub::RenderWhatsNewIfNeeded() {
     };
     constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
 
-    static int  s_Index      = 0;
-    static bool s_OpenedOnce = false;
+    static int  s_Index         = 0;
+    static bool s_OpenedOnce    = false;
+    // Desmarcado por default: si el operador cierra sin marcarlo, el
+    // carrusel vuelve a aparecer en el proximo arranque (dismissedChangelog
+    // NO se persiste). Solo marcando la casilla se guarda la version actual
+    // en dismissedChangelog y deja de mostrarse.
+    static bool s_DontShowAgain = false;
     if (!s_OpenedOnce) {
         ImGui::OpenPopup("##WhatsNewCarousel");
-        s_OpenedOnce = true;
-        s_Index      = 0;
+        s_OpenedOnce     = true;
+        s_Index          = 0;
+        s_DontShowAgain  = false;
     }
 
     ImGuiViewport* vp      = ImGui::GetMainViewport();
-    const ImVec2   winSize = ImVec2(580.0f, 400.0f);
+    const ImVec2   winSize = ImVec2(580.0f, 434.0f);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
                                     vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
     ImGui::SetNextWindowSize(winSize);
@@ -333,7 +341,7 @@ void Hub::RenderWhatsNewIfNeeded() {
         ImGui::TextWrapped("%s", slide.body);
         ImGui::PopStyleColor();
 
-        ImGui::SetCursorPosY(winSize.y - 96.0f);
+        ImGui::SetCursorPosY(winSize.y - 130.0f);
         float dotsW = kSlideCount * 16.0f;
         ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -343,6 +351,11 @@ void Hub::RenderWhatsNewIfNeeded() {
             dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y + 5.0f), 5.0f, col);
         }
         ImGui::Dummy(ImVec2(dotsW, 14.0f));
+
+        ImGui::SetCursorPosY(winSize.y - 96.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.64f, 0.76f, 1.0f));
+        ImGui::Checkbox("No volver a mostrar", &s_DontShowAgain);
+        ImGui::PopStyleColor();
 
         ImGui::SetCursorPosY(winSize.y - 60.0f);
 
@@ -357,24 +370,30 @@ void Hub::RenderWhatsNewIfNeeded() {
         if (s_Index == 0) ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (s_Index == kSlideCount - 1) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
-            if (ImGui::Button("Entendido", ImVec2(110, 34))) {
+        // "No volver a mostrar" sin marcar (default): dismissedChangelog NO
+        // se toca, asi que el carrusel vuelve a aparecer en el proximo
+        // arranque -- cerrar (con cualquiera de los dos botones) solo lo
+        // saca de la vista por esta sesion.
+        auto closeCarousel = [&]() {
+            if (s_DontShowAgain) {
                 general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
                 ProyecThor::Settings::SettingsManager::Get().Save();
-                ImGui::CloseCurrentPopup();
             }
+            ImGui::CloseCurrentPopup();
+        };
+
+        if (s_Index == kSlideCount - 1) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
+            if (ImGui::Button("Entendido", ImVec2(110, 34)))
+                closeCarousel();
             ImGui::PopStyleColor();
         } else {
             if (ImGui::Button("Siguiente >", ImVec2(110, 34))) s_Index++;
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Saltar", ImVec2(70, 34))) {
-            general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
-            ProyecThor::Settings::SettingsManager::Get().Save();
-            ImGui::CloseCurrentPopup();
-        }
+        if (ImGui::Button("Cerrar", ImVec2(70, 34)))
+            closeCarousel();
 
         ImGui::EndPopup();
     }
@@ -681,7 +700,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 10; // id de kUpdateRegistry (10 = v0.5.0, la mas reciente)
+    static int    selectedUpdateVer = 10; // id de kUpdateRegistry (10 = v0.4.3, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -1169,11 +1188,11 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            if (selectedUpdateVer == 10) { // v0.5.0
-                Cat("Nueva seccion: Yggdrasil");
-                Bul("Toolbar nueva arriba de todo (Hub / Proyector / Yggdrasil / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
+            if (selectedUpdateVer == 10) { // v0.4.3
+                Cat("Nueva seccion: Conexiones");
+                Bul("Toolbar nueva arriba de todo (Hub / Proyector / Conexiones / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
                 Bul("OSC: enviar mensajes a luces/controladores externos con direccion IP y puerto configurables, mas \"Aprender\" (OSC Learn) para vincular un fader externo a parametros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");
-                Bul("Red y Chat, disponibles ahora en dos lugares a la vez (Yggdrasil y su ubicacion original en Biblioteca/Herramientas): es la misma conexion y el mismo chat, no hay que elegir uno.");
+                Bul("Red y Chat, disponibles ahora en dos lugares a la vez (Conexiones y su ubicacion original en Biblioteca/Herramientas): es la misma conexion y el mismo chat, no hay que elegir uno.");
                 Bul("Streaming en vivo real por RTMP (Twitch, YouTube, Facebook, etc.), con captura de camara/pantalla, preview y control de capas tipo OBS, todo integrado en el mismo rail.");
                 ImGui::Dummy(ImVec2(0,12));
 
@@ -1187,7 +1206,7 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Selector rapido y novedades");
-                Bul("Alt+Espacio abre un selector para saltar entre Hub, Yggdrasil, Biblioteca y Biblia con el teclado, sin tocar el mouse.");
+                Bul("Alt+Espacio abre un selector para saltar entre Hub, Conexiones, Biblioteca y Biblia con el teclado, sin tocar el mouse.");
                 Bul("Al abrir una version nueva de ProyecThor aparece un carrusel de novedades en el Hub, en vez de tener que buscarlas en esta misma pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
 
@@ -1204,10 +1223,17 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Nuevo instalador para Windows");
-                Bul("ProyecThor ahora se instala con un instalador moderno (.msi) en vez del anterior (.exe): mas rapido, mas prolijo y con menos falsos positivos de antivirus.");
-                Bul("Si ya tenias ProyecThor instalado con una version anterior, no hace falta que la desinstales a mano: el instalador nuevo la reemplaza solo.");
+                Bul("ProyecThor ahora se instala con un instalador moderno: mas rapido, mas prolijo y con menos falsos positivos de antivirus.");
+                Bul("Si ya tenias ProyecThor instalado con una version anterior (aunque sea de un instalador viejo), no hace falta que la desinstales a mano: el instalador nuevo la detecta y la reemplaza solo, sin dejar archivos sueltos de la version vieja.");
                 Bul("Corregido: el icono de la aplicacion no se veia bien (aparecia en blanco) en el acceso directo y en el instalador.");
                 Bul("Las actualizaciones automaticas de esta pantalla tambien se actualizaron para descargar el instalador nuevo correctamente.");
+                Bul("Nuevo aviso en Ajustes > Actualizaciones, con un icono de informacion que te recuerda revisar \"Agregar o quitar programas\" si sospechas que quedo mas de una version instalada.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca con contenido de entrada");
+                Bul("Canciones y Biblias ya no arrancan vacias en una instalacion nueva: se cargan solas una cancion de bienvenida y varias Biblias (español, ingles y portugues) para tener algo con que probar de una.");
+                Bul("Corregido: al ponerle Titulo a una cancion nueva (o cambiarselo a una ya existente) desde el editor, ahora se ve reflejado en la lista, el buscador y las playlists — antes quedaba guardado por dentro pero la Biblioteca seguia mostrando el nombre viejo (\"Nueva cancion\").");
+                Bul("Corregido: renombrar una cancion desde el menu contextual ya no le hace perder el autor, las etiquetas, el estilo/fondo preferido ni las playlists en las que estaba.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Correcciones de estabilidad");

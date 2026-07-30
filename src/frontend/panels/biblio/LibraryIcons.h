@@ -49,6 +49,21 @@ inline void DrawIcon_Image(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         IcPt(o, sz, 0.88f, 0.82f), col);
 }
 
+inline void DrawIcon_Multimedia(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+    float r     = sz * 0.08f;
+    dl->AddRect(IcPt(o, sz, 0.10f, 0.10f), IcPt(o, sz, 0.90f, 0.68f),
+                col, r, ImDrawFlags_RoundCornersAll, thick);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.38f, 0.26f),
+        IcPt(o, sz, 0.38f, 0.52f),
+        IcPt(o, sz, 0.60f, 0.39f), col);
+    dl->AddEllipseFilled(IcPt(o, sz, 0.28f, 0.90f),
+                         ImVec2(sz * 0.11f, sz * 0.08f), col, 0.f, 10);
+    dl->AddLine(IcPt(o, sz, 0.38f, 0.90f), IcPt(o, sz, 0.38f, 0.66f), col, sz * 0.055f);
+}
+
 inline void DrawIcon_Cross(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     float thick = sz * 0.18f;

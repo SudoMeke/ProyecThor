@@ -265,11 +265,13 @@ namespace ProyecThor::Settings {
     // (ver LibrarySidebar.cpp). Los valores por defecto son los mismos tonos
     // que ya se usaban hardcodeados, para no cambiar nada hasta que el
     // usuario decida personalizar.
-    // Indices 6/7 (Red/Reloj) son un grupo aparte, separado por una linea de
-    // las 6 categorias de contenido de arriba — ver LibrarySidebar.cpp.
-    // Se mudaron desde ViewToolsSettings, mismos colores que tenian alli.
+    // Indices 6/7/8 (Red/Reloj/Render) son un grupo aparte, separado por una
+    // linea de las 6 categorias de contenido de arriba — ver LibrarySidebar.cpp.
+    // Red/Reloj se mudaron desde ViewToolsSettings, mismos colores que tenian
+    // alli. Render (indice 8) se mudo desde la seccion "Biblioteca" del
+    // workspace (LibraryManagerPanel, retirada), mismo color que tenia ahi.
     struct LibrarySidebarSettings {
-        float categoryColor[8][4] = {
+        float categoryColor[9][4] = {
             { 0.31f, 0.55f, 1.00f, 1.0f }, // Letra
             { 0.86f, 0.24f, 0.24f, 1.0f }, // Video
             { 0.24f, 0.86f, 0.39f, 1.0f }, // Imagen
@@ -278,6 +280,7 @@ namespace ProyecThor::Settings {
             { 0.16f, 0.75f, 0.75f, 1.0f }, // Audio
             { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
             { 0.95f, 0.75f, 0.20f, 1.0f }, // Reloj
+            { 0.90f, 0.55f, 0.20f, 1.0f }, // Render
         };
     };
 
@@ -303,13 +306,12 @@ namespace ProyecThor::Settings {
         };
     };
 
-    // ── Sidebar del hub de Diseño (Fondos/Estilos/Overlays/Shaders/
-    //    Transiciones/Anuncios/Captura) ─────────────────────────────────
+    // ── Sidebar del hub de Diseño (Fondos/Estilos/Shaders/Transiciones/
+    //    Anuncios/Captura) ────────────────────────────────────────────────
     struct StylesHubSettings {
-        float categoryColor[7][4] = {
+        float categoryColor[6][4] = {
             { 0.35f, 0.80f, 0.55f, 1.0f }, // Fondos
             { 0.65f, 0.31f, 0.94f, 1.0f }, // Estilos
-            { 0.95f, 0.60f, 0.20f, 1.0f }, // Overlays
             { 0.40f, 0.75f, 0.85f, 1.0f }, // Shaders
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Transiciones
             { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
@@ -355,12 +357,11 @@ namespace ProyecThor::Settings {
     // ── Pads de ViewTools ─────────────────────────────────────────────────
     // 8 botones tipo pad MIDI: cada uno guarda, de forma independiente,
     // una disposicion de Captura (mismos campos que CaptureSceneSettings —
-    // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene), un
+    // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene) y un
     // snapshot directo del estilo+fondo que esta en pantalla en ese momento
-    // (no una referencia por nombre a un estilo guardado), y el estado de
-    // Control Overlays (que macro y en que cue). hasCapture/hasMacro
-    // pueden faltar -- un pad no tiene por que tocar las tres cosas a la
-    // vez. Nunca guarda la letra/texto en pantalla.
+    // (no una referencia por nombre a un estilo guardado). hasCapture/
+    // hasStyle pueden faltar -- un pad no tiene por que tocar las dos cosas
+    // a la vez. Nunca guarda la letra/texto en pantalla.
     struct PadSettings {
         bool assigned  = false;
         int  iconIndex = 0; // indice en la tabla fija de iconos, ver ViewToolsPanel.cpp
@@ -379,11 +380,6 @@ namespace ProyecThor::Settings {
         int         bgType = 0; // espeja PresentationCore::PresentationState::BackgroundType
         std::string bgPath;
         float       bgColor[3] = { 0.0f, 0.0f, 0.0f };
-
-        bool        hasMacro = false;
-        std::string macroName;
-        int         macroCueIndex    = -1;
-        bool        macroAutoAdvance = false;
     };
     static constexpr int kPadCount = 8;
     struct PadsSettings {

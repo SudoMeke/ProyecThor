@@ -89,13 +89,6 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
          dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
     }
 
-    // Overlay (logos, videos de overlay, etc.)
-    if (core.IsOverlayActive())
-    {
-        if (void* overlayTex = core.GetOverlayTexture())
-            dl->AddImage(overlayTex, p0, p1, ImVec2(0, 0), ImVec2(1, 1));
-    }
-
     // ── Texto proyectado ───────────────────────────────────────────────────
     if (state.showText && !state.currentText.empty())
     {

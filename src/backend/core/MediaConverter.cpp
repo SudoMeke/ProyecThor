@@ -39,7 +39,7 @@ bool MediaConverter::Start(const std::string& inputPath, const std::string& outp
     m_Thread = std::thread([this, ffmpegPath, inputPath, outputPath]() {
         // -y: sobreescribe si por algun motivo ya existe el destino (el
         // llamador ya se encarga de elegir un nombre libre, ver
-        // RenderConverterSection en LibraryManagerPanel.cpp). Sin -hwaccel
+        // RenderConverterSection en LibraryPanel.cpp). Sin -hwaccel
         // ni flags de codec: se apoya en que ffmpeg elige un codec/
         // contenedor razonable a partir de la extension de salida, igual
         // que hace cualquier conversor simple de formato.

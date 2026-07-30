@@ -2,7 +2,6 @@
 #include "IPanel.h"
 #include "BackgroundsPanel.h"
 #include "CanvasStylesPanel.h"
-#include "OverlaysPanel.h"
 #include "ShadersPanel.h"
 #include "frontend/views/Announcements.h"
 #include "capture/CapturePanel.h"
@@ -13,13 +12,13 @@ namespace ProyecThor::UI {
 class UIManager;
 class TransitionPanel;
 
-// Hub de Diseño: reune Fondos + Estilos + Overlays + Transiciones + Anuncios
-// + Captura en un solo panel con rail de iconos a la izquierda (igual que
+// Hub de Diseño: reune Fondos + Estilos + Transiciones + Anuncios + Captura
+// en un solo panel con rail de iconos a la izquierda (igual que
 // Biblioteca/Home). Anuncios y Captura se movieron aca desde Home, junto
 // con el resto de las herramientas de "preparar/vestir" la salida en vivo.
 enum class StylesSection {
-    Backgrounds = 0, Styles = 1, Overlays = 2, Shaders = 3, Transitions = 4,
-    Announcements = 5, Capture = 6,
+    Backgrounds = 0, Styles = 1, Shaders = 2, Transitions = 3,
+    Announcements = 4, Capture = 5,
 };
 
 class StylesHubPanel : public IPanel {
@@ -53,7 +52,6 @@ private:
 
     BackgroundsPanel   m_Backgrounds;
     CanvasStylesPanel  m_Styles;
-    OverlaysPanel      m_Overlays;
     ShadersPanel       m_Shaders;
     TransitionPanel*   m_TransitionsRef = nullptr;
     Announcements      m_Announcements;

@@ -255,7 +255,7 @@ void SettingsPanel::Render(bool* isOpen) {
     // siempre vuelve a nacer centrado la próxima vez que se abra, sin
     // arrastrar coordenadas obsoletas de una resolución/monitor distinto.
     // NoDocking: ver comentario de floatingClass arriba.
-    bool open = ImGui::Begin("Preferencias", isOpen,
+    bool open = ImGui::Begin("Configuraciones", isOpen,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 

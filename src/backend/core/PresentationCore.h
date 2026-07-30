@@ -11,7 +11,6 @@
 #include "NetworkStreamServer.h"
 #include "ChatMessageStore.h"
 #include "frontend/windowing/SecondaryOutputWindow.h"
-#include "MacroTypes.h"
 
 struct GLFWwindow;
 
@@ -99,7 +98,6 @@ namespace ProyecThor::Core {
         std::string bgPath;
         float bgColor[3] = { 0.0f, 0.0f, 0.0f };
 
-        std::string overlayPath;
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
 
@@ -184,10 +182,10 @@ void SetGlobalMute(bool mute);
         void Update();
 
         void RenderBackground(int outputW, int outputH);
-        void RenderProjectorWindow(); // dibuja background+overlay (contenido, no la ventana en si)
+        void RenderProjectorWindow(); // dibuja el contenido en vivo (background, no la ventana en si)
         PresentationState GetState();
         void ApplyStyleByName(const std::string& styleName);
-        void ApplyStyleSnapshot(const SavedStyle& style); // aplica un snapshot directo (ver ViewToolsPanel::ApplyPad), sin pasar por el catalogo de estilos guardados
+        void ApplyStyleSnapshot(const SavedStyle& style); // aplica un snapshot directo (ver ViewPanel::ApplyPad), sin pasar por el catalogo de estilos guardados
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
@@ -221,10 +219,7 @@ void SetGlobalMute(bool mute);
         void           SetFillBlurBrightness(float v);
         float          GetFillBlurBrightness() const;
 
-        void*          GetOverlayTexture();
-        bool           IsOverlayActive() const;
         VLCBasePlayer* GetBackgroundPlayer();
-        VLCBasePlayer* GetOverlayPlayer();
 
         void  SetFSREnabled(bool enabled);
         bool  GetFSREnabled() const;
@@ -356,21 +351,21 @@ void SetGlobalMute(bool mute);
 
         void SetLayer0_Color(float r, float g, float b);
 
-        void SetOverlayMedia(const std::string& path);
-        void StopOverlayMedia();
         void SetLayer2_Text(const std::string& text);
         void ClearLayer2();
         void SetNextText(const std::string& text); // vista previa para el Stage Display, nunca al publico
 
-        // Cue de cambio de estilo para OClock, disparada por un MacroPlayer.
-        // ConsumeClockStyleCue() devuelve "" si no hay ninguna pendiente.
+        // Cue de cambio de estilo pendiente para OClock. ConsumeClockStyleCue()
+        // devuelve "" si no hay ninguna pendiente. Patron "consumir una vez",
+        // pensado originalmente para que un disparador externo (ej. un
+        // secuenciador de cues) empuje un cambio de estilo sin acoplarse
+        // directo a OClock.
         void        SetClockStyleCue(const std::string& styleName);
         std::string ConsumeClockStyleCue();
 
         // Transicion pendiente para la proxima vez que se dispare una (ver
-        // TransitionPanel::Trigger(), que la consume) — disparada por un
-        // MacroCue con transitionName no vacio. Se guarda como string, no
-        // como UI::TransitionType, para que backend/core no dependa de
+        // TransitionPanel::Trigger(), que la consume). Se guarda como string,
+        // no como UI::TransitionType, para que backend/core no dependa de
         // frontend/panels; el mapeo nombre<->enum vive en TransitionPanel.cpp.
         void SetPendingTransitionOverride(const std::string& name, float duration);
         bool ConsumePendingTransitionOverride(std::string& outName, float& outDuration);
@@ -383,23 +378,6 @@ void SetGlobalMute(bool mute);
         // SetClockStyleCue/ConsumeClockStyleCue arriba.
         void        RequestSongEditorOpen(const std::string& filename);
         bool        ConsumeSongEditorOpenRequest(std::string& outFilename);
-
-        // ── Macros (ver MacroTypes.h) ─────────────────────────────────────
-        // El MacroPlayer vive aca (no en un panel) para que tanto el editor
-        // (LayersOverlayTab) como el transporte "Control Overlays"
-        // (ViewPanel) controlen la MISMA reproduccion.
-        void        PlayMacro(const std::string& name, bool autoAdvance);
-        void        StopMacro();
-        void        NextMacroCue();
-        void        PrevMacroCue();
-        void        SetMacroCueIndex(int index); // salta directo a una cue (ej. recall de un Pad)
-        void        SetMacroAutoAdvance(bool autoAdvance);
-        bool        GetMacroAutoAdvance() const;
-        bool        IsMacroPlaying() const;
-        std::string GetActiveMacroName() const;
-        int         GetMacroCueIndex() const; // -1 = ninguna cue disparada aun
-        int         GetMacroCueCount() const;
-        float       GetMacroElapsed() const;
 
         void*          GetPreviewTexture();
         VLCBasePlayer* GetPreviewPlayer();
@@ -473,6 +451,15 @@ void SetGlobalMute(bool mute);
         bool  GetLiveMute();
         void  SetLiveVolume(int volume);
         void  SetLiveMute(bool mute);
+
+        // Ecualizador de 10 bandas sobre el audio en vivo (ver
+        // BackgroundLayer::SetLiveEqualizer*/VLCBasePlayer::SetEqualizer*).
+        // Sin getters: el estado "de verdad" (para dibujar los sliders) vive
+        // en la UI que los llama (ver MonitorView), igual criterio que ya
+        // usa AudioPanel con su propio ecualizador.
+        void SetLiveEqualizerEnabled(bool enabled);
+        void SetLiveEqualizerPreamp(float preampDb);
+        void SetLiveEqualizerBand(int index, float ampDb);
         // Loop del player "general" (bg/PROGRAM). Antes era un bool local de
         // MonitorView; se subio al estado compartido porque el toggle (en
         // Monitor, ver MonitorCenterColumn) y el enforcement del auto-restart
@@ -638,16 +625,15 @@ bool m_GlobalMuted = false;
         LibrarySelection  m_CurrentSelection;
         bool              m_SelectionFromQueue = false;
 
-        // Cue de "cambiar estilo del reloj" pendiente de un MacroPlayer (ver
-        // MacroTypes.h/LayersOverlayTab). Patron "consumir una vez", igual
-        // que ConsumeEndReached() en VLCBasePlayer: OClock::Update() la lee
-        // y limpia cada frame, asi no compite con que el operador cambie el
-        // estilo a mano desde el combo de OClock.
+        // Cue de "cambiar estilo del reloj" pendiente. Patron "consumir una
+        // vez", igual que ConsumeEndReached() en VLCBasePlayer:
+        // OClock::Update() la lee y limpia cada frame, asi no compite con
+        // que el operador cambie el estilo a mano desde el combo de OClock.
         std::string m_PendingClockStyleCue;
         bool        m_HasClockStyleCue = false;
 
         // Mismo patron "consumir una vez" que m_PendingClockStyleCue, para
-        // la transicion pendiente de un MacroCue (ver SetPendingTransitionOverride).
+        // una transicion pendiente (ver SetPendingTransitionOverride).
         std::string m_PendingTransitionName;
         float       m_PendingTransitionDuration = -1.0f;
         bool        m_HasTransitionOverride = false;
@@ -655,8 +641,6 @@ bool m_GlobalMuted = false;
         // Ver RequestSongEditorOpen/ConsumeSongEditorOpenRequest arriba.
         std::string m_PendingSongEditorOpenFile;
         bool        m_HasSongEditorOpenRequest = false;
-
-        MacroPlayer m_MacroPlayer;
 
         // ── Logo (pantalla de carga, ver Ajustes > Proyeccion) ────────────
         // Textura GL cargada una sola vez (recargada si el path cambia),

@@ -15,7 +15,7 @@ std::string PickImageOrVideoFile();
 std::string PickImageFile();
 
 // Extension-sniffing simple para decidir si un path va por el pipeline de
-// video o de imagen (mismo criterio que BackgroundLayer/OverlayLayer).
+// video o de imagen (mismo criterio que BackgroundLayer).
 bool LooksLikeVideoPath(const std::string& path);
 
 } // namespace ProyecThor::UI

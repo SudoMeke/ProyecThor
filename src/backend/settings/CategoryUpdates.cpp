@@ -161,7 +161,7 @@ static void DoCheckUpdate(const std::string& currentVersion,
     }
     if (tag[0] == 'v') tag = tag.substr(1);
 
-    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.msi");
+    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
     s_LatestVersion  = tag;
 
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -216,11 +216,11 @@ static void DoDownloadAndInstall(const std::string& urlStr) {
 
         char tempPath[MAX_PATH];
         GetTempPathA(MAX_PATH, tempPath);
-        // .msi, no .exe: desde que se empaqueta con WiX, "abrir" este archivo
-        // (ShellExecute con verbo "open") invoca msiexec via la asociacion
-        // por defecto de Windows para .msi, igual que hacia antes con el
-        // instalador .exe de Inno Setup.
-        s_InstallerPath = std::string(tempPath) + "ProyecThor_Update.msi";
+        // .exe (instalador de Inno Setup, ver packaging/windows/ProyecThor.iss):
+        // ShellExecute con verbo "open" lo corre directo, sin depender de
+        // ninguna asociacion de archivo de Windows (a diferencia del .msi
+        // que se uso mientras se empaqueto con WiX Toolset).
+        s_InstallerPath = std::string(tempPath) + "ProyecThor_Update.exe";
 
         std::ofstream outFile(s_InstallerPath, std::ios::binary);
         float  downloadedBytes = 0.0f;
@@ -438,6 +438,21 @@ void SettingsPanel::RenderCategoryUpdates() {
         ImGui::Text("Ultima comprobacion: %s", u.lastChecked.c_str());
         ImGui::PopStyleColor();
     }
+
+    // Recordatorio: el instalador (ver packaging/windows/ProyecThor.iss) ya
+    // borra automaticamente cualquier version anterior detectada (Inno o el
+    // .msi viejo de WiX), pero eso no cubre instalaciones MUY viejas hechas
+    // a mano fuera de esos dos sistemas — dejamos el aviso para que el
+    // usuario lo verifique el mismo desde "Agregar o quitar programas".
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
+    ImGui::TextUnformatted("Verificar versiones antiguas instaladas");
+    ImGui::PopStyleColor();
+    HelpTooltip("El instalador borra automaticamente cualquier version anterior de "
+                "ProyecThor que haya quedado instalada. Si igual sospechas que te "
+                "quedo mas de una version (por ejemplo, de antes de que existiera "
+                "este sistema de actualizaciones), revisa 'Agregar o quitar "
+                "programas' de Windows y desinstala a mano cualquier version vieja "
+                "sobrante.");
 
     // ── Caja de estado ───────────────────────────────────────────────────────
     SectionTitle("Estado");

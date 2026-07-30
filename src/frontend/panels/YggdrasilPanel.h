@@ -38,7 +38,7 @@ public:
     ~YggdrasilPanel() override;
 
     void        Render()  override;
-    std::string GetName() const override { return "Yggdrasil"; }
+    std::string GetName() const override { return "Conexiones"; }
 
     void SetRedPanel(StreamingPanel* p)      { m_Red       = p; }
     void SetChatPanel(TeamChatPanel* p)      { m_Chat       = p; }

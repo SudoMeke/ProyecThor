@@ -21,6 +21,14 @@ std::vector<std::string> LoadSongVerses(const std::string& filename);
 // linesPerSlide<=0 = centinela legacy (una estrofa completa = una diapositiva).
 std::vector<std::string> GroupLyricsIntoSlides(const std::string& normalizedContent, int linesPerSlide);
 
+// Duracion calculada para una estrofa/diapositiva a partir del tempo:
+// 1 compas (4 tiempos) por cada linea fisica de texto -- heuristica simple,
+// pensada para ajustarse a mano cuando el fraseo real no es "4 tiempos por
+// linea" (ver icono de reloj en el editor unificado, que guarda un override
+// en LibrarySongMeta::verseDurationOverrideMs). bpm<=0 devuelve 0 (auto-avance
+// desactivado).
+int CalcVerseDurationMs(const std::string& stanza, int bpm);
+
 void CreateNewSong(LibraryContext& ctx);
 
 // Variante de CreateNewSong para el menu Archivo > Importar > "Importar
@@ -33,6 +41,23 @@ void CreateNewSongFromClipboard(const std::string& clipboardText);
 
 std::string GetSongAuthor(const std::string& filename);
 void SetSongAuthor(const std::string& filename, const std::string& author);
+
+// Nombre a mostrar en listas/playlists/buscador: el Titulo guardado desde el
+// editor unificado (LibrarySongMeta::title) si existe, si no el nombre de
+// archivo sin extension (comportamiento legacy). El archivo en si NUNCA se
+// renombra al tipear un titulo nuevo (rompería la seleccion activa en
+// PresentationCore y las referencias en playlists, que usan el nombre de
+// archivo como clave) — esta funcion es lo que hace que ese Titulo
+// realmente se "vea" en la Biblioteca en vez de quedar solo en el sidecar.
+std::string GetSongDisplayName(const std::string& filename);
+
+// Migra TODOS los sidecars de una cancion (autor, etiquetas, estilo/fondo
+// preset, color de estrofa, meta JSON de LibrarySongMeta, y las referencias
+// en cada playlist) de <oldFilename> a <newFilename> — llamar SIEMPRE
+// despues de un fs::rename exitoso del .txt de la cancion (ver
+// LibraryModals::RenderRenameModal), o esos datos quedan huerfanos bajo el
+// nombre de archivo viejo.
+void MigrateSongSidecars(const std::string& oldFilename, const std::string& newFilename);
 
 std::vector<std::string> GetSongTags(const std::string& filename);
 void SetSongTags(const std::string& filename, const std::vector<std::string>& tags);

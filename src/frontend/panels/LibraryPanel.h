@@ -9,6 +9,8 @@
 #include "frontend/views/OClock.h"
 #include "IPanel.h"
 #include "biblio/LibraryContext.h"
+#include "biblio/LibraryMultimedia.h"
+#include "backend/core/MediaConverter.h"
 
 namespace ProyecThor::UI { class UIManager; class MonitorView; class StreamingPanel; }
 enum class ActiveLeftPanel;
@@ -21,7 +23,12 @@ enum class LibraryCategory {
     Images,
     Bibles,
     Documents,
-    Audio
+    Audio,
+    // Vista unificada del sidebar: reemplaza los 3 botones Video/Imagen/Audio
+    // por uno solo (ver LibraryMultimedia.h). Videos/Images/Audio de arriba
+    // siguen existiendo para la resolucion de carpetas (RefreshList, import,
+    // delete/rename) -- no son alcanzables desde el sidebar directamente.
+    Multimedia
 };
 
 // Grupo aparte, abajo del todo en el sidebar izquierdo (ver LibrarySidebar.cpp),
@@ -33,6 +40,9 @@ enum class LibrarySideMode {
                     // disponible en Yggdrasil (misma instancia, ver
                     // SetStreamingPanelRef mas abajo).
     Clock      = 2, // "Reloj" — antes vivia en ViewToolsPanel.
+    Render     = 3, // "Render" — conversor de formato (ver MediaConverter.h),
+                     // mudado desde la seccion "Biblioteca" del workspace
+                     // (LibraryManagerPanel, retirada del todo).
 };
 
 class LibraryPanel : public IPanel {
@@ -66,8 +76,16 @@ private:
     void ShowFileInUseToast(const std::string& fileName);
     void RenderFileInUseToast();
 
+    // ── Render (conversor de formato, ver LibrarySideMode::Render) ───────
+    // Migrado tal cual desde LibraryManagerPanel (seccion "Biblioteca" del
+    // workspace, retirada del todo) — convierte Video/Audio ya importados a
+    // otro formato aprovechando ffmpeg (ver MediaConverter.h).
+    void RenderConverterSection();
+    void RefreshConvertibleItems();
+
     LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
     LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
+    Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;
     // Flag: evita llamar SetSelection cada frame cuando estamos en Audio.
     // Solo se llama una vez al entrar a la categoria.
     bool                     m_AudioSelectionSet   = false;
@@ -90,6 +108,18 @@ private:
     LibrarySideMode  m_SideMode = LibrarySideMode::Categories;
     OClock           m_OClock;
     StreamingPanel*  m_StreamingPanelRef = nullptr;
+
+    // ── Render (conversor de formato) ─────────────────────────────────────
+    struct ConvertibleItem { std::string filename; bool isVideo; };
+    std::vector<ConvertibleItem> m_ConvertibleItems; // Video + Audio juntos, para el combo de origen
+    bool                          m_ConvertibleNeedsRefresh = true;
+
+    int  m_ConvertSourceIndex = -1;
+    int  m_ConvertFormatIndex = 0;
+
+    Core::MediaConverter m_Converter;
+    std::string          m_ConvertStatus;
+    bool                 m_ConvertStatusIsError = false;
 
     bool m_ShowSongEditor = false;
     char m_EditTitle  [256]{};

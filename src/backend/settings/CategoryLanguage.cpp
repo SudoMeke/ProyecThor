@@ -27,7 +27,7 @@ namespace ProyecThor::UI::Settings {
             "Biblioteca", "Previsualización", "Inspector de Capas y Fondos", "Control",
             "Buscar (Libro Abreviado + 1:1)", "Limpiar Historial",
             "Biblia:", "Libros", "Capítulos",
-            "Preferencias", "Guardar", "Restablecer"
+            "Configuraciones", "Guardar", "Restablecer"
         },
         // English
         {
@@ -35,7 +35,7 @@ namespace ProyecThor::UI::Settings {
             "Library", "Preview", "Layers & Backgrounds Inspector", "Control",
             "Search (Abbrev. Book + 1:1)", "Clear History",
             "Bible:", "Books", "Chapters",
-            "Preferences", "Save", "Reset"
+            "Settings", "Save", "Reset"
         },
         // Portuguese
         {
@@ -43,7 +43,7 @@ namespace ProyecThor::UI::Settings {
             "Biblioteca", "Pré-visualização", "Inspetor de Camadas e Fundos", "Controlo",
             "Pesquisar (Livro Abrev. + 1:1)", "Limpar Histórico",
             "Bíblia:", "Livros", "Capítulos",
-            "Preferências", "Guardar", "Repor"
+            "Configurações", "Guardar", "Repor"
         },
     };
 

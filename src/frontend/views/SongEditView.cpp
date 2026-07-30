@@ -3,6 +3,7 @@
 #include "LibrarySongMeta.h"
 #include "LibraryHelpers.h"
 #include "frontend/ui/DesignSystem.h"
+#include "frontend/panels/home/HomeIcons.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -269,6 +270,11 @@ void SongEditView::Open(const std::string& filename)
     m_Current.extra        = meta.extra;
     m_Current.linesPerSlide = meta.linesPerSlide;
 
+    m_TempoBpm                = meta.tempoBpm;
+    m_VerseDurationOverrideMs = meta.verseDurationOverrideMs;
+    m_DurationPopupForSlide   = -1;
+    m_OpenDurationPopupRequest = false;
+
     m_Undo = EditSnapshot{};
     m_Redo = EditSnapshot{};
     m_HasUndo = false;
@@ -304,6 +310,8 @@ void SongEditView::FlushIfDirty()
     meta.copyright      = m_Current.copyright;
     meta.extra          = m_Current.extra;
     meta.linesPerSlide  = m_Current.linesPerSlide;
+    meta.tempoBpm       = m_TempoBpm;
+    meta.verseDurationOverrideMs = m_VerseDurationOverrideMs;
     Library::SetSongMeta(m_Filename, meta);
 
     m_Dirty     = false;
@@ -775,6 +783,38 @@ void SongEditView::RenderRightPane(float width)
         ImVec2 numSz = ImGui::CalcTextSize(numLbl.c_str());
         dl->AddText({ p_min.x + 8.0f, barMin.y + (barH - numSz.y) * 0.5f }, IM_COL32(200, 200, 205, 220), numLbl.c_str());
 
+        // Icono de reloj: ver/cambiar/guardar la duracion de ESTA
+        // diapositiva (override manual del calculo automatico por tempo,
+        // ver ComputeVerseDurationSeconds en SongView y RenderVerseDurationPopup
+        // aca abajo). Mismo idioma que el swatch de color de SongView
+        // (icono chico clickeable en la barra inferior de la tarjeta).
+        {
+            float  clockSize = std::max(10.0f, barH * 0.55f);
+            ImVec2 clkMin = { p_max.x - clockSize - 6.0f, barMin.y + (barH - clockSize) * 0.5f };
+
+            ImGui::SetCursorScreenPos(clkMin);
+            bool clockClicked = ImGui::InvisibleButton("##verseDuration", { clockSize, clockSize });
+            bool clockHovered = ImGui::IsItemHovered();
+
+            bool hasOverride = (i < m_VerseDurationOverrideMs.size() && m_VerseDurationOverrideMs[i] > 0);
+            ImU32 clockCol = hasOverride ? IM_COL32(235, 200, 90, 255)
+                            : clockHovered ? IM_COL32(255, 255, 255, 235)
+                                           : IM_COL32(200, 200, 205, 180);
+            HomeIcons::DrawIcon_Clock(dl, clkMin, clockSize, clockCol);
+
+            if (clockHovered)
+                ImGui::SetTooltip("Duracion de esta diapositiva%s", hasOverride ? " (ajustada a mano)" : "");
+
+            if (clockClicked)
+            {
+                m_DurationPopupForSlide = (int)i;
+                m_DurationPopupValueMs = hasOverride
+                    ? m_VerseDurationOverrideMs[i]
+                    : Library::CalcVerseDurationMs(stanza, m_TempoBpm);
+                m_OpenDurationPopupRequest = true;
+            }
+        }
+
         ImGui::EndChild();
         ImGui::PopID();
 
@@ -783,7 +823,84 @@ void SongEditView::RenderRightPane(float width)
             ImGui::SameLine();
     }
 
+    RenderVerseDurationPopup(slides);
+
     ImGui::EndChild();
+}
+
+// =============================================================================
+//  RenderVerseDurationPopup — contenido del popup que abre el icono de
+//  reloj de cada diapositiva (ver RenderRightPane): muestra el calculo
+//  automatico por tempo como referencia y deja escribir un override manual
+//  en milisegundos. "Guardar" persiste via MarkDirty()+FlushIfDirty() (el
+//  autoguardado normal del editor); "Usar calculo automatico" borra el
+//  override para volver al valor derivado del tempo.
+// =============================================================================
+void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slides)
+{
+    if (m_OpenDurationPopupRequest) {
+        ImGui::OpenPopup("verseDurationPopup");
+        m_OpenDurationPopupRequest = false;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.07f, 0.07f, 0.08f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, 1.0f, 1.0f, 0.14f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+
+    if (ImGui::BeginPopup("verseDurationPopup"))
+    {
+        int slide = m_DurationPopupForSlide;
+        if (slide < 0 || (size_t)slide >= slides.size())
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+            ImGui::Text("Duracion de la diapositiva %d", slide + 1);
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+
+            int autoMs = Library::CalcVerseDurationMs(slides[slide], m_TempoBpm);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
+            if (m_TempoBpm > 0)
+                ImGui::TextWrapped("Calculado con el tempo actual (%d BPM): %.1fs", m_TempoBpm, autoMs / 1000.0f);
+            else
+                ImGui::TextWrapped("Configura el tempo (BPM) en la vista de reproduccion para ver un calculo automatico.");
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Duracion manual (segundos):");
+            float durSec = m_DurationPopupValueMs / 1000.0f;
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::InputFloat("##durSec", &durSec, 0.1f, 1.0f, "%.1f"))
+                m_DurationPopupValueMs = std::max(0, (int)std::lround(durSec * 1000.0));
+
+            ImGui::Spacing();
+            if (DS::GlassButton("Guardar", { 100.f, DS::ButtonHeight }, DS::AccentColor))
+            {
+                if ((size_t)slide >= m_VerseDurationOverrideMs.size())
+                    m_VerseDurationOverrideMs.resize(slide + 1, -1);
+                m_VerseDurationOverrideMs[slide] = std::max(1, m_DurationPopupValueMs);
+                MarkDirty();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (DS::GlassButton("Usar calculo automatico", { 190.f, DS::ButtonHeight }, DS::TextSecondary))
+            {
+                if ((size_t)slide < m_VerseDurationOverrideMs.size())
+                    m_VerseDurationOverrideMs[slide] = -1;
+                MarkDirty();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 }
 
 // =============================================================================

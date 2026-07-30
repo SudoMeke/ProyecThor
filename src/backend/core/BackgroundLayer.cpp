@@ -737,6 +737,7 @@ void main() {
                 Active().SetAudioActive(true);
                 Active().SetMute(m_TargetMuted);
                 Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+                ReapplyLiveEqualizer(Active());
             }
         }
     }
@@ -833,6 +834,7 @@ void main() {
             newActive.SetAudioActive(true);
             newActive.SetMute(m_TargetMuted);
             newActive.SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+            ReapplyLiveEqualizer(newActive);
         }
         else
         {
@@ -1096,6 +1098,41 @@ void main() {
         VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetMute(mute);
         target.SetVolume(mute ? 0 : m_TargetVolume.load());
+    }
+
+    // ── Ecualizador en vivo ──────────────────────────────────────────────
+
+    void BackgroundLayer::ReapplyLiveEqualizer(VLCBasePlayer& target)
+    {
+        target.SetEqualizerPreamp(m_TargetEqPreamp);
+        for (int b = 0; b < VLCBasePlayer::kEqualizerBands; b++)
+            target.SetEqualizerBand(b, m_TargetEqBands[b]);
+        target.SetEqualizerEnabled(m_TargetEqEnabled);
+    }
+
+    void BackgroundLayer::SetLiveEqualizerEnabled(bool enabled)
+    {
+        m_TargetEqEnabled = enabled;
+        if (!m_IsLiveToPublic) return;
+        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        target.SetEqualizerEnabled(enabled);
+    }
+
+    void BackgroundLayer::SetLiveEqualizerPreamp(float preampDb)
+    {
+        m_TargetEqPreamp = preampDb;
+        if (!m_IsLiveToPublic) return;
+        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        target.SetEqualizerPreamp(preampDb);
+    }
+
+    void BackgroundLayer::SetLiveEqualizerBand(int index, float ampDb)
+    {
+        if (index < 0 || index >= VLCBasePlayer::kEqualizerBands) return;
+        m_TargetEqBands[index] = ampDb;
+        if (!m_IsLiveToPublic) return;
+        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        target.SetEqualizerBand(index, ampDb);
     }
 
     // ── Dispositivo de salida de audio ──────────────────────────────────

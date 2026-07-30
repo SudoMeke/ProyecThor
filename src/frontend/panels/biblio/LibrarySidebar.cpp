@@ -3,6 +3,7 @@
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
 #include "frontend/panels/home/HomeIcons.h"
+#include "frontend/ui/AppIcons.h"
 #include "backend/settings/SettingsManager.h"
 
 #include <imgui.h>
@@ -14,17 +15,16 @@
 // El enum vive en LibraryPanel.h; aqui lo reproducimos como constantes locales
 // para no crear una dependencia circular con el header del panel.
 // El orden debe coincidir con LibraryCategory.
-static constexpr int kCat_Songs     = 0;
-static constexpr int kCat_Videos    = 1;
-static constexpr int kCat_Images    = 2;
-static constexpr int kCat_Bibles    = 3;
-static constexpr int kCat_Documents = 4;
-static constexpr int kCat_Audio     = 5;
+static constexpr int kCat_Songs      = 0;
+static constexpr int kCat_Bibles     = 3;
+static constexpr int kCat_Documents  = 4;
+static constexpr int kCat_Multimedia = 6;
 
 // Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h).
 static constexpr int kSideMode_Categories = 0;
 static constexpr int kSideMode_Streaming  = 1;
 static constexpr int kSideMode_Clock      = 2;
+static constexpr int kSideMode_Render     = 3;
 
 namespace ProyecThor::Library {
 
@@ -150,12 +150,10 @@ void RenderCategoryButtons(LibraryContext& ctx)
     };
 
     static const CatDef k_Cats[] = {
-        { kCat_Songs,     DrawIcon_Music,    "Letra"  },
-        { kCat_Videos,    DrawIcon_Play,     "Video"  },
-        { kCat_Images,    DrawIcon_Image,    "Imagen" },
-        { kCat_Bibles,    DrawIcon_Cross,    "Biblia" },
-        { kCat_Documents, DrawIcon_Document, "Doc"    },
-        { kCat_Audio,     DrawIcon_Audio,    "Audio"  },
+        { kCat_Songs,      DrawIcon_Music,      "Letra"      },
+        { kCat_Multimedia, DrawIcon_Multimedia, "Multimedia" },
+        { kCat_Bibles,     DrawIcon_Cross,      "Biblia"     },
+        { kCat_Documents,  DrawIcon_Document,   "Doc"        },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
@@ -208,23 +206,25 @@ void RenderCategoryButtons(LibraryContext& ctx)
         ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
     }
 
-    // "Red" se mudo a Yggdrasil (rail OSC/Red/Chat, ver YggdrasilPanel.cpp)
-    // -- solo queda "Reloj" en este grupo aparte.
-    struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     // "Red" tambien esta disponible en Yggdrasil (misma StreamingPanel,
     // ver LibraryPanel::SetStreamingPanelRef) -- por pedido, no es
-    // exclusivo de uno de los dos lugares.
+    // exclusivo de uno de los dos lugares. "Render" se mudo aca desde la
+    // seccion "Biblioteca" del workspace (LibraryManagerPanel, retirada).
+    struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     static const SideDef k_SideItems[] = {
-        { "Red",   ProyecThor::UI::HomeIcons::DrawIcon_Broadcast, kSideMode_Streaming },
-        { "Reloj", ProyecThor::UI::HomeIcons::DrawIcon_Clock,     kSideMode_Clock     },
+        { "Red",      ProyecThor::UI::HomeIcons::DrawIcon_Broadcast, kSideMode_Streaming },
+        { "Reloj",    ProyecThor::UI::HomeIcons::DrawIcon_Clock,     kSideMode_Clock     },
+        { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
     };
 
     for (const auto& sd : k_SideItems)
     {
         const bool active = (ctx.sideModeInt == sd.mode);
-        // Colores en los indices 6/7 de librarySidebar.categoryColor — ver
-        // SettingsManager.h.
-        int colorIdx = (sd.mode == kSideMode_Streaming) ? 6 : 7;
+        // Colores en los indices 6/7/8 de librarySidebar.categoryColor —
+        // ver SettingsManager.h.
+        int colorIdx = (sd.mode == kSideMode_Streaming) ? 6
+                      : (sd.mode == kSideMode_Clock)     ? 7
+                                                          : 8;
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            sd.label, sd.drawIcon, active,

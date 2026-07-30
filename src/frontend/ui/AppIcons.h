@@ -73,6 +73,27 @@ inline void DrawIcon_Yggdrasil(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     }
 }
 
+// Conexiones — antena con ondas de señal, reemplaza al arbol de ramas
+// desnudas de DrawIcon_Yggdrasil (mucha gente lo confundia con un
+// pentagrama/simbolo esoterico en vez de con "Conexiones").
+inline void DrawIcon_Antenna(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+
+    ImVec2 base = IcPt(o, sz, 0.5f, 0.90f);
+    ImVec2 tip  = IcPt(o, sz, 0.5f, 0.42f);
+    dl->AddLine(base, tip, col, thick);
+    dl->AddCircleFilled(tip, sz * 0.06f, col, 12);
+
+    // Ondas de señal en abanico arriba de la punta (mismo lenguaje visual
+    // que un icono de WiFi/broadcast), dos arcos concentricos.
+    for (int i = 1; i <= 2; i++) {
+        float radius = sz * (0.08f + i * 0.07f);
+        dl->PathArcTo(tip, radius, -2.356f, -0.785f, 16);
+        dl->PathStroke(col, 0, thick * 0.8f);
+    }
+}
+
 // Stage Display — monitor con base
 inline void DrawIcon_Monitor(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

@@ -13,7 +13,7 @@ namespace ProyecThor::UI {
             if (!*p_open) return;
 
             ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Preferencias", p_open)) {
+            if (ImGui::Begin("Configuraciones", p_open)) {
                 
                 if (ImGui::BeginTabBar("ConfigTabs")) {
                     if (ImGui::BeginTabItem("General")) {

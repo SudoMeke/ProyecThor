@@ -7,6 +7,7 @@
 #include "biblio/LibraryDocuments.h"
 #include "biblio/LibraryModals.h"
 #include "StreamingPanel.h"
+#include "frontend/views/audio/AudioHelpers.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -81,6 +82,26 @@ void ImportSelectedFileToLibrary(const fs::path& src, LibraryCategory category, 
             fs::create_directories(docDir);
             fs::copy(src, docDir / src.filename(),
                      fs::copy_options::overwrite_existing);
+        } else if (category == LibraryCategory::Multimedia) {
+            // El destino se decide por la extension del archivo elegido, no
+            // por un filtro previo -- el dialogo de "Importar" en Multimedia
+            // acepta cualquier tipo de los 3 (ver ImportFile()).
+            std::string ext = src.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return (char)std::tolower(c); });
+            static const std::vector<std::string> kVideoExts = { ".mp4", ".mkv", ".avi", ".mov" };
+            static const std::vector<std::string> kImageExts = { ".jpg", ".jpeg", ".png" };
+
+            std::string destFolder;
+            if (std::find(kVideoExts.begin(), kVideoExts.end(), ext) != kVideoExts.end())
+                destFolder = base + "/videos";
+            else if (std::find(kImageExts.begin(), kImageExts.end(), ext) != kImageExts.end())
+                destFolder = base + "/images";
+            else
+                destFolder = ProyecThor::Audio::GetAudioPath();
+
+            fs::copy(src, U8Path(destFolder) / src.filename(),
+                     fs::copy_options::overwrite_existing);
         } else {
             std::string destFolder;
             switch (category) {
@@ -95,6 +116,40 @@ void ImportSelectedFileToLibrary(const fs::path& src, LibraryCategory category, 
         }
     } catch (const std::exception& e) {
         std::cerr << "[LibraryPanel] Error al importar: " << e.what() << '\n';
+    }
+}
+
+// -----------------------------------------------------------------------------
+//  SeedDefaultLibraryContent
+//  Primer arranque (o biblioteca vaciada del todo): en vez de dejar Canciones
+//  y Biblias completamente vacias, se copia ahi el contenido por defecto que
+//  se distribuye con la app en bin/assets/<categoria> (relativo al ejecutable
+//  — mismo criterio que main.cpp usa para iconos/fuentes bundleados, ver
+//  "bin/assets/icons/ui/..." ahi). Solo copia si el destino esta VACIO: si el
+//  operador ya tiene sus propias canciones/biblias, esto no toca nada; si las
+//  borro todas a proposito, se vuelve a sembrar el default en el proximo
+//  arranque (mismo comportamiento esperable que "restaurar contenido de
+//  fabrica" al vaciar la carpeta).
+// -----------------------------------------------------------------------------
+void SeedDefaultLibraryContent(const std::string& base)
+{
+    static const char* kCategories[] = { "songs", "bibles" };
+
+    for (const char* category : kCategories) {
+        std::error_code ec;
+        fs::path destDir = U8Path(base + "/" + category);
+        if (!fs::is_empty(destDir, ec) || ec) continue; // tiene contenido (o no se pudo leer): no tocar
+
+        fs::path srcDir = U8Path(std::string("bin/assets/") + category);
+        if (!fs::exists(srcDir, ec) || !fs::is_directory(srcDir, ec)) continue;
+
+        for (const auto& entry : fs::directory_iterator(srcDir, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+            std::error_code copyEc;
+            fs::copy_file(entry.path(), destDir / entry.path().filename(),
+                          fs::copy_options::skip_existing, copyEc);
+        }
     }
 }
 
@@ -174,6 +229,8 @@ LibraryPanel::LibraryPanel()
         fs::create_directories(U8Path(base + "/bibles"));
         fs::create_directories(U8Path(base + "/documents"));
         fs::create_directories(U8Path(base + "/audio"));
+
+        SeedDefaultLibraryContent(base);
     } catch (const std::exception& e) {
         std::cerr << "[LibraryPanel] Advertencia IO: " << e.what() << '\n';
     }
@@ -209,7 +266,16 @@ void LibraryPanel::SaveStreamURLs()
 // =============================================================================
 void LibraryPanel::RefreshList()
 {
+    if (m_CurrentCategory == LibraryCategory::Multimedia) {
+        m_Items.clear();
+        Library::RefreshMultimediaLists();
+        ForceListUpdate() = true;
+        return;
+    }
+
     if (m_CurrentCategory == LibraryCategory::Audio) {
+        // Audio maneja su propio escaneo (AudioPanel::RefreshLibrary) en vez
+        // de usar m_Items.
         m_Items.clear();
         ForceListUpdate() = true;
         return;
@@ -526,6 +592,10 @@ void LibraryPanel::Render()
         {
             if (m_UIManagerRef) m_OClock.Render(m_UIManagerRef->GetGlassRenderer());
         }
+        else if (m_SideMode == LibrarySideMode::Render)
+        {
+            RenderConverterSection();
+        }
         else if (m_CurrentCategory == LibraryCategory::Audio)
         {
             if (!m_AudioSelectionSet)
@@ -538,6 +608,10 @@ void LibraryPanel::Render()
             }
 
             m_AudioPanel.RenderLibraryList();
+        }
+        else if (m_CurrentCategory == LibraryCategory::Multimedia)
+        {
+            Library::RenderMultimediaSection(ctx, m_MultimediaFilter);
         }
         else if (m_CurrentCategory == LibraryCategory::Videos)
         {
@@ -675,6 +749,8 @@ void LibraryPanel::ImportFile()
         ofn.lpstrFilter = L"Videos\0*.mp4;*.mkv;*.avi;*.mov\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Images)
         ofn.lpstrFilter = L"Imagenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
+    else if (m_CurrentCategory == LibraryCategory::Multimedia)
+        ofn.lpstrFilter = L"Video, audio o imagen\0*.mp4;*.mkv;*.avi;*.mov;*.mp3;*.flac;*.wav;*.ogg;*.aac;*.m4a;*.wma;*.opus;*.aiff;*.jpg;*.jpeg;*.png\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Songs)
         ofn.lpstrFilter = L"Textos\0*.txt\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Documents)
@@ -697,6 +773,10 @@ void LibraryPanel::ImportFile()
             break;
         case LibraryCategory::Images:
             filter = "--file-filter=Imagenes | *.jpg *.jpeg *.png";
+            break;
+        case LibraryCategory::Multimedia:
+            filter = "--file-filter=Video, audio o imagen | *.mp4 *.mkv *.avi *.mov "
+                     "*.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff *.jpg *.jpeg *.png";
             break;
         case LibraryCategory::Songs:
             filter = "--file-filter=Textos | *.txt";
@@ -733,6 +813,161 @@ void LibraryPanel::ImportFile()
 
     ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
     RefreshList();
+}
+
+// =============================================================================
+//  Render (conversor de formato) — migrado tal cual desde LibraryManagerPanel
+//  (seccion "Biblioteca" del workspace, retirada del todo: ver LibrarySideMode
+//  ::Render en LibraryPanel.h y el grupo "Red"/"Reloj"/"Render" del sidebar en
+//  LibrarySidebar.cpp). Convierte Video/Audio ya importados a otro formato
+//  aprovechando ffmpeg (ver MediaConverter.h) — Video vive en assets/videos,
+//  Audio en la carpeta que devuelve ProyecThor::Audio::GetAudioPath().
+// =============================================================================
+void LibraryPanel::RefreshConvertibleItems()
+{
+    m_ConvertibleItems.clear();
+
+    auto scan = [&](const std::string& dirPath, const std::vector<std::string>& exts, bool isVideo) {
+        fs::path dir = U8Path(dirPath);
+        std::error_code ec;
+        if (!fs::exists(dir, ec) || ec) return;
+
+        for (auto& entry : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+
+            std::string lowExt = entry.path().extension().string();
+            std::transform(lowExt.begin(), lowExt.end(), lowExt.begin(),
+                           [](unsigned char c) { return (char)std::tolower(c); });
+            if (std::find(exts.begin(), exts.end(), lowExt) == exts.end()) continue;
+
+            m_ConvertibleItems.push_back({ PathToUtf8(entry.path().filename()), isVideo });
+        }
+    };
+    scan(GetAssetsPath() + "/videos/", { ".mp4", ".mkv", ".avi", ".mov" }, true);
+    scan(ProyecThor::Audio::GetAudioPath() + "/",
+        { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" }, false);
+
+    std::sort(m_ConvertibleItems.begin(), m_ConvertibleItems.end(),
+              [](const ConvertibleItem& a, const ConvertibleItem& b) { return a.filename < b.filename; });
+
+    if (m_ConvertSourceIndex >= (int)m_ConvertibleItems.size()) m_ConvertSourceIndex = -1;
+    m_ConvertibleNeedsRefresh = false;
+}
+
+void LibraryPanel::RenderConverterSection()
+{
+    if (m_ConvertibleNeedsRefresh) RefreshConvertibleItems();
+
+    ImGui::TextUnformatted("Render");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(convertir Video/Audio ya importados a otro formato)");
+    ImGui::Spacing();
+
+    // Si termino una conversion desde el ultimo frame, actualizar estado.
+    bool        finishedOk = false;
+    std::string finishedMsg;
+    if (m_Converter.PollFinished(finishedOk, finishedMsg)) {
+        m_ConvertStatusIsError = !finishedOk;
+        m_ConvertStatus        = finishedMsg;
+        m_ConvertibleNeedsRefresh = true; // por si el archivo convertido cae en la misma carpeta
+    }
+
+    if (m_ConvertibleItems.empty()) {
+        ImGui::TextDisabled("Todavia no importaste ningun Video o Audio para convertir.");
+        return;
+    }
+
+    bool running = m_Converter.IsRunning();
+    if (running) ImGui::BeginDisabled();
+
+    // ── Origen ────────────────────────────────────────────────────────────
+    std::string sourcePreview = (m_ConvertSourceIndex >= 0 && m_ConvertSourceIndex < (int)m_ConvertibleItems.size())
+        ? m_ConvertibleItems[m_ConvertSourceIndex].filename : "Elegi un archivo...";
+
+    ImGui::SetNextItemWidth(360.0f);
+    if (ImGui::BeginCombo("Archivo de origen", sourcePreview.c_str())) {
+        for (int i = 0; i < (int)m_ConvertibleItems.size(); i++) {
+            const auto& item = m_ConvertibleItems[i];
+            std::string label = std::string(item.isVideo ? "[Video] " : "[Audio] ") + item.filename;
+            bool sel = (i == m_ConvertSourceIndex);
+            if (ImGui::Selectable(label.c_str(), sel)) {
+                m_ConvertSourceIndex = i;
+                m_ConvertFormatIndex = 0;
+            }
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    // ── Formato de destino ───────────────────────────────────────────────
+    static const char* kVideoFormats[] = { "mp4", "mkv", "webm", "avi", "mov" };
+    static const char* kAudioFormats[] = { "mp3", "wav", "flac", "ogg", "aac", "m4a" };
+
+    const char** formats     = kVideoFormats;
+    int          formatCount = (int)(sizeof(kVideoFormats) / sizeof(kVideoFormats[0]));
+    bool         haveSource  = (m_ConvertSourceIndex >= 0 && m_ConvertSourceIndex < (int)m_ConvertibleItems.size());
+    if (haveSource && !m_ConvertibleItems[m_ConvertSourceIndex].isVideo) {
+        formats     = kAudioFormats;
+        formatCount = (int)(sizeof(kAudioFormats) / sizeof(kAudioFormats[0]));
+    }
+    if (m_ConvertFormatIndex >= formatCount) m_ConvertFormatIndex = 0;
+
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::BeginCombo("Formato de destino", haveSource ? formats[m_ConvertFormatIndex] : "-")) {
+        for (int i = 0; i < formatCount; i++) {
+            bool sel = (i == m_ConvertFormatIndex);
+            if (ImGui::Selectable(formats[i], sel)) m_ConvertFormatIndex = i;
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    if (running) ImGui::EndDisabled();
+
+    ImGui::Spacing();
+    if (!m_ConvertStatus.empty()) {
+        ImGui::TextColored(m_ConvertStatusIsError ? ImVec4(0.90f, 0.35f, 0.35f, 1.0f) : ImVec4(0.40f, 0.85f, 0.55f, 1.0f),
+                            "%s", m_ConvertStatus.c_str());
+        ImGui::Spacing();
+    }
+
+    if (running) {
+        ImGui::TextColored(ImVec4(0.96f, 0.75f, 0.30f, 1.0f), "Convirtiendo...");
+        return;
+    }
+
+    if (!haveSource) { ImGui::BeginDisabled(); }
+    if (ImGui::Button("Convertir", ImVec2(160, 36)) && haveSource) {
+        const auto& src     = m_ConvertibleItems[m_ConvertSourceIndex];
+        std::string dirPath = src.isVideo ? (GetAssetsPath() + "/videos/") : (ProyecThor::Audio::GetAudioPath() + "/");
+        fs::path    dir     = U8Path(dirPath);
+        std::string stem    = StripExtension(src.filename);
+        std::string ext     = formats[m_ConvertFormatIndex];
+
+        // Nombre de salida unico -- nunca pisa un archivo existente (mismo
+        // criterio que LibraryPanel::CreateNewSong).
+        std::string outName = stem + "." + ext;
+        int suffix = 2;
+        std::error_code ec;
+        while (fs::exists(dir / U8Path(outName), ec)) {
+            outName = stem + " (" + std::to_string(suffix) + ")." + ext;
+            suffix++;
+        }
+
+        std::string inputPath  = dirPath + src.filename;
+        std::string outputPath = dirPath + outName;
+
+        std::string err;
+        if (m_Converter.Start(inputPath, outputPath, &err)) {
+            m_ConvertStatusIsError = false;
+            m_ConvertStatus        = "Convirtiendo a " + outName + "...";
+        } else {
+            m_ConvertStatusIsError = true;
+            m_ConvertStatus        = err;
+        }
+    }
+    if (!haveSource) { ImGui::EndDisabled(); }
 }
 
 } // namespace ProyecThor::UI

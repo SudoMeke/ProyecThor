@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "LibrarySongs.h"
 #include "frontend/ui/DesignSystem.h"
 
 #include <imgui.h>
@@ -138,6 +139,13 @@ void RenderRenameModal(LibraryContext& ctx)
                         fs::path newPath = U8Path(folder) / U8Path(newName);
                         try {
                             fs::rename(oldPath, newPath);
+                            // Sin esto, renombrar una cancion deja el autor/
+                            // etiquetas/estilo-fondo preset/color de estrofa/
+                            // meta.json y las referencias en playlists
+                            // huerfanos bajo el nombre de archivo viejo (ver
+                            // LibrarySongs::MigrateSongSidecars).
+                            if (ctx.currentCategoryInt == kCat_Songs)
+                                MigrateSongSidecars(ctx.renameOldName, newName);
                             ctx.selectedIndex = -1;
                             ctx.refreshList();
                         } catch (const std::exception& e) {

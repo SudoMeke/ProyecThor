@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.5.0
+    VERSION 0.4.3
     LANGUAGES C CXX
 )
 
@@ -20,6 +20,25 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# ── CONTADOR DE BUILDS ────────────────────────────────────────────────────────
+# Aumenta SOLO al reconfigurar con CMake (compilar de verdad: "cmake -B" a
+# mano, o un build limpio de CI), nunca al abrir la app -- antes se
+# incrementaba en cada arranque (ver splash screen / GetAndIncrementBuildCount
+# en main.cpp, retirado), lo que en la practica contaba "veces que se probo
+# el build" en vez de "veces que se compilo". CI sigue pudiendo fijar su
+# propio numero pasando -DPROYECTHOR_BUILD_NUMBER=N (ver
+# .github/workflows/build.yml), en cuyo caso este contador local no se toca.
+if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
+    set(_build_count_file "${CMAKE_CURRENT_SOURCE_DIR}/build_count.txt")
+    set(PROYECTHOR_BUILD_NUMBER 0)
+    if(EXISTS "${_build_count_file}")
+        file(READ "${_build_count_file}" PROYECTHOR_BUILD_NUMBER)
+        string(STRIP "${PROYECTHOR_BUILD_NUMBER}" PROYECTHOR_BUILD_NUMBER)
+    endif()
+    math(EXPR PROYECTHOR_BUILD_NUMBER "${PROYECTHOR_BUILD_NUMBER} + 1")
+    file(WRITE "${_build_count_file}" "${PROYECTHOR_BUILD_NUMBER}")
+endif()
 
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
 configure_file(

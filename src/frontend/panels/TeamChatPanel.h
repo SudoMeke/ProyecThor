@@ -7,9 +7,8 @@
 
 namespace ProyecThor::UI {
 
-// Contenido de la seccion "Chat" del hub de Herramientas (ver
-// ViewToolsPanel.h/.cpp) — mismo rol que StreamingPanel: no es un IPanel
-// propio, vive como una pestana mas del rail.
+// Contenido del popup "Chat" de Vista en Vivo (ver ViewPanel::RenderChatPopup)
+// y de Yggdrasil — mismo rol que StreamingPanel: no es un IPanel propio.
 //
 // El operador puede escribir desde aca mismo (PostChatMessage directo al
 // ChatMessageStore, sin pasar por HTTP) mientras cualquier dispositivo de

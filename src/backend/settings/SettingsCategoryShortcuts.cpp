@@ -62,7 +62,7 @@ void SettingsPanel::RenderCategoryShortcuts() {
     DrawShortcutRow("Shift + 6", "Ir a Audio");
 
     SectionTitle("General");
-    DrawShortcutRow("Ctrl + P", "Abrir Preferencias");
+    DrawShortcutRow("Ctrl + P", "Abrir Configuraciones");
     DrawShortcutRow("F1",       "Abrir documentacion");
     DrawShortcutRow("Alt + F4", "Cerrar ProyecThor");
 }

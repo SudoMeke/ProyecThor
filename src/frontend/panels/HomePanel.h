@@ -16,11 +16,10 @@ namespace ProyecThor::UI {
 
 class UIManager;
 
-// Home ya no es un hub multi-seccion: Reloj/Anuncios/Notas/Captura/
-// Transmision se movieron a ViewToolsPanel (debajo de "Vista en Vivo") y a
-// StylesHubPanel (Diseño), asi que Home queda solo con el contenido de
-// biblioteca que ya tenia (ver RenderHomeContent) — sin rail de iconos ni
-// pestañas propias.
+// Home ya no es un hub multi-seccion: Reloj/Anuncios/Captura/Transmision se
+// movieron a StylesHubPanel (Diseño) o a LibraryPanel — sin rail de iconos ni
+// pestañas propias. Notas vive en un popup propio desde la toolbar superior
+// (ver UIManager::RenderNotesPopup), no aca.
 class HomePanel : public IPanel {
 public:
     HomePanel();

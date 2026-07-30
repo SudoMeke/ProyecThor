@@ -88,6 +88,12 @@ namespace ProyecThor::Core {
         // quedaba mudo pese a haberse desmuteado).
         std::atomic<int>  m_TargetVolume{100};
         std::atomic<bool> m_TargetMuted{true};
+
+        // ── Ecualizador en vivo (ver SetLiveEqualizer*) ──────────────────
+        bool  m_TargetEqEnabled = false;
+        float m_TargetEqPreamp  = 0.0f;
+        float m_TargetEqBands[VLCBasePlayer::kEqualizerBands] = { 0.0f };
+        void  ReapplyLiveEqualizer(VLCBasePlayer& target);
         float m_TransitionProgress = 1.0f;
 
         // Gate real de audio al publico. Solo cuando esta en true el
@@ -366,6 +372,14 @@ namespace ProyecThor::Core {
 
         void SetLiveVolume(int volume0to200);
         void SetLiveMute(bool mute);
+
+        // Ecualizador de 10 bandas sobre el audio en vivo (ver
+        // VLCBasePlayer::SetEqualizer*). Mismo criterio que SetLiveVolume/
+        // SetLiveMute: se guarda como "target" y se reaplica en cada swap
+        // del doble buffer para sobrevivir al crossfade.
+        void SetLiveEqualizerEnabled(bool enabled);
+        void SetLiveEqualizerPreamp(float preampDb);
+        void SetLiveEqualizerBand(int index, float ampDb);
 
         // ── Dispositivo de salida de audio ───────────────────────────────
         // Enumera los dispositivos de audio disponibles en el sistema

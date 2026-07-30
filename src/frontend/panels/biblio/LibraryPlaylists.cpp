@@ -125,4 +125,18 @@ void MovePlaylistSong(const std::string& playlistName, int index, int delta)
     SavePlaylist(pl);
 }
 
+void RenameSongInAllPlaylists(const std::string& oldFilename, const std::string& newFilename)
+{
+    if (oldFilename.empty() || newFilename.empty() || oldFilename == newFilename) return;
+
+    for (const auto& name : ListPlaylists()) {
+        Playlist pl = LoadPlaylist(name);
+        bool changed = false;
+        for (auto& s : pl.songs) {
+            if (s == oldFilename) { s = newFilename; changed = true; }
+        }
+        if (changed) SavePlaylist(pl);
+    }
+}
+
 } // namespace ProyecThor::Library

@@ -348,7 +348,7 @@ void YggdrasilPanel::RenderSendSection() {
 
 void YggdrasilPanel::RenderRail() {
     static const IconRailItem kItems[] = {
-        { (int)Section::OSC,  AppIcons::DrawIcon_Yggdrasil,  "OSC"  },
+        { (int)Section::OSC,  AppIcons::DrawIcon_Antenna,  "OSC"  },
         { (int)Section::Red,     HomeIcons::DrawIcon_Broadcast, "Red"     },
         { (int)Section::Chat,    HomeIcons::DrawIcon_Chat,      "Chat"    },
         { (int)Section::Capture, HomeIcons::DrawIcon_Camera,    "Capture" },
@@ -405,12 +405,12 @@ void YggdrasilPanel::Render() {
     {
         float iconSz = 30.0f;
         ImVec2 iconOrigin = ImGui::GetCursorScreenPos();
-        AppIcons::DrawIcon_Yggdrasil(ImGui::GetWindowDrawList(), iconOrigin, iconSz,
-                                      ImGui::GetColorU32(ImGuiCol_Text));
+        AppIcons::DrawIcon_Antenna(ImGui::GetWindowDrawList(), iconOrigin, iconSz,
+                                    ImGui::GetColorU32(ImGuiCol_Text));
         ImGui::Dummy(ImVec2(iconSz + 8.0f, iconSz));
         ImGui::SameLine();
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (iconSz - ImGui::GetTextLineHeight()) * 0.5f);
-        ImGui::TextUnformatted("Yggdrasil");
+        ImGui::TextUnformatted("Conexiones");
         ImGui::SameLine();
         ImGui::TextDisabled("(OSC, Red, Chat y Streaming)");
     }

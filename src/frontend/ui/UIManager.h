@@ -14,11 +14,11 @@
 #include "panels/WikiPanel.h"
 #include "panels/PerformancePanel.h"
 #include "panels/YggdrasilPanel.h"
-#include "panels/LibraryManagerPanel.h"
 #include "panels/BibleFullscreenPanel.h"
 #include "panels/StreamingPanel.h"
 #include "panels/TeamChatPanel.h"
 #include "panels/BroadcastPanel.h"
+#include "frontend/views/QuickNotes.h"
 
 namespace ProyecThor::UI {
 
@@ -38,15 +38,12 @@ enum class ActiveLeftPanel {
 //  - Yggdrasil: OSC, Red, Chat y Streaming (RTMP), todo en un rail propio
 //    (YggdrasilPanel) -- Streaming fue su propio modo un tiempo, se
 //    combino aca por pedido.
-//  - Biblioteca: ver/gestionar (renombrar, borrar) Video/Imagen/Audio ya
-//    importados, sin seleccionar nada para Vista en Vivo (LibraryManagerPanel).
 //  - Biblia: el mismo BibleView de Home, a pantalla completa
 //    (BibleFullscreenPanel).
 enum class WorkspaceMode {
     Hub,
     Projector,
     Yggdrasil,
-    Biblioteca,
     Biblia,
 };
 
@@ -79,9 +76,10 @@ uint64_t m_LastTransitionTrigger = 0;
     // Herramientas) para que Update() corra SIEMPRE, sin importar el
     // WorkspaceMode activo -- una transmision o el chat no se pueden pausar
     // solo porque el operador esta mirando Proyector. Yggdrasil,
-    // LibraryPanel (grupo "Red") y ViewToolsPanel (pestaña "Chat") reciben
-    // un puntero a la MISMA instancia (ver main.cpp), asi que aparecen "en
-    // las dos partes" pero comparten un unico servidor de verdad.
+    // LibraryPanel (grupo "Red") y ViewPanel (popup "Chat", ver
+    // RenderChatPopup) reciben un puntero a la MISMA instancia (ver
+    // main.cpp), asi que aparecen "en varias partes" pero comparten un
+    // unico servidor de verdad.
     StreamingPanel& GetRedPanel()      { return m_Red; }
     TeamChatPanel&  GetChatPanel()     { return m_Chat; }
     BroadcastPanel& GetBroadcastPanel() { return m_Broadcast; }
@@ -93,10 +91,25 @@ private:
     void RenderMainMenuBar();
     void RenderModeToolbar();
     void RenderQuickSwitcher();
+
+    // Puntos "Publico"/"Stage" + "Borrar Todo" — antes vivian en ViewPanel
+    // (arriba del video), pedido explicito de subirlos a la toolbar
+    // superior (lado derecho) para liberarle mas espacio a "Vista en Vivo".
+    void RenderModeToolbarStatusActions(float winW, float railH);
+    void ToggleAudience(bool active);
+    void ToggleStageQuick(bool active);
+
+    // Ventana flotante de Notas -- boton propio en RenderModeToolbar (junto
+    // a los 5 modos), abre una ventana centrada tipo "Preferencias" (ver
+    // Settings::SettingsPanel::Render) con QuickNotes adentro, en vez de
+    // vivir dockeada en Home o en un panel propio.
+    void         RenderNotesWindow();
+    bool         m_ShowNotes = false;
+    QuickNotes   m_NotesPanel;
+
  DatabasePanel m_DatabasePanel;
     WikiPanel     m_WikiPanel;
     YggdrasilPanel      m_YggdrasilPanel;
-    LibraryManagerPanel m_LibraryManagerPanel;
     BibleFullscreenPanel m_BiblePanel;
 
     // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel).

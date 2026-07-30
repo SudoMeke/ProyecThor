@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <imgui.h>
 #include "SongEditView.h"
 
@@ -33,6 +34,19 @@ namespace ProyecThor::UI {
         int         m_ColorPickerForStanza    = -1;
         bool        m_OpenColorPickerRequest  = false;
         bool        m_OpenSongSettingsRequest = false;
+
+        // ── Auto-avance por tempo (ver RenderBrowseGrid, barra "Tempo"/
+        // Reproducir) — cache en memoria de LibrarySongMeta::tempoBpm/
+        // verseDurationOverrideMs, releido cada vez que cambia la cancion
+        // activa o se vuelve del editor (donde se edita el override por
+        // estrofa, ver icono de reloj en SongEditView).
+        int               m_TempoBpm              = 0;
+        std::vector<int>  m_VerseDurationOverrideMs;
+        bool              m_AutoAdvancePlaying    = false;
+        double            m_AutoAdvanceDeadline   = 0.0; // ImGui::GetTime() absoluto
+
+        void ReloadTempoMeta(const std::string& songFilename);
+        float ComputeVerseDurationSeconds(const std::string& stanzaText, int stanzaIndex) const;
 
         void RenderBrowseGrid();
         void RenderSettingsCard(const std::string& songFilename, ImVec2 p_min, ImVec2 p_max, bool isHovered);

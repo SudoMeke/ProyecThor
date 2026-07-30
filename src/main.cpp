@@ -36,7 +36,6 @@
 #include "frontend/panels/HomePanel.h"
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
-#include "frontend/panels/ViewToolsPanel.h"
 #include "frontend/panels/StylesHubPanel.h"
 
 #ifdef _WIN32
@@ -100,32 +99,6 @@ std::string GetAppDataFilePath(const std::string& filename) {
     }
 
     return (dirPath / filename).string();
-}
-
-// Contador de builds — a pedido, cuenta cada vez que se abre la app (no solo
-// cada recompilada real), asi que en la practica funciona como "cuantas
-// veces se probo/corrio este build". Mismo patron que splash_state.txt mas
-// abajo: un archivo chico en AppData, leer -> incrementar -> guardar.
-int GetAndIncrementBuildCount()
-{
-    std::string countFile = GetAppDataFilePath("build_count.txt");
-    int count = 0;
-
-    std::ifstream inFile(countFile);
-    if (inFile.is_open()) {
-        inFile >> count;
-        inFile.close();
-    }
-
-    count += 1;
-
-    std::ofstream outFile(countFile);
-    if (outFile.is_open()) {
-        outFile << count;
-        outFile.close();
-    }
-
-    return count;
 }
 
 GLuint LoadTextureFromFile(const char* filename)
@@ -262,7 +235,7 @@ static void RenderSplashScreen(GLFWwindow* splashWindow,
     ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", status.c_str());
 
     static const std::string versionLine =
-        "Version " PROYECTHOR_VERSION_STRING "  |  Build " + std::to_string(GetAndIncrementBuildCount());
+        "Version " PROYECTHOR_VERSION_STRING "  |  Build " + std::to_string(PROYECTHOR_BUILD_NUMBER);
     const std::string copyLine    = "\xC2\xA9 2026 ProyecThor Team";
     const float vW = ImGui::CalcTextSize(versionLine.c_str()).x;
     const float cW = ImGui::CalcTextSize(copyLine.c_str()).x;
@@ -809,26 +782,14 @@ homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     ProyecThor::Core::PresentationCore::Get().SetAudioPanelRef(libraryPanel->GetAudioPanel());
     homePanel->m_UIManagerRef = &uiManager;
     libraryPanel->SetUIManager(&uiManager);
-    // Red tambien vive en Yggdrasil -- misma instancia (ver
-    // UIManager::GetRedPanel), nunca dos servidores independientes.
     libraryPanel->SetStreamingPanelRef(&uiManager.GetRedPanel());
 
     uiManager.AddPanel(libraryPanel);
     uiManager.AddPanel(homePanel);
-    // ControlPanel se elimino: su config (enrutamiento/calidad, Stage) vive
-    // en Ajustes (ver SettingsPanel > Proyeccion/Stage), y arrancar/detener
-    // la proyeccion ahora se hace desde los puntos "Audience"/"Stage" de
-    // ViewPanel (ver ViewPanel::RenderLiveTransport / los dos toggles).
-    uiManager.AddPanel(std::make_shared<ProyecThor::UI::ViewPanel>(&uiManager));
 
-    // "Herramientas" — Control Overlays (antes dentro de ViewPanel) + Red/
-    // Notas/Reloj (antes secciones de Home), agrupados en un hub propio
-    // debajo de "Vista en Vivo" (ver UIManager::BeginDockspace/dock_right_*).
-    auto viewToolsPanel = std::make_shared<ProyecThor::UI::ViewToolsPanel>(&uiManager);
-    // Chat tambien vive en Yggdrasil -- misma instancia (ver
-    // UIManager::GetChatPanel), nunca dos chats independientes.
-    viewToolsPanel->SetTeamChatPanelRef(&uiManager.GetChatPanel());
-    uiManager.AddPanel(viewToolsPanel);
+    auto viewPanel = std::make_shared<ProyecThor::UI::ViewPanel>(&uiManager);
+    viewPanel->SetTeamChatPanelRef(&uiManager.GetChatPanel());
+    uiManager.AddPanel(viewPanel);
 
     auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
     stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());

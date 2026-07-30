@@ -1,8 +1,11 @@
 #pragma once
+#include <GL/glew.h>
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <imgui.h>
+#include "frontend/views/ImageView.h"
+#include "frontend/ui/SpinningDisc.h"
 #include "backend/media/VLCBasePlayer.h"
 #include "MonitorQueueEngine.h"
 
@@ -63,6 +66,22 @@ private:
     // ── Cola (logica real en MonitorQueueEngine) ────────────────────────────
     MonitorQueueEngine m_QueueEngine;
     int m_DragSrcIndex = -1; // solo feedback visual mientras se arrastra
+
+    // ── Preview de Imagen/Audio (Video usa el player VLC de siempre) ────────
+    ImageView         m_ImageView;
+    SpinningDiscState m_DiscState;
+    ImTextureID       m_CurrentAudioArt = 0; // portada del audio en preview, 0 = sin portada
+
+    // ── Ecualizador en vivo (ver PresentationCore::SetLiveEqualizer*) ───────
+    // Estado "de verdad" para los sliders del popup -- se aplica al audio en
+    // vivo (nunca al de Preview, que es mudo por diseño). Mismo criterio que
+    // AudioPanel: la UI es la fuente de verdad, libVLC solo recibe valores.
+    static constexpr int kEqBands = 10;
+    bool  m_EqEnabled = false;
+    float m_EqPreamp  = 0.0f;
+    float m_EqBandAmps[kEqBands] = { 0.0f };
+    bool  m_ShowEqPopup = false;
+    void  RenderEqualizerPopup();
 };
 
 } // namespace ProyecThor::UI

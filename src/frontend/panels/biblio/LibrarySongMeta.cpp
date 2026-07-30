@@ -45,6 +45,13 @@ SongMeta GetSongMeta(const std::string& filename)
     meta.copyright    = j.value("copyright", "");
     meta.extra        = j.value("extra", "");
     meta.linesPerSlide = j.value("linesPerSlide", 0);
+    meta.tempoBpm      = j.value("tempoBpm", 0);
+
+    meta.verseDurationOverrideMs.clear();
+    if (j.contains("verseDurationOverrideMs") && j["verseDurationOverrideMs"].is_array()) {
+        for (const auto& v : j["verseDurationOverrideMs"])
+            meta.verseDurationOverrideMs.push_back(v.get<int>());
+    }
 
     return meta;
 }
@@ -61,10 +68,23 @@ void SetSongMeta(const std::string& filename, const SongMeta& meta)
     j["copyright"]     = meta.copyright;
     j["extra"]         = meta.extra;
     j["linesPerSlide"] = meta.linesPerSlide;
+    j["tempoBpm"]      = meta.tempoBpm;
+    j["verseDurationOverrideMs"] = meta.verseDurationOverrideMs;
 
     std::ofstream f(U8Path(SongMetaPath(filename)));
     if (!f.is_open()) return;
     f << j.dump(2);
+}
+
+void RenameSongMeta(const std::string& oldFilename, const std::string& newFilename)
+{
+    std::error_code ec;
+    fs::path oldPath = U8Path(SongMetaPath(oldFilename));
+    if (!fs::exists(oldPath, ec)) return;
+
+    EnsureSongMetaDir();
+    fs::path newPath = U8Path(SongMetaPath(newFilename));
+    fs::rename(oldPath, newPath, ec);
 }
 
 } // namespace ProyecThor::Library

@@ -592,7 +592,7 @@ void SettingsManager::SaveSettings() {
         j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
 
     const auto& lsb = m_Settings.librarySidebar;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 9; i++)
         for (int c = 0; c < 4; c++)
             j["librarySidebar"]["categoryColor"][i][c] = lsb.categoryColor[i][c];
 
@@ -607,7 +607,7 @@ void SettingsManager::SaveSettings() {
             j["controlHub"]["categoryColor"][i][c] = chs.categoryColor[i][c];
 
     const auto& shs = m_Settings.stylesHub;
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < 6; i++)
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
 
@@ -656,11 +656,6 @@ void SettingsManager::SaveSettings() {
         jp["bgType"]    = p.bgType;
         jp["bgPath"]    = p.bgPath;
         for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
-
-        jp["hasMacro"]         = p.hasMacro;
-        jp["macroName"]        = p.macroName;
-        jp["macroCueIndex"]    = p.macroCueIndex;
-        jp["macroAutoAdvance"] = p.macroAutoAdvance;
     }
 
     j["yggdrasil"]["targetIp"]   = m_Settings.yggdrasil.targetIp;
@@ -836,7 +831,7 @@ void SettingsManager::LoadSettings() {
             const auto& jlsb = j["librarySidebar"];
             if (jlsb.contains("categoryColor") && jlsb["categoryColor"].is_array()) {
                 const auto& arr = jlsb["categoryColor"];
-                for (int i = 0; i < 8 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 9 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         lsb.categoryColor[i][c] = arr[i][c].get<float>();
             }
@@ -869,7 +864,7 @@ void SettingsManager::LoadSettings() {
             const auto& jshs = j["stylesHub"];
             if (jshs.contains("categoryColor") && jshs["categoryColor"].is_array()) {
                 const auto& arr = jshs["categoryColor"];
-                for (int i = 0; i < 7 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 6 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         shs.categoryColor[i][c] = arr[i][c].get<float>();
             }
@@ -984,11 +979,6 @@ void SettingsManager::LoadSettings() {
                     for (int c = 0; c < 3 && c < (int)bc.size(); c++)
                         p.bgColor[c] = bc[c].get<float>();
                 }
-
-                p.hasMacro         = jp.value("hasMacro",         false);
-                p.macroName        = jp.value("macroName",        "");
-                p.macroCueIndex    = jp.value("macroCueIndex",    -1);
-                p.macroAutoAdvance = jp.value("macroAutoAdvance", false);
             }
         }
 

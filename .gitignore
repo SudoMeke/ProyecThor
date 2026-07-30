@@ -13,6 +13,9 @@ compile_commands.json
 .ninja_log
 .ninja_deps
 
+# ── Contador de builds local (uno por maquina/CI, ver CMakeLists.txt) ────────
+build_count.txt
+
 # ── Instaladores / paquetes generados ────────────────────────────────────────
 iss/installer_output/
 *.exe

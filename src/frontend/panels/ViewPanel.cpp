@@ -4,9 +4,11 @@
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/settings/SettingsManager.h"
+#include "backend/settings/ProjectionQualityPresets.h"
 #include "frontend/views/Announcements.h"
 #include "frontend/views/OClock.h"
 #include "capture/CapturePanel.h"
+#include "TeamChatPanel.h"
 #include "MonitorTheme.h"
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
@@ -26,6 +28,10 @@
 namespace ProyecThor::UI {
 
 static constexpr float kQuickActionsRailW = 40.0f;
+// Franja horizontal de config (RenderQuickActionsConfig), abajo de todo el
+// panel -- antes era un segundo riel vertical a la izquierda, movido para
+// devolverle ese ancho al video (ver ViewPanel::Render).
+static constexpr float kConfigStripH = 36.0f;
 // Alto reservado para el transporte del player "general" (ver
 // RenderLiveTransport) debajo del video — mismo contenido que tenia
 // MonitorLiveControls, reflowado a un layout ancho/bajo en vez de
@@ -301,6 +307,21 @@ void DrawIcon_Gear(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     }
 }
 
+// Rayo — para el acceso rapido a "Calidad de salida" (Ajustes > Proyeccion).
+// Mismo motivo que DrawIcon_Disc/DrawIcon_Gear: no hay textura cargada para
+// esto y el glifo de fallback no es un icono real.
+void DrawIcon_Bolt(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float  thick = sz * 0.14f;
+    ImVec2 p0 = { o.x + sz * 0.58f, o.y + sz * 0.06f };
+    ImVec2 p1 = { o.x + sz * 0.28f, o.y + sz * 0.54f };
+    ImVec2 p2 = { o.x + sz * 0.50f, o.y + sz * 0.54f };
+    ImVec2 p3 = { o.x + sz * 0.34f, o.y + sz * 0.94f };
+    dl->AddLine(p0, p1, col, thick);
+    dl->AddLine(p1, p2, col, thick);
+    dl->AddLine(p2, p3, col, thick);
+}
+
 // Botón de celda plano — sin esquinas redondeadas, ancho completo del riel y
 // separador inferior de 1px: da el efecto de "grilla" tipo hoja de cálculo
 // (Excel) / toolbar de Holyrics-ProPresenter en vez de tarjetas vistosas.
@@ -372,6 +393,148 @@ bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIco
     return clicked;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Pads (ver RenderPadsPopup) — movido tal cual desde ViewToolsPanel (mismo
+//  comportamiento). Tabla de iconos elegibles: reusa dibujos vectoriales ya
+//  existentes (AppIcons/HomeIcons, misma firma en los dos headers), no hace
+//  falta agregar assets nuevos. PadSettings::iconIndex es la posicion en
+//  esta tabla (no un nombre), asi que el orden importa para la persistencia.
+// ─────────────────────────────────────────────────────────────────────────────
+using PadIconDrawFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
+struct PadIconEntry { const char* name; PadIconDrawFn draw; };
+
+static const PadIconEntry kPadIcons[] = {
+    { "Mixer",      AppIcons::DrawIcon_Mixer     },
+    { "Monitor",    AppIcons::DrawIcon_Monitor   },
+    { "Capas",      AppIcons::DrawIcon_Layers    },
+    { "Paleta",     AppIcons::DrawIcon_Palette   },
+    { "Overlay",    AppIcons::DrawIcon_Overlay   },
+    { "Tipografia", AppIcons::DrawIcon_TextAa    },
+    { "Transicion", AppIcons::DrawIcon_Swap      },
+    { "Shader",     AppIcons::DrawIcon_Shader    },
+    { "Home",       HomeIcons::DrawIcon_Home     },
+    { "Reloj",      HomeIcons::DrawIcon_Clock    },
+    { "Anuncios",   HomeIcons::DrawIcon_Megaphone},
+    { "Notas",      HomeIcons::DrawIcon_Notepad  },
+    { "Camara",     HomeIcons::DrawIcon_Camera   },
+    { "Red",        HomeIcons::DrawIcon_Broadcast},
+    { "Chat",       HomeIcons::DrawIcon_Chat     },
+};
+static constexpr int kPadIconCount = (int)(sizeof(kPadIcons) / sizeof(kPadIcons[0]));
+
+const PadIconEntry& PadIconFor(int index)
+{
+    return kPadIcons[std::clamp(index, 0, kPadIconCount - 1)];
+}
+
+// Grilla de seleccion de icono, usada dentro del submenu "Elegir icono" del
+// menu contextual de cada pad. Devuelve true si el usuario eligio uno nuevo.
+bool RenderPadIconGrid(int& iconIndex)
+{
+    bool changed = false;
+    const int   cols    = 5;
+    const float cellSz  = 34.0f;
+    const float spacing = 6.0f;
+
+    for (int i = 0; i < kPadIconCount; i++)
+    {
+        if (i % cols != 0) ImGui::SameLine(0.0f, spacing);
+
+        const bool sel = (i == iconIndex);
+        ImGui::PushID(i);
+        ImGui::PushStyleColor(ImGuiCol_Button, sel ? MT::k_PrevBtn : ImVec4(1,1,1,0.04f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, MT::k_PrevBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  MT::k_PrevBtnAct);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+
+        bool clicked = ImGui::Button("##padIcon", ImVec2(cellSz, cellSz));
+        ImVec2 p = ImGui::GetItemRectMin();
+        ImVec2 s = ImGui::GetItemRectSize();
+        float  iconSz = cellSz * 0.55f;
+        kPadIcons[i].draw(ImGui::GetWindowDrawList(),
+                          { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f }, iconSz, ImGui::GetColorU32(ImVec4(1,1,1,0.92f)));
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("%s", kPadIcons[i].name);
+
+        if (clicked) { iconIndex = i; changed = true; }
+        ImGui::PopID();
+    }
+    return changed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Guardar/aplicar un Pad — junta las dos partes independientes (Captura,
+//  Estilo+Fondo) via las APIs ya existentes de cada subsistema. Nunca toca
+//  la letra/texto en pantalla (PresentationState::currentText) a proposito
+//  -- eso es lo unico que un Pad no guarda.
+// ─────────────────────────────────────────────────────────────────────────────
+using PadSettings = ProyecThor::Settings::PadSettings;
+
+void SavePad(PadSettings& pad)
+{
+    auto& core = Core::PresentationCore::Get();
+
+    if (auto* cap = core.GetCapturePanelRef())
+        pad.hasCapture = cap->SnapshotCurrentCapture(pad.capture);
+    else
+        pad.hasCapture = false;
+
+    auto state = core.GetState();
+    pad.hasStyle       = true;
+    pad.styleSize      = state.textSize;
+    for (int c = 0; c < 4; c++) pad.styleColor[c] = state.textColor[c];
+    pad.styleHAlign    = state.textAlignment;
+    pad.styleVAlign    = state.vAlignment;
+    for (int c = 0; c < 4; c++) pad.styleMargins[c] = state.margins[c];
+    pad.styleAutoScale = state.autoScale;
+    pad.styleFontName  = state.selectedFont;
+    pad.bgType = (int)state.bgType;
+    pad.bgPath = state.bgPath;
+    for (int c = 0; c < 3; c++) pad.bgColor[c] = state.bgColor[c];
+
+    pad.assigned = pad.hasCapture || pad.hasStyle;
+    ProyecThor::Settings::SettingsManager::Get().Save();
+}
+
+void ApplyPad(const PadSettings& pad)
+{
+    auto& core = Core::PresentationCore::Get();
+    using BgType = Core::PresentationState::BackgroundType;
+
+    if (pad.hasCapture) {
+        if (auto* cap = core.GetCapturePanelRef())
+            cap->ApplyCaptureScene(pad.capture);
+    }
+
+    if (pad.hasStyle) {
+        Core::SavedStyle snap;
+        snap.size      = pad.styleSize;
+        for (int c = 0; c < 4; c++) snap.color[c] = pad.styleColor[c];
+        snap.hAlign    = pad.styleHAlign;
+        snap.vAlign    = pad.styleVAlign;
+        for (int c = 0; c < 4; c++) snap.margins[c] = pad.styleMargins[c];
+        snap.autoScale = pad.styleAutoScale;
+        snap.fontName  = pad.styleFontName;
+        core.ApplyStyleSnapshot(snap);
+
+        switch ((BgType)pad.bgType) {
+            case BgType::SolidColor:
+                core.SetLayer0_Color(pad.bgColor[0], pad.bgColor[1], pad.bgColor[2]);
+                break;
+            case BgType::Video:
+                core.SetBackgroundMedia(pad.bgPath, true, false);
+                break;
+            case BgType::Audio:
+                core.SetBackgroundAudio();
+                break;
+        }
+    }
+}
+
 } // namespace
 
 void ViewPanel::Render()
@@ -387,39 +550,32 @@ void ViewPanel::Render()
     if (visible)
     {
         ImVec2 avail = ImGui::GetContentRegionAvail();
-        // Riel opcional desde Vista > "Botones de limpieza (Vista en Vivo)"
-        // — apagado, el video se queda con todo el ancho.
+        // Riel/franja opcional desde Vista > "Botones de limpieza (Vista en
+        // Vivo)" — apagado, el video se queda con todo el espacio. Solo el
+        // riel de "Limpiar <tipo>" es vertical (a la derecha, junto al
+        // video); config es una franja horizontal abajo de TODO el panel,
+        // asi no le resta ancho al video por los dos costados.
         const bool  showQuickActions = ProyecThor::Settings::SettingsManager::Get()
                                             .GetSettings().general.showViewQuickActions;
-        const float railW    = showQuickActions ? kQuickActionsRailW : 0.0f;
-        const float contentW = std::max(0.0f, avail.x - railW);
+        const float railW      = showQuickActions ? kQuickActionsRailW : 0.0f;
+        const float stripH     = showQuickActions ? kConfigStripH : 0.0f;
+        const float topAreaH   = std::max(0.0f, avail.y - stripH);
+        const float contentW   = std::max(0.0f, avail.x - railW);
 
         // Children con padding cero — el estilo global usa WindowPadding
         // (22,18), que aquí sólo recortaría el video y el riel angosto.
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        if (contentW > 8.0f && avail.y > 8.0f)
+        if (contentW > 8.0f && topAreaH > 8.0f)
         {
-            ImGui::BeginChild("##viewVideoArea", ImVec2(contentW, avail.y), false,
+            ImGui::BeginChild("##viewVideoArea", ImVec2(contentW, topAreaH), false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-            // Puntos "Público"/"Stage" arriba de todo — reemplazan el boton
-            // "Iniciar proyección" de ControlPanel (eliminado, ver
-            // ToggleAudience/ToggleStageQuick).
-            const float dotsH = 28.0f;
-            RenderStatusDots(contentW);
-
-            // FIX: antes el video se quedaba con "lo que sobraba" despues
-            // de reservarle a Transport/Control Overlays un piso fijo, asi
-            // que en un panel angosto y alto el video terminaba con MAS
-            // alto reservado del que en realidad necesita para su relacion
-            // de aspecto (RenderContent letterboxea puertas adentro), y esa
-            // franja de negro "desperdiciada" no se le devolvia a los
-            // paneles de abajo, que quedaban apretados. Ahora se calcula
-            // primero cuanto alto necesita el video para llenar el ancho
-            // disponible sin barras (su relacion de aspecto real, la del
-            // monitor de salida), y lo que sobra se reparte generosamente
-            // entre Transport y Control Overlays.
+            // Relacion de aspecto real de la salida (la del monitor
+            // configurado en Ajustes > Proyeccion) — se calcula antes de
+            // todo porque tanto el video principal como la tira de Stage
+            // (mas abajo) letterboxean contra la MISMA proporcion, sea 16:9
+            // o cualquier otra resolucion "rara" que use el operador.
             float srcAspect = 1920.0f / 1080.0f;
             {
                 int monitorCount = 0;
@@ -434,7 +590,51 @@ void ViewPanel::Render()
                 }
             }
 
-            const float remain2   = std::max(0.0f, avail.y - dotsH);
+            // Puntos "Publico"/"Stage" + "Borrar Todo" -- se mudaron a la
+            // toolbar superior (ver UIManager::RenderModeToolbarStatusActions),
+            // pedido explicito para liberarle este espacio a "Vista en Vivo".
+            const float dotsH = 0.0f;
+
+            // Tira de preview de Stage, opcional (ver "vaStageStrip" en
+            // RenderQuickActionsConfig) — a diferencia de m_PreviewSource
+            // (que reemplaza que se ve en el video principal), esto se ve EN
+            // SIMULTANEO con Público, arriba del video. Letterboxeada a
+            // srcAspect (no estirada 16:9 fijo) para que se vea igual de
+            // proporcion que la salida real, sea la que sea.
+            const float stageStripMaxH = 110.0f;
+            float       stageStripH    = 0.0f;
+            if (m_ShowStageStrip)
+            {
+                float stripW = contentW;
+                float stripH = stripW / std::max(0.1f, srcAspect);
+                if (stripH > stageStripMaxH) {
+                    stripH = stageStripMaxH;
+                    stripW = stripH * srcAspect;
+                }
+                stageStripH = stripH;
+
+                ImGui::SetCursorPosY(dotsH);
+                ImDrawList* dl     = ImGui::GetWindowDrawList();
+                ImVec2      areaP0 = ImGui::GetCursorScreenPos();
+                float       offX   = (contentW - stripW) * 0.5f;
+                ImVec2      stripP0 = { areaP0.x + offX, areaP0.y };
+                ImVec2      stripP1 = { stripP0.x + stripW, stripP0.y + stripH };
+
+                dl->AddRectFilled(stripP0, stripP1, IM_COL32(10, 10, 14, 255));
+                UI::DrawStageContent(dl, stripP0, stripP1);
+                dl->AddRect(stripP0, stripP1, IM_COL32(90, 95, 110, 140), 0.0f, 0, 1.0f);
+
+                ImVec2 lblSz = ImGui::CalcTextSize("STAGE");
+                dl->AddRectFilled(stripP0, { stripP0.x + lblSz.x + 12.0f, stripP0.y + lblSz.y + 6.0f },
+                                  IM_COL32(0, 0, 0, 160));
+                dl->AddText({ stripP0.x + 6.0f, stripP0.y + 3.0f }, IM_COL32(255, 255, 255, 230), "STAGE");
+
+                ImGui::SetCursorPosY(dotsH);
+                ImGui::Dummy(ImVec2(contentW, stageStripH));
+            }
+            const float topReservedH = dotsH + stageStripH;
+
+            const float remain2   = std::max(0.0f, topAreaH - topReservedH);
             const float minVideoH = 40.0f;
 
             // El video nunca se lleva mas del 65% de lo que queda, aunque
@@ -445,25 +645,30 @@ void ViewPanel::Render()
             // minVideoH — de ahi el std::max() en cada limite superior, para
             // que el clamp nunca reciba un rango invertido pase lo que pase
             // con el alto disponible.
-            //
-            // FIX: antes esta cuenta tambien le reservaba un piso fijo a
-            // "Control Overlays" (kControlOverlaysH) dentro de este mismo
-            // panel — se movio a ViewToolsPanel (panel propio debajo de
-            // este), asi que ese espacio vuelve integro al video/transporte.
             float naturalVideoH = contentW / std::max(0.1f, srcAspect);
             float videoH     = std::clamp(naturalVideoH, minVideoH, std::max(minVideoH, remain2 * 0.65f));
-            float transportH = std::clamp(remain2 - videoH, 60.0f, std::max(60.0f, kLiveTransportH * 1.6f));
-            // Reajuste final: cualquier resto (por los clamps de arriba)
-            // vuelve al video en vez de perderse como espacio muerto.
-            videoH = std::max(0.0f, remain2 - transportH);
+            // FIX: un panel angosto y muy alto (poco ancho -> poco alto
+            // "natural" de 16:9, pero mucho remain2 vertical) hacia que ANTES
+            // se le devolviera TODO el sobrante a videoH, mucho mas alla de
+            // lo que su aspecto realmente necesita — RenderContent letterboxea
+            // puertas adentro, asi que ese alto de mas no sumaba video, solo
+            // franjas negras enormes arriba/abajo del recuadro real (el
+            // operador lo veia como "espacio roto" entre el video y el
+            // transporte). Ahora el sobrante, si lo hay, se le da al
+            // transporte (hasta un tope razonable) en vez de al video; lo
+            // que quede despues de eso se deja como aire al fondo del panel,
+            // mucho menos llamativo que un video "flotando" en el medio de
+            // una caja gigante.
+            float transportH = std::clamp(remain2 - videoH, 60.0f, std::max(60.0f, kLiveTransportH * 1.3f));
 
+            ImGui::SetCursorPosY(topReservedH);
             RenderContent(contentW, videoH);
 
             // RenderContent centra el video (letterbox) y puede dejar el
             // cursor antes de videoH — se fuerza la posicion para que cada
             // seccion arranque justo donde corresponde, sin importar cuanto
             // del alto reservado ocupo el letterbox.
-            ImGui::SetCursorPosY(dotsH + videoH);
+            ImGui::SetCursorPosY(topReservedH + videoH);
             RenderLiveTransport(contentW, transportH);
 
             ImGui::EndChild();
@@ -474,9 +679,21 @@ void ViewPanel::Render()
             ImGui::SameLine(0.0f, 0.0f);
 
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.06f, 0.09f, 1.0f));
-            ImGui::BeginChild("##viewQuickActions", ImVec2(railW, avail.y), false,
+            ImGui::BeginChild("##viewQuickActions", ImVec2(railW, topAreaH), false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-            RenderQuickActions(railW, avail.y);
+            RenderQuickActionsClear(railW);
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+        }
+
+        // Franja horizontal de config, ancho completo del panel (abajo del
+        // video Y del riel derecho) -- ver comentario arriba.
+        if (showQuickActions)
+        {
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.06f, 0.09f, 1.0f));
+            ImGui::BeginChild("##viewQuickActionsConfigStrip", ImVec2(avail.x, stripH), false,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            RenderQuickActionsConfig(stripH);
             ImGui::EndChild();
             ImGui::PopStyleColor();
         }
@@ -487,14 +704,10 @@ void ViewPanel::Render()
     ImGui::End();
 }
 
-void ViewPanel::RenderQuickActions(float railW, float railH)
+void ViewPanel::RenderQuickActionsClear(float railW)
 {
-    (void)railH;
     auto& core = Core::PresentationCore::Get();
-    bool stretchOn = core.GetStretchToFill();
-    bool isMuted   = core.GetLiveMute();
 
-    auto* audioPanel   = core.GetAudioPanelRef();
     auto* announcements= core.GetAnnouncementsRef();
     auto* oclock       = core.GetOClockRef();
     auto* capturePanel = core.GetCapturePanelRef();
@@ -506,20 +719,15 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
     bool showText  = core.GetState().showText;
     bool discLive  = core.GetState().bgType == Core::PresentationState::BackgroundType::Audio;
     bool bgLive    = core.GetState().bgType != Core::PresentationState::BackgroundType::SolidColor;
-    bool imgLive   = core.IsOverlayActive();
     bool annLive   = announcements && announcements->IsLive();
     bool clockLive = oclock && oclock->IsLive();
     bool capLive   = capturePanel && capturePanel->IsLive();
 
-    ImVec4 baseFill     = ToVec4(DS::BtnDefaultFill);
     ImVec4 hoverClear   = ToVec4(DS::AccentColorDim);
-    ImVec4 activeStretch= ToVec4((DS::AccentColor & 0x00FFFFFFu) | (140u << 24));
-    ImVec4 hoverMute    = ToVec4(DS::DangerColor);
-    ImVec4 activeMute   = Brighten(ToVec4(DS::DangerColor), 0.12f);
     ImVec4 activeContent= Design::k_EQ_Yellow;
     ImVec4 textPrimary  = ToVec4(DS::TextPrimary);
-    ImVec4 textDanger   = ToVec4(DS::DangerColor);
     ImVec4 tintOnYellow = ImVec4(0.10f, 0.09f, 0.06f, 1.0f);
+    ImVec4 baseFill     = ToVec4(DS::BtnDefaultFill);
 
     struct ActionDef {
         const char* id;
@@ -533,42 +741,25 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
         ImVec4      tint;
     };
 
-    // Los primeros 7 son "Limpiar <tipo especifico>" (uno por cada capa de
-    // contenido que puede estar en vivo), y despues del espaciador quedan
-    // las utilidades (proporcion/mute/ajustes) que ya estaban. Pedido
-    // explicito: solo iconos, nada de letras — donde no habia una textura ya
-    // cargada (album/imagen/campana/reloj/camara/engranaje) se reusan los
-    // iconos vectoriales ya dibujados a mano en otras partes de la app
-    // (AppIcons.h/HomeIcons.h) o se agregan nuevos chicos aca mismo (Disco,
-    // Engranaje) — ver DrawIcon_Disc/DrawIcon_Gear arriba.
-    const bool previewingStage = (m_PreviewSource == PreviewSource::Stage);
-
-    ActionDef actions[11] = {
+    // "Limpiar <tipo especifico>" — uno por cada capa de contenido que puede
+    // estar en vivo. Pedido explicito: solo iconos, nada de letras — donde
+    // no habia una textura ya cargada (album/imagen/campana/reloj/camara) se
+    // reusan los iconos vectoriales ya dibujados a mano en otras partes de
+    // la app (AppIcons.h/HomeIcons.h) o se agregan nuevos chicos aca mismo
+    // (Disco) — ver DrawIcon_Disc arriba.
+    ActionDef actions[6] = {
         { "vaClearText", "", AppIcons::DrawIcon_TextAa, "Aa", "Limpiar texto",
           hoverClear, activeContent, showText,  showText  ? tintOnYellow : textPrimary },
         { "vaClearDisc", "", DrawIcon_Disc, "Dsc", "Detener disco en vivo",
           hoverClear, activeContent, discLive,  discLive  ? tintOnYellow : textPrimary },
         { "vaClearBg",   "delete", nullptr, "BG",  "Quitar fondo",
           hoverClear, activeContent, bgLive,    bgLive    ? tintOnYellow : textPrimary },
-        { "vaClearImg",  "", AppIcons::DrawIcon_Overlay, "Img", "Overlays",
-          hoverClear, activeContent, imgLive,   imgLive   ? tintOnYellow : textPrimary },
         { "vaClearAnn",  "", HomeIcons::DrawIcon_Megaphone, "Anc", "Detener anuncios",
           hoverClear, activeContent, annLive,   annLive   ? tintOnYellow : textPrimary },
         { "vaClearClock","", HomeIcons::DrawIcon_Clock, "Rlj", "Quitar reloj",
           hoverClear, activeContent, clockLive, clockLive ? tintOnYellow : textPrimary },
         { "vaClearCap",  "", HomeIcons::DrawIcon_Camera, "Cap", "Detener captura",
           hoverClear, activeContent, capLive,   capLive   ? tintOnYellow : textPrimary },
-
-        { "vaStretch",   stretchOn ? "original_screen" : "fit_screen", nullptr, stretchOn ? "1:1" : "Fit",
-          "Alternar proporción", hoverClear, activeStretch, stretchOn, textPrimary },
-        { "vaMute",      isMuted ? "no_sound" : "volume_up", nullptr, isMuted ? "Mute" : "Vol",
-          "Mutear / Desmutear audio vivo", isMuted ? hoverMute : hoverClear, activeMute, isMuted,
-          isMuted ? textDanger : textPrimary },
-        { "vaPrefs",     "", DrawIcon_Gear, "...", "Ajustes",
-          hoverClear, baseFill, false, textPrimary },
-        { "vaPreviewSource", "", AppIcons::DrawIcon_Swap, "S/P",
-          previewingStage ? "Viendo: Stage (click para ver Público)" : "Viendo: Público (click para ver Stage)",
-          hoverClear, activeStretch, previewingStage, textPrimary },
     };
 
     // Celdas de ancho completo, pegadas unas a otras (separadas solo por la
@@ -579,10 +770,8 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
     ImGui::Dummy(ImVec2(railW, 1.0f));
 
-    for (int i = 0; i < 11; i++)
+    for (int i = 0; i < 6; i++)
     {
-        if (i == 7) ImGui::Dummy(ImVec2(railW, 10.0f)); // separa utilidades de los "Limpiar"
-
         if (QuickActionButton(actions[i].id, actions[i].icon, actions[i].vectorIcon, actions[i].fallbackGlyph,
                                actions[i].tooltip, cellSize, baseFill, actions[i].hoverColor,
                                actions[i].activeColor, actions[i].tint, actions[i].toggledOn))
@@ -590,192 +779,259 @@ void ViewPanel::RenderQuickActions(float railW, float railH)
             if (i == 0)      core.ClearLayer2();
             else if (i == 1) core.StopBackgroundMedia();
             else if (i == 2) core.StopBackgroundMedia();
-            else if (i == 3) core.StopOverlayMedia();
-            else if (i == 4 && announcements) announcements->SetLive(false);
-            else if (i == 5 && oclock)        oclock->StopTransmitting();
-            else if (i == 6 && capturePanel)  capturePanel->Stop();
-            else if (i == 7) core.SetStretchToFill(!stretchOn);
-            else if (i == 8) core.SetLiveMute(!isMuted);
-            else if (i == 9 && m_UIManager) m_UIManager->RequestSettings();
-            else if (i == 10) m_PreviewSource = previewingStage ? PreviewSource::Publico : PreviewSource::Stage;
+            else if (i == 3 && announcements) announcements->SetLive(false);
+            else if (i == 4 && oclock)        oclock->StopTransmitting();
+            else if (i == 5 && capturePanel)  capturePanel->Stop();
         }
     }
 
     ImGui::PopStyleVar();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderStatusDots — "Público" y "Stage", arriba del video. Reemplazan el
-//  boton "Iniciar proyección" que vivia en ControlPanel (eliminado: su
-//  configuracion — pantalla/calidad — ya estaba duplicada en Ajustes >
-//  Proyección) y el "ACTIVAR STAGE" de StageDisplayPanel (ahora una
-//  categoria de Ajustes). Cargar contenido (fondo/cancion/video) nunca
-//  prende esto solo — el operador decide con estos dos puntos.
-// ─────────────────────────────────────────────────────────────────────────────
-static bool StatusDotToggle(ImDrawList* dl, const char* id, const char* label, bool on, ImVec4 onColor, float rowH)
-{
-    const float dotR = 5.0f;
-    ImVec2 textSz = ImGui::CalcTextSize(label);
-    float itemW = dotR * 2.0f + 6.0f + textSz.x + 14.0f;
-
-    ImVec2 p0 = ImGui::GetCursorScreenPos();
-    bool clicked = ImGui::InvisibleButton(id, ImVec2(itemW, rowH));
-    bool hovered = ImGui::IsItemHovered();
-
-    ImVec2 center = { p0.x + dotR + 4.0f, p0.y + rowH * 0.5f };
-    ImVec4 offColor = { 0.42f, 0.44f, 0.50f, 1.0f };
-    DrawStatusDot(dl, center, dotR, on ? onColor : offColor, on);
-
-    ImVec4 textCol = on ? onColor : ImVec4(0.75f, 0.76f, 0.80f, hovered ? 1.0f : 0.85f);
-    dl->AddText({ center.x + dotR + 6.0f, p0.y + (rowH - textSz.y) * 0.5f },
-               ImGui::ColorConvertFloat4ToU32(textCol), label);
-
-    return clicked;
-}
-
-void ViewPanel::RenderStatusDots(float w)
+void ViewPanel::RenderQuickActionsConfig(float stripH)
 {
     auto& core = Core::PresentationCore::Get();
-    auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+    bool stretchOn = core.GetStretchToFill();
 
-    const bool audienceOn = core.IsProjecting();
-    const bool stageOn    = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
-    const float rowH      = 28.0f;
+    ImVec4 baseFill     = ToVec4(DS::BtnDefaultFill);
+    ImVec4 hoverClear   = ToVec4(DS::AccentColorDim);
+    ImVec4 activeStretch= ToVec4((DS::AccentColor & 0x00FFFFFFu) | (140u << 24));
+    ImVec4 textPrimary  = ToVec4(DS::TextPrimary);
 
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImGui::SetCursorPosX(10.0f);
+    struct ActionDef {
+        const char* id;
+        const char* icon;
+        DrawIconFn  vectorIcon;
+        const char* fallbackGlyph;
+        const char* tooltip;
+        ImVec4      hoverColor;
+        ImVec4      activeColor;
+        bool        toggledOn;
+        ImVec4      tint;
+    };
 
-    if (StatusDotToggle(dl, "##dotAudience", "Público", audienceOn, MT::k_LiveAccent, rowH))
-        ToggleAudience(!audienceOn);
+    // Utilidades de vista/configuracion -- separadas de "Limpiar <tipo>"
+    // (riel derecho) a pedido explicito, para no mezclar accion destructiva
+    // con ajuste de vista. Mute/Desmute se saco de aca (pedido explicito,
+    // sobraba: el mismo control ya esta en RenderLiveTransport).
+    const bool previewingStage = (m_PreviewSource == PreviewSource::Stage);
 
-    ImGui::SameLine(0.0f, 14.0f);
+    ActionDef actions[7] = {
+        { "vaStretch",   stretchOn ? "original_screen" : "fit_screen", nullptr, stretchOn ? "1:1" : "Fit",
+          "Alternar proporción", hoverClear, activeStretch, stretchOn, textPrimary },
+        { "vaPrefs",     "", DrawIcon_Gear, "...", "Ajustes",
+          hoverClear, baseFill, false, textPrimary },
+        { "vaPreviewSource", "", AppIcons::DrawIcon_Swap, "S/P",
+          previewingStage ? "Viendo: Stage (click para ver Público)" : "Viendo: Público (click para ver Stage)",
+          hoverClear, activeStretch, previewingStage, textPrimary },
+        { "vaStageStrip", "", AppIcons::DrawIcon_Monitor, "Stg",
+          m_ShowStageStrip ? "Ocultar tira de Stage" : "Mostrar tira de Stage arriba de Público",
+          hoverClear, activeStretch, m_ShowStageStrip, textPrimary },
+        { "vaQuality",   "", DrawIcon_Bolt, "Qty", "Calidad de salida (para PCs de bajos recursos)",
+          hoverClear, activeStretch, false, textPrimary },
+        { "vaChat",      "", HomeIcons::DrawIcon_Chat, "Cht", "Chat",
+          hoverClear, activeStretch, false, textPrimary },
+        { "vaPads",      "", AppIcons::DrawIcon_Pads, "Pds", "Pads",
+          hoverClear, activeStretch, false, textPrimary },
+    };
 
-    if (StatusDotToggle(dl, "##dotStage", "Stage", stageOn, MT::k_PrevAccent, rowH))
-        ToggleStageQuick(!stageOn);
+    constexpr int kCount   = 7;
+    const float   totalW   = ImGui::GetContentRegionAvail().x;
+    const float   cellW    = totalW / (float)kCount;
+    const ImVec2  cellSize(cellW, stripH);
 
-    // ── "Borrar Todo" ────────────────────────────────────────────────────
-    // Pedido explicito: los botones especificos ("Limpiar texto/disco/
-    // fondo/imagen/anuncios/reloj/captura") viven en el riel angosto a la
-    // derecha del video (ver RenderQuickActions); este limpia TODO de una
-    // — se pone del lado del video (columna izquierda) para que no se
-    // confunda con esos botones especificos.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+
+    for (int i = 0; i < kCount; i++)
     {
-        const char* label   = "Borrar Todo";
-        ImVec2      textSz  = ImGui::CalcTextSize(label);
-        const float iconSz  = rowH * 0.55f;
-        const float iconGap = 8.0f;
-        float       groupW  = iconSz + iconGap + textSz.x;
-        float       btnW    = groupW + 24.0f;
-        float       btnX    = std::max(ImGui::GetCursorPosX(), w - btnW - 10.0f);
-        ImGui::SameLine(btnX);
+        if (i > 0) ImGui::SameLine(0.0f, 0.0f);
 
-        ImGui::PushStyleColor(ImGuiCol_Button,       ToVec4((DS::DangerColor & 0x00FFFFFFu) | (40u  << 24)));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ToVec4((DS::DangerColor & 0x00FFFFFFu) | (90u  << 24)));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ToVec4((DS::DangerColor & 0x00FFFFFFu) | (140u << 24)));
-        ImGui::PushStyleColor(ImGuiCol_Border,        ToVec4((DS::DangerColor & 0x00FFFFFFu) | (100u << 24)));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rowH * 0.5f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-
-        bool clicked = ImGui::Button("##borrarTodo", ImVec2(btnW, rowH));
-
-        ImVec2 bMin = ImGui::GetItemRectMin();
-        ImVec2 bMax = ImGui::GetItemRectMax();
-        float  startX  = bMin.x + ((bMax.x - bMin.x) - groupW) * 0.5f;
-        float  centerY = (bMin.y + bMax.y) * 0.5f;
-        ImU32  dangerCol = ImGui::ColorConvertFloat4ToU32(ToVec4(DS::DangerColor));
-
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        auto it = StyleGeneralApp::Icons.find("cleaning_services");
-        if (it != StyleGeneralApp::Icons.end() && it->second.textureID)
+        if (QuickActionButton(actions[i].id, actions[i].icon, actions[i].vectorIcon, actions[i].fallbackGlyph,
+                               actions[i].tooltip, cellSize, baseFill, actions[i].hoverColor,
+                               actions[i].activeColor, actions[i].tint, actions[i].toggledOn))
         {
-            dl->AddImage(it->second.textureID,
-                { startX, centerY - iconSz * 0.5f }, { startX + iconSz, centerY + iconSz * 0.5f },
-                ImVec2(0, 0), ImVec2(1, 1), dangerCol);
+            if (i == 0)      core.SetStretchToFill(!stretchOn);
+            else if (i == 1 && m_UIManager) m_UIManager->RequestSettings();
+            else if (i == 2) m_PreviewSource = previewingStage ? PreviewSource::Publico : PreviewSource::Stage;
+            else if (i == 3) m_ShowStageStrip = !m_ShowStageStrip;
+            else if (i == 4) ImGui::OpenPopup("##vaQualityPopup");
+            else if (i == 5) ImGui::OpenPopup("##vaChatPopup");
+            else if (i == 6) ImGui::OpenPopup("##vaPadsPopup");
         }
-        dl->AddText({ startX + iconSz + iconGap, centerY - textSz.y * 0.5f }, dangerCol, label);
+    }
 
-        if (clicked)
-        {
-            core.ClearLayer2();
-            core.StopBackgroundMedia();
-            core.StopOverlayMedia();
-            if (auto* a   = core.GetAnnouncementsRef())  a->SetLive(false);
-            if (auto* clk = core.GetOClockRef())          clk->StopTransmitting();
-            if (auto* cap = core.GetCapturePanelRef())    cap->Stop();
+    ImGui::PopStyleVar();
+
+    RenderQualityPopup();
+    RenderChatPopup();
+    RenderPadsPopup();
+}
+
+void ViewPanel::RenderQualityPopup()
+{
+    if (!ImGui::BeginPopup("##vaQualityPopup"))
+        return;
+
+    using namespace ProyecThor::Settings;
+    auto& projection = SettingsManager::Get().GetSettings().projection;
+    auto  mode       = static_cast<OutputQualityMode>(projection.outputQualityMode);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
+    ImGui::TextUnformatted("CALIDAD DE SALIDA");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+
+    bool changed = false;
+
+    if (ImGui::Selectable("Auto", mode == OutputQualityMode::Auto)) {
+        projection.outputQualityMode = static_cast<int>(OutputQualityMode::Auto);
+        changed = true;
+    }
+    for (int i = 0; i < kQualityPresetCount; i++) {
+        bool sel = (mode == OutputQualityMode::Preset && projection.outputPresetIndex == i);
+        if (ImGui::Selectable(kQualityPresets[i].label, sel)) {
+            projection.outputQualityMode = static_cast<int>(OutputQualityMode::Preset);
+            projection.outputPresetIndex = i;
+            changed = true;
         }
+    }
+
+    if (changed)
+        SettingsManager::Get().Save();
+
+    ImGui::Separator();
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 220.0f);
+    ImGui::TextWrapped("Baja la resolucion del video de fondo para aliviar PCs de bajos recursos. "
+                       "El texto en vivo siempre se ve nitido.");
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+
+    ImGui::EndPopup();
+}
+
+void ViewPanel::RenderChatPopup()
+{
+    // FIX: TeamChatPanel::RenderContent calcula el alto del log de mensajes
+    // a partir de GetContentRegionAvail() (pensado para su hogar original,
+    // un panel dockeado de alto fijo). Un popup normal se auto-ajusta al
+    // contenido salvo que se le fuerce un tamaño -- con solo
+    // ImGuiCond_Appearing (una vez, al abrir) el tamaño no queda fijo en los
+    // frames siguientes, asi que avail crecia sin limite y con el retroalimentaba
+    // el alto del log: mas contenido -> ventana mas alta -> avail mas grande
+    // -> log mas alto -> ventana mas alta todavia. ImGuiCond_Always +
+    // NoResize fuerza el mismo tamaño en todos los frames, como el panel
+    // dockeado original.
+    ImGui::SetNextWindowSize(ImVec2(380.0f, 460.0f), ImGuiCond_Always);
+    if (!ImGui::BeginPopup("##vaChatPopup", ImGuiWindowFlags_NoResize))
+        return;
+
+    if (m_TeamChatPanelRef)
+        m_TeamChatPanelRef->RenderContent();
+    else
+        ImGui::TextDisabled("Chat no disponible.");
+
+    ImGui::EndPopup();
+}
+
+// Pads — movido tal cual desde ViewToolsPanel::RenderPads (mismo
+// comportamiento, ver los helpers en el namespace anonimo de arriba).
+void ViewPanel::RenderPadsPopup()
+{
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopup("##vaPadsPopup"))
+        return;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
+    ImGui::TextUnformatted("PADS");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 290.0f);
+    ImGui::TextWrapped("Click: aplicar. Click derecho: guardar lo que hay en pantalla "
+                       "(captura + estilo/fondo + overlay activo, no la letra) o elegir icono.");
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+
+    auto& padsArr = ProyecThor::Settings::SettingsManager::Get().GetSettings().pads.pads;
+
+    const int   cols    = 4;
+    const float btnSize = 56.0f;
+    const float spacing = 10.0f;
+
+    for (int i = 0; i < ProyecThor::Settings::kPadCount; i++)
+    {
+        if (i % cols != 0) ImGui::SameLine(0.0f, spacing);
+
+        auto& pad = padsArr[i];
+        const auto& icon = PadIconFor(pad.iconIndex);
+
+        ImVec4 fillCol = pad.assigned ? MT::k_PrevBtn : ImVec4(MT::k_PrevBtn.x, MT::k_PrevBtn.y, MT::k_PrevBtn.z, 0.12f);
+        ImVec4 bordCol = pad.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.35f) : MT::k_BorderSubtle;
+
+        ImGui::PushID(i);
+        ImGui::PushStyleColor(ImGuiCol_Button,        fillCol);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  MT::k_PrevBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   MT::k_PrevBtnAct);
+        ImGui::PushStyleColor(ImGuiCol_Border,         bordCol);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   10.0f);
+
+        bool clicked = ImGui::Button("##pad", ImVec2(btnSize, btnSize));
+
+        ImVec2 p       = ImGui::GetItemRectMin();
+        ImVec2 s       = ImGui::GetItemRectSize();
+        float  iconSz  = btnSize * 0.42f;
+        ImU32  iconCol = ImGui::GetColorU32(pad.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.92f) : MT::k_TextDim);
+        icon.draw(ImGui::GetWindowDrawList(),
+                  { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f }, iconSz, iconCol);
 
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
-    }
-}
 
-// Portado de ControlPanel::ToggleSecondaryDisplay (eliminado). Usa la
-// pantalla configurada en Ajustes > Proyección, o la secundaria (indice 1)
-// por defecto — nunca la principal.
-//
-// FIX: antes esto creaba una ventana GLFW nativa propia (CreateProjectorWindow/
-// SecondaryOutputWindow, GLFW_FLOATING=true) para el proyector, que corria
-// EN PARALELO con el viewport ImGui "ProjectorLive" (UIManager.cpp,
-// ImGuiViewportFlags_TopMost) — las dos posicionadas exactamente sobre el
-// mismo monitor, ambas pidiendo estar siempre encima. El publico terminaba
-// viendo cualquiera de las dos ventanas segun quien ganara el z-order en
-// cada instante, y la nativa ni siquiera dibujaba el texto en vivo. Ya se
-// habia migrado el Stage a este mismo esquema (ver el comentario en
-// UIManager.cpp junto a "StageLive") — ahora el Proyector sigue el mismo
-// patron: SOLO existe "ProjectorLive", gateado por isProjecting/
-// targetMonitorIndex, sin ventana nativa que le compita el z-order.
-void ViewPanel::ToggleAudience(bool active)
-{
-    auto& core = Core::PresentationCore::Get();
+        if (clicked && pad.assigned) ApplyPad(pad);
 
-    if (active) {
-        auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
-        int monitorCount = 0;
-        glfwGetMonitors(&monitorCount);
-        int monitorIndex = std::clamp(
-            settings.projection.targetMonitor < 0 ? 1 : settings.projection.targetMonitor,
-            0, std::max(0, monitorCount - 1));
+        if (ImGui::BeginPopupContextItem("##padCtx")) {
+            if (ImGui::MenuItem(pad.assigned ? "Guardar aqui (reemplazar)" : "Guardar aqui"))
+                SavePad(pad);
 
-        core.SetTargetMonitor(monitorIndex);
-        std::cout << "[ViewPanel] Proyección iniciada en monitor " << monitorIndex << ".\n";
-    } else {
-        std::cout << "[ViewPanel] Proyección detenida.\n";
-    }
+            if (ImGui::BeginMenu("Elegir icono")) {
+                if (RenderPadIconGrid(pad.iconIndex))
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                ImGui::EndMenu();
+            }
 
-    core.SetProjecting(active);
-}
-
-// Portado de StageDisplayPanel::ToggleStageDisplay, ahora leyendo
-// pantalla/LAN/puerto desde Settings (ver Settings::StageDisplaySettings)
-// en vez de miembros efimeros — esta clase no tiene (ni necesita) una
-// instancia de StageDisplayPanel.
-void ViewPanel::ToggleStageQuick(bool active)
-{
-    auto& core = Core::PresentationCore::Get();
-    auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
-
-    if (active) {
-        if (sd.useLAN) {
-            core.ToggleNetworkStream(true, sd.lanPort);
-            return;
+            if (pad.assigned) {
+                ImGui::Separator();
+                if (ImGui::MenuItem("Borrar pad")) {
+                    pad = PadSettings{};
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
+            }
+            ImGui::EndPopup();
         }
 
-        int monitorCount = 0;
-        glfwGetMonitors(&monitorCount);
-        if (monitorCount < 2) {
-            std::cerr << "[ViewPanel] No hay suficientes monitores para activar el stage.\n";
-            return;
+        if (pad.assigned && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+            std::string tip = "Pad " + std::to_string(i + 1);
+            if (pad.hasCapture) tip += "\n- Captura";
+            if (pad.hasStyle)   tip += "\n- Estilo y fondo";
+            ImGui::SetTooltip("%s", tip.c_str());
         }
 
-        int stageMonitorIndex = std::clamp(sd.monitorIndex < 0 ? 1 : sd.monitorIndex, 0, monitorCount - 1);
-        sd.monitorIndex = stageMonitorIndex;
-        ProyecThor::Settings::SettingsManager::Get().Save();
-        core.SetStaging(true, stageMonitorIndex);
-    } else {
-        if (sd.useLAN) core.ToggleNetworkStream(false);
-        else           core.SetStaging(false);
+        ImGui::PopID();
     }
+
+    if (auto* cap = Core::PresentationCore::Get().GetCapturePanelRef())
+        cap->RenderSceneButtons();
+
+    ImGui::EndPopup();
 }
+
+// NOTA: RenderStatusDots/StatusDotToggle/ToggleAudience/ToggleStageQuick y
+// el boton "Borrar Todo" que vivian aca se mudaron a UIManager.cpp
+// (RenderModeToolbarStatusActions), pedido explicito para subirlos a la
+// toolbar superior y liberarle este espacio a "Vista en Vivo".
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  RenderLiveTransport — transporte + VU meters del player "general" (bg,

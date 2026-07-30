@@ -10,6 +10,8 @@
 #include <cmath>
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "backend/core/AppPaths.h"
+#include "frontend/views/audio/AudioHelpers.h"
+#include "frontend/views/audio/AudioAlbumArt.h"
 
 namespace ProyecThor::UI {
 
@@ -70,12 +72,43 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
     // el video en vivo al publico nunca debe esperar a que el Preview
     // termine de abrir un archivo.
     Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/true);
+    m_ImageView.Clear();
     m_PreviewPlaying = true;
 }
+            else if (currentSel.type == Core::ItemType::Audio && !currentSel.title.empty())
+            {
+                std::string path = Audio::GetAudioPath() + "/" + currentSel.title;
+                // Reproduce igual que un video (el preview sigue mudo por
+                // forceSilent) para que el tiempo/seek funcionen; el disco
+                // animado se dibuja en vez de la textura de video.
+                Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/true);
+                m_ImageView.Clear();
+                m_PreviewPlaying = true;
+
+                if (m_CurrentAudioArt) {
+                    GLuint tex = static_cast<GLuint>(m_CurrentAudioArt);
+                    glDeleteTextures(1, &tex);
+                    m_CurrentAudioArt = 0;
+                }
+                Audio::AlbumArt art = Audio::ExtractAlbumArt(path);
+                if (art.HasData()) {
+                    Audio::UploadAlbumArtToGL(art);
+                    if (art.HasTexture())
+                        m_CurrentAudioArt = static_cast<ImTextureID>(art.texID);
+                }
+            }
+            else if (currentSel.type == Core::ItemType::Image && !currentSel.title.empty())
+            {
+                Core::PresentationCore::Get().RequestPreviewStop();
+                m_PreviewPlaying = false;
+                m_ImageView.LoadImageFromFile(GetAssetsPath() + "/images/" + currentSel.title);
+                m_ImageView.ResetAdjustments();
+            }
             else
             {
                 player->SetPause(true);
                 player->SetMute(true);
+                m_ImageView.Clear();
                 m_PreviewPlaying = false;
             }
         }
