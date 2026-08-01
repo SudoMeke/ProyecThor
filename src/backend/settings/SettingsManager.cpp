@@ -14,6 +14,7 @@
 #include <windows.h>
 #endif
 #include "MonitorTheme.h"
+#include "backend/monitors/MonitorDesign.h"
 #include "HubTheme.h"
 #include "LayersTheme.h"
 #include "CanvaStyleEditor.h"
@@ -377,6 +378,7 @@ void SettingsManager::ApplyProjection() {
     }
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
     core.SetLoadingLogoPath(p.loadingLogoPath);
+    core.SetBackgroundPingPongLoop(p.bgPingPongLoop);
 
     core.SetFSREnabled(p.fsrEnabled);
     core.SetFSRSharpness(p.fsrSharpness);
@@ -428,9 +430,15 @@ void SettingsManager::ApplyTheme() {
         return ImVec4(a[0], a[1], a[2], a[3] * alphaMul);
     };
 
+    // Fondos de panel 100% opacos (pedido explicito: "quita las
+    // transparencias de los paneles, queda muy feo") -- ChildBg en
+    // particular estaba al 70% alpha, dejando ver lo que hubiera detras de
+    // CUALQUIER BeginChild() sin override propio (la mayoria de los
+    // paneles: Biblioteca, Cola de Monitor, listas, etc), lo que se veia
+    // como un lavado/neblina inconsistente segun que hubiera de fondo.
     c[ImGuiCol_WindowBg]         = V(t.base);
-    c[ImGuiCol_ChildBg]          = V(t.surface0, 0.70f);
-    c[ImGuiCol_PopupBg]          = V(t.surface1, 0.98f);
+    c[ImGuiCol_ChildBg]          = V(t.surface0);
+    c[ImGuiCol_PopupBg]          = V(t.surface1);
     c[ImGuiCol_Border]           = V(t.border);
     c[ImGuiCol_BorderShadow]     = ImVec4(0, 0, 0, 0);
 
@@ -440,7 +448,7 @@ void SettingsManager::ApplyTheme() {
 
     c[ImGuiCol_TitleBg]          = V(t.base);
     c[ImGuiCol_TitleBgActive]    = V(t.surface0);
-    c[ImGuiCol_TitleBgCollapsed] = V(t.base, 0.8f);
+    c[ImGuiCol_TitleBgCollapsed] = V(t.base);
     c[ImGuiCol_MenuBarBg]        = V(t.base);
 
     c[ImGuiCol_ScrollbarBg]          = ImVec4(0, 0, 0, 0);
@@ -515,6 +523,7 @@ void SettingsManager::ApplyTheme() {
 
     ProyecThor::UI::DS::SyncFromTheme(t);
     ProyecThor::UI::MonitorTheme::Sync(t);
+    ProyecThor::UI::Design::Sync(t);
     ProyecThor::UI::HubTheme::Sync(t);
     ProyecThor::UI::LP::Sync(t);
     ProyecThor::UI::CanvaPalette::Sync(t);
@@ -592,7 +601,7 @@ void SettingsManager::SaveSettings() {
         j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
 
     const auto& lsb = m_Settings.librarySidebar;
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < 10; i++)
         for (int c = 0; c < 4; c++)
             j["librarySidebar"]["categoryColor"][i][c] = lsb.categoryColor[i][c];
 
@@ -684,6 +693,10 @@ void SettingsManager::SaveSettings() {
     j["streaming"]["width"]            = m_Settings.streaming.width;
     j["streaming"]["height"]           = m_Settings.streaming.height;
 
+    j["sync"]["enabled"]    = m_Settings.sync.enabled;
+    j["sync"]["port"]       = m_Settings.sync.port;
+    j["sync"]["pairingPin"] = m_Settings.sync.pairingPin;
+
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
     else if (m_Settings.general.language == Language::Portuguese) langStr = "pt";
@@ -700,7 +713,6 @@ void SettingsManager::SaveSettings() {
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
-    j["general"]["showModeToolbar"]     = m_Settings.general.showModeToolbar;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -831,7 +843,7 @@ void SettingsManager::LoadSettings() {
             const auto& jlsb = j["librarySidebar"];
             if (jlsb.contains("categoryColor") && jlsb["categoryColor"].is_array()) {
                 const auto& arr = jlsb["categoryColor"];
-                for (int i = 0; i < 9 && i < (int)arr.size(); i++)
+                for (int i = 0; i < 10 && i < (int)arr.size(); i++)
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         lsb.categoryColor[i][c] = arr[i][c].get<float>();
             }
@@ -905,6 +917,13 @@ void SettingsManager::LoadSettings() {
             m_Settings.streaming.fps              = js.value("fps", 30);
             m_Settings.streaming.width            = js.value("width", 1280);
             m_Settings.streaming.height           = js.value("height", 720);
+        }
+
+        if (j.contains("sync")) {
+            const auto& jsy = j["sync"];
+            m_Settings.sync.enabled    = jsy.value("enabled", false);
+            m_Settings.sync.port       = jsy.value("port", 8090);
+            m_Settings.sync.pairingPin = jsy.value("pairingPin", "");
         }
 
         if (j.contains("yggdrasil")) {
@@ -1000,7 +1019,6 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
-            m_Settings.general.showModeToolbar      = jg.value("showModeToolbar",      false);
         }
 
         if (j.contains("audio")) {

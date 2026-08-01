@@ -8,6 +8,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <cctype>
 
 namespace ProyecThor::UI::Settings {
 
@@ -33,16 +34,28 @@ struct Category {
 
 static const Category k_Categories[] = {
     { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
-    { "GEN", "General",         "Inicio, guardado y carpetas",             CatIcon::Sliders,   IM_COL32( 95, 150, 245, 255) }, // 1
-    { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 2
-    { "STG", "Stage",           "Monitor de confianza para el equipo",     CatIcon::Cast,      IM_COL32( 80, 205, 165, 255) }, // 3
-    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
-    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
-    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
-    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
-    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
+    { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 1
+    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Cast,      IM_COL32( 80, 205, 165, 255) }, // 2
+    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 3
+    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 4
+    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 5
+    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 6
+    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 7
+    // "General" (Inicio/Guardado automatico/Carpetas por defecto) se quito
+    // del todo -- pedido explicito, no se usaba. Los campos siguen viviendo
+    // en SettingsManager.h (GeneralSettings) con sus valores actuales, solo
+    // que ya no hay UI para editarlos.
+    //
+    // Red/Mobile/Streaming/OSC NO son categorías propias -- son
+    // subcategorías (SectionTitle) DENTRO de "Proyección" (ver
+    // CategoryProjection.cpp), igual que Monitor de Salida/Calidad de
+    // Salida/Logo. Separarlas en categorías de nivel superior fue un error
+    // (quedaban sueltas de la categoría a la que en realidad pertenecen);
+    // lo que sí vale la pena de esa idea es que cada tema tenga su propia
+    // entrada navegable en el sidebar -- eso ya lo resuelve el mecanismo de
+    // subcategorías (m_SectionAnchors) sin inventar categorías nuevas.
 };
-static constexpr int k_CategoryCount = 9;
+static constexpr int k_CategoryCount = 8;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -145,10 +158,10 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
 // sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
 struct NavGroup { const char* label; const int items[3]; int count; };
 static const NavGroup k_NavGroups[] = {
-    { "GENERAL",    { 0, 1,    }, 2 },
-    { "PROYECCIÓN", { 2, 3, 5  }, 3 },
-    { "AUDIO",      { 4,       }, 1 },
-    { "SISTEMA",    { 6, 7, 8  }, 3 },
+    { "APARIENCIA", { 0,       }, 1 },
+    { "PANTALLAS",  { 1, 2,    }, 2 }, // Proyección + Pantallas (Stage) -- mismo grupo, pedido explicito
+    { "AUDIO",      { 3, 4,    }, 2 },
+    { "SISTEMA",    { 5, 6, 7  }, 3 },
 };
 static constexpr int k_NavGroupCount = 4;
 
@@ -338,16 +351,6 @@ void SettingsPanel::Render(bool* isOpen) {
                       ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_HorizontalScrollbar);
     ImGui::PopStyleVar();
 
-    // Un click en una subcategoría del sidebar (frame anterior) deja
-    // pendiente un salto de scroll -- se aplica acá, ya con este child
-    // activo. Instantáneo a propósito (nada de animar el scroll): ver
-    // feedback del usuario sobre no querer más movimiento/animación de la
-    // cuenta en este panel.
-    if (m_HasPendingScroll) {
-        ImGui::SetScrollY(m_PendingScrollY);
-        m_HasPendingScroll = false;
-    }
-
     RenderContent();
     ImGui::EndChild();
 
@@ -387,6 +390,16 @@ void SettingsPanel::Render(bool* isOpen) {
 //  Sidebar
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Minúsculas ASCII simple para el filtro del buscador -- las etiquetas y
+// descripciones de k_Categories son español sin acentos raros en las
+// palabras clave típicas de búsqueda (osc, red, audio, etc.), así que no
+// hace falta nada más elaborado que tolower por byte.
+static std::string ToLowerAscii(const std::string& s) {
+    std::string r = s;
+    std::transform(r.begin(), r.end(), r.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return r;
+}
+
 void SettingsPanel::RenderSidebar() {
     auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
     const auto& theme = mgr.GetSettings().theme;
@@ -406,7 +419,56 @@ void SettingsPanel::RenderSidebar() {
     ImGui::Text("Versión %s", mgr.GetSettings().updates.currentVersion.c_str());
     ImGui::PopStyleColor();
 
-    ImGui::Dummy(ImVec2(0.0f, 30.0f));
+    ImGui::Dummy(ImVec2(0.0f, 18.0f));
+
+    // ── Buscador de configuraciones ─────────────────────────────────────
+    // Filtra por etiqueta o descripción (ver k_Categories) -- pedido
+    // explícito para no tener que escanear visualmente toda la lista
+    // agrupada cuando el usuario ya sabe qué palabra busca.
+    const float searchW = ImGui::GetContentRegionAvail().x - 20.0f;
+    ImGui::SetCursorPosX(10.0f);
+    {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ThemeCol(theme.surface2, 0.55f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ThemeCol(theme.surface2, 0.80f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ThemeCol(theme.surface3, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_Text,           ThemeCol(theme.textPrimary));
+        ImGui::PushStyleColor(ImGuiCol_Border,         ThemeCol(theme.border, 0.6f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   9.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,    ImVec2(30.0f, 8.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
+        ImGui::SetNextItemWidth(searchW);
+        ImGui::InputTextWithHint("##settingsSearch", "Buscar ajustes...", m_SearchBuffer, sizeof(m_SearchBuffer));
+        ImVec2 fMin = ImGui::GetItemRectMin();
+        ImVec2 fMax = ImGui::GetItemRectMax();
+
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(5);
+
+        // Lupa dibujada a mano (mismo criterio que el resto de iconos de
+        // este archivo, DrawCategoryIcon) -- circulo + mango diagonal.
+        ImU32 glassCol = ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.textFaint));
+        ImVec2 gC(fMin.x + 15.0f, (fMin.y + fMax.y) * 0.5f);
+        dl->AddCircle(gC, 5.2f, glassCol, 12, 1.4f);
+        ImVec2 hDir(0.71f, 0.71f);
+        dl->AddLine(ImVec2(gC.x + 5.2f * hDir.x,       gC.y + 5.2f * hDir.y),
+                    ImVec2(gC.x + 5.2f * hDir.x * 1.85f, gC.y + 5.2f * hDir.y * 1.85f),
+                    glassCol, 1.6f);
+
+        // Boton "x" para limpiar, solo si hay texto.
+        if (m_SearchBuffer[0] != '\0') {
+            ImVec2 xC(fMax.x - 16.0f, (fMin.y + fMax.y) * 0.5f);
+            ImGui::SetCursorScreenPos(ImVec2(xC.x - 9.0f, xC.y - 9.0f));
+            if (ImGui::InvisibleButton("##settingsSearchClear", ImVec2(18.0f, 18.0f)))
+                m_SearchBuffer[0] = '\0';
+            ImU32 xCol = ImGui::ColorConvertFloat4ToU32(
+                ThemeCol(theme.textFaint, ImGui::IsItemHovered() ? 1.0f : 0.7f));
+            dl->AddLine(ImVec2(xC.x - 3.5f, xC.y - 3.5f), ImVec2(xC.x + 3.5f, xC.y + 3.5f), xCol, 1.5f);
+            dl->AddLine(ImVec2(xC.x - 3.5f, xC.y + 3.5f), ImVec2(xC.x + 3.5f, xC.y - 3.5f), xCol, 1.5f);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 6.0f));
 
@@ -420,100 +482,137 @@ void SettingsPanel::RenderSidebar() {
 
     float targetPillY = -1.0f;
 
-    // Navegación agrupada por tema (ver k_NavGroups): en vez de una lista
-    // plana de 9 categorías, se muestran en bloques con un encabezado
-    // pequeño ("GENERAL", "PROYECCIÓN", "AUDIO", "SISTEMA"), más fácil de
-    // escanear visualmente.
-    for (int g = 0; g < k_NavGroupCount; g++) {
-        const NavGroup& group = k_NavGroups[g];
+    // Dibuja una fila de categoría (icono con insignia circular de color +
+    // label + subcategorías si está activa) -- extraído a lambda para que
+    // tanto la navegación agrupada (k_NavGroups) como los resultados planos
+    // del buscador compartan el mismo look, en vez de duplicar el bloque.
+    auto RenderCategoryRow = [&](int i) {
+        bool selected = (m_SelectedCategory == i);
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        p.x += 10.0f; // Margen izquierdo
 
-        if (g > 0) ImGui::Dummy(ImVec2(0.0f, 16.0f));
-        ImGui::SetCursorPosX(25.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
-        ImGui::SetWindowFontScale(0.82f);
-        ImGui::TextUnformatted(group.label);
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        ImGui::SetCursorPosX(10.0f);
 
-        for (int gi = 0; gi < group.count; gi++) {
-            int  i        = group.items[gi];
-            bool selected = (m_SelectedCategory == i);
-            ImVec2 p = ImGui::GetCursorScreenPos();
-            p.x += 10.0f; // Margen izquierdo
+        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
 
-            ImGui::SetCursorPosX(10.0f);
+        char selectId[32];
+        snprintf(selectId, sizeof(selectId), "##nav%d", i);
 
-            ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
+        dl->ChannelsSetCurrent(1);
 
-            char selectId[32];
-            snprintf(selectId, sizeof(selectId), "##nav%d", i);
+        bool clicked = ImGui::Selectable(selectId, selected, ImGuiSelectableFlags_None, ImVec2(itemW, itemH));
+        bool hovered = ImGui::IsItemHovered() && !selected;
 
-            dl->ChannelsSetCurrent(1);
+        if (clicked && m_SelectedCategory != i) {
+            m_SelectedCategory = i;
+        }
 
-            bool clicked = ImGui::Selectable(selectId, selected, ImGuiSelectableFlags_None, ImVec2(itemW, itemH));
-            bool hovered = ImGui::IsItemHovered() && !selected;
+        if (selected) {
+            targetPillY = p.y - ImGui::GetWindowPos().y;
+        } else if (hovered) {
+            dl->AddRectFilled(p, ImVec2(p.x + itemW, p.y + itemH),
+                              ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.surface2, 0.5f)), 8.0f);
+        }
 
-            if (clicked && m_SelectedCategory != i) {
-                m_SelectedCategory = i;
-            }
+        // Icono de identidad de la categoría, en su color propio (ver
+        // k_Categories) -- a todo color cuando está seleccionada, algo
+        // apagado en el resto para que no compitan visualmente entre sí.
+        // Insignia circular detrás del icono (look "chip de color", estilo
+        // Windows 11/macOS Ajustes) -- antes el icono flotaba solo contra
+        // el fondo de la fila, se veía plano/aburrido.
+        ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(k_Categories[i].color);
+        ImVec2 badgeC(p.x + 22.0f, p.y + itemH * 0.5f);
+        ImVec4 badgeFillV = iconColV;
+        badgeFillV.w = selected ? 0.24f : (hovered ? 0.16f : 0.10f);
+        dl->AddCircleFilled(badgeC, 13.5f, ImGui::ColorConvertFloat4ToU32(badgeFillV), 20);
+        if (selected) {
+            ImVec4 badgeRingV = iconColV; badgeRingV.w = 0.55f;
+            dl->AddCircle(badgeC, 13.5f, ImGui::ColorConvertFloat4ToU32(badgeRingV), 20, 1.2f);
+        }
+        iconColV.w *= selected ? 1.0f : (hovered ? 0.90f : 0.62f);
+        DrawCategoryIcon(dl, k_Categories[i].icon, badgeC, 8.5f,
+            ImGui::ColorConvertFloat4ToU32(iconColV));
 
-            if (selected) {
-                targetPillY = p.y - ImGui::GetWindowPos().y;
-            } else if (hovered) {
-                dl->AddRectFilled(p, ImVec2(p.x + itemW, p.y + itemH),
-                                  ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.surface2, 0.5f)), 8.0f);
-            }
+        float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
+        float labelX = p.x + 42.0f;
+        ImVec4 labelColV = selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
+        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), k_Categories[i].label);
 
-            // Icono de identidad de la categoría, en su color propio (ver
-            // k_Categories) -- a todo color cuando está seleccionada, algo
-            // apagado en el resto para que no compitan visualmente entre sí.
-            ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(k_Categories[i].color);
-            iconColV.w *= selected ? 1.0f : (hovered ? 0.90f : 0.55f);
-            DrawCategoryIcon(dl, k_Categories[i].icon,
-                ImVec2(p.x + 22.0f, p.y + itemH * 0.5f), 8.5f,
-                ImGui::ColorConvertFloat4ToU32(iconColV));
+        ImGui::PopStyleColor(3);
 
-            float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
-            float labelX = p.x + 42.0f;
-            ImVec4 labelColV = selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
-            dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), k_Categories[i].label);
+        // Subcategorías: solo se muestran para la categoría activa (igual
+        // que el menú de referencia). Cada una es su propia "página" --
+        // clickear una reemplaza por completo el contenido mostrado (ver
+        // m_SelectedSubsection, RenderContent/SectionTitle), no un salto de
+        // scroll dentro de una página más larga.
+        if (selected && !m_SectionAnchors.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 2.0f));
+            for (size_t si = 0; si < m_SectionAnchors.size(); si++) {
+                const std::string& subLabel = m_SectionAnchors[si];
+                bool isActiveSub = (subLabel == m_SelectedSubsection);
 
-            ImGui::PopStyleColor(3);
+                ImGui::SetCursorPosX(34.0f);
+                ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0, 0, 0, 0));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ThemeCol(theme.surface2, 0.5f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ThemeCol(theme.surface2, 0.7f));
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                    isActiveSub ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textFaint));
+                ImGui::SetWindowFontScale(0.88f);
 
-            // Subcategorías: solo se muestran para la categoría activa
-            // (igual que el menú de referencia). Clickear una NO cambia de
-            // categoría -- solo hace scroll hasta esa sección, que sigue
-            // viviendo en la misma página (ver m_SectionAnchors,
-            // RenderContent/SectionTitle).
-            if (selected && !m_SectionAnchors.empty()) {
-                ImGui::Dummy(ImVec2(0.0f, 2.0f));
-                for (size_t si = 0; si < m_SectionAnchors.size(); si++) {
-                    const std::string& subLabel = m_SectionAnchors[si].first;
-                    float              subY     = m_SectionAnchors[si].second;
-                    bool isActiveSub = (subLabel == m_ActiveSubsection);
-
-                    ImGui::SetCursorPosX(34.0f);
-                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0, 0, 0, 0));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ThemeCol(theme.surface2, 0.5f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ThemeCol(theme.surface2, 0.7f));
-                    ImGui::PushStyleColor(ImGuiCol_Text,
-                        isActiveSub ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textFaint));
-                    ImGui::SetWindowFontScale(0.88f);
-
-                    std::string subId = subLabel + "##sub" + std::to_string(i) + "_" + std::to_string(si);
-                    if (ImGui::Selectable(subId.c_str(), isActiveSub, ImGuiSelectableFlags_None, ImVec2(itemW - 24.0f, 24.0f))) {
-                        m_PendingScrollY   = subY;
-                        m_HasPendingScroll = true;
-                    }
-
-                    ImGui::SetWindowFontScale(1.0f);
-                    ImGui::PopStyleColor(4);
+                std::string subId = subLabel + "##sub" + std::to_string(i) + "_" + std::to_string(si);
+                if (ImGui::Selectable(subId.c_str(), isActiveSub, ImGuiSelectableFlags_None, ImVec2(itemW - 24.0f, 24.0f))) {
+                    m_SelectedSubsection = subLabel;
                 }
-                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::PopStyleColor(4);
             }
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        }
+    };
+
+    const bool searching = m_SearchBuffer[0] != '\0';
+
+    if (searching) {
+        // Lista plana de resultados, sin encabezados de grupo -- el usuario
+        // ya escribió lo que busca, agrupar por tema solo estorbaría.
+        std::string query = ToLowerAscii(m_SearchBuffer);
+        int matches = 0;
+        for (int i = 0; i < k_CategoryCount; i++) {
+            std::string label = ToLowerAscii(k_Categories[i].label);
+            std::string desc  = ToLowerAscii(k_Categories[i].description);
+            if (label.find(query) == std::string::npos && desc.find(query) == std::string::npos)
+                continue;
+            matches++;
+            RenderCategoryRow(i);
+        }
+        if (matches == 0) {
+            ImGui::SetCursorPosX(25.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
+            ImGui::TextUnformatted("Sin resultados.");
+            ImGui::PopStyleColor();
+        }
+    } else {
+        // Navegación agrupada por tema (ver k_NavGroups): en vez de una lista
+        // plana de categorías, se muestran en bloques con un encabezado
+        // pequeño ("GENERAL", "PANTALLAS", "AUDIO", "SISTEMA", "CONEXIONES"),
+        // más fácil de escanear visualmente.
+        for (int g = 0; g < k_NavGroupCount; g++) {
+            const NavGroup& group = k_NavGroups[g];
+
+            if (g > 0) ImGui::Dummy(ImVec2(0.0f, 16.0f));
+            ImGui::SetCursorPosX(25.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
+            ImGui::SetWindowFontScale(0.82f);
+            ImGui::TextUnformatted(group.label);
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+            for (int gi = 0; gi < group.count; gi++)
+                RenderCategoryRow(group.items[gi]);
         }
     }
 
@@ -548,11 +647,27 @@ void SettingsPanel::RenderContent() {
     ImDrawList* dl    = ImGui::GetWindowDrawList();
     ImVec4      accent = ThemeCol(theme.accent);
 
+    // Al cambiar de categoría, ninguna subcategoría de la nueva es todavía
+    // válida (podría ni existir en la categoría anterior) -- se limpia acá
+    // para que SectionTitle() auto-seleccione la primera que aparezca.
+    if (m_SelectedCategory != m_PrevCategory) {
+        m_PrevCategory = m_SelectedCategory;
+        m_SelectedSubsection.clear();
+    }
+
     // Se reconstruye entera cada frame (la vuelve a llenar SectionTitle() a
-    // medida que la categoría activa dibuja sus secciones) -- ver
-    // RenderSidebar(), que la usa para mostrar las subcategorías de la
-    // categoría seleccionada.
+    // medida que la categoría activa dibuja sus secciones, y decide cuál de
+    // ellas dibuja su cuerpo -- ver comentario largo en el .h) -- RenderSidebar()
+    // la usa para mostrar las subcategorías de la categoría seleccionada.
     m_SectionAnchors.clear();
+
+    // Cambiar de categoría O de subcategoría arranca esa "página" siempre
+    // desde arriba -- sin esto, una página corta podía heredar el scroll a
+    // mitad de camino de la página larga que se estaba viendo antes.
+    if (m_SelectedSubsection != m_PrevSubsection) {
+        m_PrevSubsection = m_SelectedSubsection;
+        ImGui::SetScrollY(0.0f);
+    }
 
     // Título de la sección
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
@@ -584,31 +699,17 @@ void SettingsPanel::RenderContent() {
 
     switch (m_SelectedCategory) {
         case 0: RenderCategoryTheme();      break;
-        case 1: RenderCategoryGeneral();    break;
-        case 2: RenderCategoryProjection(); break;
-        case 3: RenderCategoryStage();      break;
-        case 4: RenderCategoryAudio();      break;
-        case 5: RenderCategorySongs();      break;
-        case 6: RenderCategoryShortcuts();  break;
-        case 7: RenderCategoryLanguage();   break;
-        case 8: RenderCategoryUpdates();    break;
+        case 1: RenderCategoryProjection(); break;
+        case 2: RenderCategoryStage();      break;
+        case 3: RenderCategoryAudio();      break;
+        case 4: RenderCategorySongs();      break;
+        case 5: RenderCategoryShortcuts();  break;
+        case 6: RenderCategoryLanguage();   break;
+        case 7: RenderCategoryUpdates();    break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 
     ImGui::PopStyleVar(2);
-
-    // Cuál subcategoría está "a la vista" según el scroll actual: la última
-    // cuyo ancla ya quedó por encima del tope visible (+ un margen chico).
-    // Todavía estamos dentro de "##content_scroll", así que GetScrollY() es
-    // el del área de contenido real, no el del sidebar.
-    m_ActiveSubsection.clear();
-    float scrollY = ImGui::GetScrollY();
-    for (const auto& anchor : m_SectionAnchors) {
-        if (anchor.second <= scrollY + 40.0f)
-            m_ActiveSubsection = anchor.first;
-        else
-            break;
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -774,24 +875,37 @@ void SettingsPanel::SpinnerWidget(float radius, float thickness, const ImVec4& c
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helper: SectionTitle (usa acento del tema)
 // ─────────────────────────────────────────────────────────────────────────────
-void SettingsPanel::SectionTitle(const char* label, const char* navGroup) {
-    auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
-    const auto& theme = mgr.GetSettings().theme;
-
+bool SettingsPanel::SectionTitle(const char* label, const char* navGroup) {
     // Registra esta sección como subcategoría navegable (ver RenderSidebar /
     // m_SectionAnchors), agrupando por navGroup si se pasó uno: varios
     // SectionTitle con el mismo grupo comparten UNA sola entrada en el
-    // sidebar (la del primero), en vez de una subcategoría técnica por cada
-    // subtítulo interno -- ver CategoryTheme.cpp. La posición se toma ANTES
-    // del espaciado de arriba, asi el scroll-to-section deja un poco de
-    // aire encima del título.
+    // sidebar y se muestran/ocultan juntos -- ver los 3 bloques de
+    // Streaming en CategoryProjection.cpp o Temas/Colores/Fuentes/Diseño en
+    // CategoryTheme.cpp.
     const char* group = navGroup ? navGroup : label;
     bool alreadyRegistered = false;
-    for (const auto& anchor : m_SectionAnchors) {
-        if (anchor.first == group) { alreadyRegistered = true; break; }
+    for (const auto& g : m_SectionAnchors) {
+        if (g == group) { alreadyRegistered = true; break; }
     }
-    if (!alreadyRegistered)
-        m_SectionAnchors.emplace_back(group, ImGui::GetCursorPosY());
+    if (!alreadyRegistered) {
+        m_SectionAnchors.emplace_back(group);
+        // La primera subcategoría que aparece en el frame, mientras
+        // ninguna esté seleccionada todavía (recién se entró a esta
+        // categoría, ver RenderContent), se auto-selecciona -- así la
+        // página nunca aparece vacía.
+        if (m_SelectedSubsection.empty())
+            m_SelectedSubsection = group;
+    }
+
+    // Esta sección NO es la subcategoría visible ahora mismo: pedido
+    // explícito de que cada subcategoría se vea "una por una" en vez de
+    // todas juntas en un scroll largo -- no dibuja ni el título ni el
+    // cuerpo que el caller ponga a continuación.
+    if (m_SelectedSubsection != group)
+        return false;
+
+    auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
+    const auto& theme = mgr.GetSettings().theme;
 
     ImGui::Dummy(ImVec2(0.0f, 15.0f));
 
@@ -808,6 +922,7 @@ void SettingsPanel::SectionTitle(const char* label, const char* navGroup) {
     dl->AddRectFilledMultiColor(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + 1.5f), colLeft, colRight, colRight, colLeft);
 
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
+    return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

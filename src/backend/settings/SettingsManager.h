@@ -72,6 +72,12 @@ namespace ProyecThor::Settings {
         // entrecortado/viejo. Vacio = sin logo, comportamiento sin cambios.
         std::string loadingLogoPath;
 
+        // ── Fondos: "bucle falso" ─────────────────────────────────────────
+        // Ver Ajustes > Proyeccion > Fondos y el comentario largo en
+        // BackgroundLayer.h (m_PingPongEnabled). Solo afecta a Fondos
+        // (allowAudio=false), nunca a Videos/cola del Monitor.
+        bool bgPingPongLoop = false;
+
         // ── Efectos de post-proceso (salida en vivo, panel "Shaders") ────
         // fsrEnabled/fsrSharpness: ya corren hoy en BackgroundLayer (solo
         // sobre el fondo, para upscale); antes no se persistian ni tenian
@@ -164,12 +170,6 @@ namespace ProyecThor::Settings {
         // el menu Vista para operadores que no lo necesitan y prefieren mas
         // ancho para el video.
         bool        showViewQuickActions = true;
-        // Toolbar de modos (Hub/Proyector/Streaming/Yggdrasil/Biblioteca,
-        // ver WorkspaceMode en UIManager.h), activable desde el menu Vista.
-        // Apagada por default: la mayoria de los operadores solo usa el
-        // workspace normal (Proyector) y no necesita el selector visible
-        // todo el tiempo.
-        bool        showModeToolbar      = false;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -265,13 +265,17 @@ namespace ProyecThor::Settings {
     // (ver LibrarySidebar.cpp). Los valores por defecto son los mismos tonos
     // que ya se usaban hardcodeados, para no cambiar nada hasta que el
     // usuario decida personalizar.
-    // Indices 6/7/8 (Red/Reloj/Render) son un grupo aparte, separado por una
-    // linea de las 6 categorias de contenido de arriba — ver LibrarySidebar.cpp.
-    // Red/Reloj se mudaron desde ViewToolsSettings, mismos colores que tenian
-    // alli. Render (indice 8) se mudo desde la seccion "Biblioteca" del
-    // workspace (LibraryManagerPanel, retirada), mismo color que tenia ahi.
+    // Indices 6/8/9 (Red/Render/Overlay) son un grupo aparte, separado
+    // por una linea de las 6 categorias de contenido de arriba — ver
+    // LibrarySidebar.cpp. Red se mudo desde ViewToolsSettings, mismo color
+    // que tenia alli. Render (indice 8) se mudo desde la seccion
+    // "Biblioteca" del workspace (LibraryManagerPanel, retirada), mismo
+    // color que tenia ahi. Indice 9 fue Mobile (mudado a Ajustes >
+    // Conexiones) y ahora es Overlay -- se reutiliza el slot, no se agrego
+    // uno. Indice 7 (Reloj) quedo sin uso: el boton se saco del sidebar por
+    // quedar duplicado con el toolbar inline de ViewPanel.
     struct LibrarySidebarSettings {
-        float categoryColor[9][4] = {
+        float categoryColor[10][4] = {
             { 0.31f, 0.55f, 1.00f, 1.0f }, // Letra
             { 0.86f, 0.24f, 0.24f, 1.0f }, // Video
             { 0.24f, 0.86f, 0.39f, 1.0f }, // Imagen
@@ -281,6 +285,7 @@ namespace ProyecThor::Settings {
             { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
             { 0.95f, 0.75f, 0.20f, 1.0f }, // Reloj
             { 0.90f, 0.55f, 0.20f, 1.0f }, // Render
+            { 0.90f, 0.40f, 0.70f, 1.0f }, // Overlay
         };
     };
 
@@ -438,6 +443,16 @@ namespace ProyecThor::Settings {
         int         height           = 720;
     };
 
+    // ── Sincronizacion LAN con ProyecThor Mobile (ver SyncServer/SyncPanel) ──
+    // pairingPin se autogenera (6 digitos) la primera vez que se activa el
+    // servidor si esta vacio -- ver SyncPanel::RenderServerControl. Es lo que
+    // el celular manda en el header "X-Sync-Token" de cada request.
+    struct SyncSettings {
+        bool        enabled    = false;
+        int         port       = 8090;
+        std::string pairingPin = "";
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
@@ -454,6 +469,7 @@ namespace ProyecThor::Settings {
         PadsSettings           pads;
         YggdrasilSettings      yggdrasil;
         StreamingSettings      streaming;
+        SyncSettings           sync;
     };
 
     class SettingsManager {

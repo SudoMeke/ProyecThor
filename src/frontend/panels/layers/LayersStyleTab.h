@@ -7,6 +7,8 @@
 
 namespace ProyecThor::UI {
 
+class UIManager;
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersStyleTab — toda la logica del tab "Estilos de Letra"
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,6 +16,11 @@ class LayersStyleTab {
 public:
     LayersStyleTab();
     ~LayersStyleTab() = default;
+
+    // El editor de estilos se abre a pantalla completa (ver
+    // UIManager::EnterFullscreenEditor) -- sin esto, el boton "Nuevo estilo"/
+    // "Editar" simplemente no hace nada.
+    void SetUIManager(UIManager* uiManager) { m_UIManager = uiManager; }
 
     void Render();
 
@@ -34,6 +41,11 @@ private:
     float m_ThumbZoom = 1.0f; // 0.65 .. 1.8 — tamano de las tarjetas de tema
 
     std::unique_ptr<CanvaStyleEditor> m_StyleEditor;
+    UIManager* m_UIManager = nullptr;
+
+    // Abre m_StyleEditor (nuevo o existente) a pantalla completa -- ver
+    // UIManager::EnterFullscreenEditor.
+    void OpenStyleEditorFullscreen(bool isNew, const std::string& name, const StyleData& data);
 
     // ── Render helpers ────────────────────────────────────────────────────────
     void RenderTopBar();     // toolbar compacta (icon-only): nuevo / recargar fuentes / zoom / grid-lista

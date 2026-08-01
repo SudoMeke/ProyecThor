@@ -332,6 +332,65 @@ void main() {
             }
             // si no, sigue esperando sin forzar nada.
         }
+
+        // ── Ping-pong "bucle falso" ──────────────────────────────────────
+        // Ver comentario largo del miembro m_PingPongEnabled en el .h. Solo
+        // corre sobre contenido de Fondos (allowAudio=false) ya asentado
+        // (nunca en medio de un swap/prefetch, para no interferir con esa
+        // logica de carga). MonitorQueueEngine::Update() consume
+        // EndReached de forma independiente y solo cuando hay una cola de
+        // Videos activa, asi que no hay conflicto por consumir el evento
+        // aca tambien.
+        if (m_PingPongEnabled && m_IsVideo && !m_ContentAllowsAudio && !m_SwapPending)
+        {
+            VLCBasePlayer& active = Active();
+            double now = NowSeconds();
+
+            if (!m_PingPongReverse)
+            {
+                if (active.ConsumeEndReached())
+                {
+                    m_PingPongReverse    = true;
+                    m_PingPongLastStepAt = now;
+                    // De aca en mas la posicion se mueve a mano (ver abajo):
+                    // pausar corta el avance natural, asi cada SetPosition()
+                    // refleja un paso limpio hacia atras sin que el decode
+                    // en curso lo compense.
+                    active.SetPause(true);
+                }
+            }
+            else
+            {
+                int64_t lenMs = active.GetLength();
+                double  dt    = now - m_PingPongLastStepAt;
+
+                if (lenMs <= 0)
+                {
+                    // Sin duracion valida (raro, pero mejor no quedar
+                    // trabado pausado para siempre): se abandona la reversa.
+                    active.SetPause(false);
+                    m_PingPongReverse = false;
+                }
+                else if (dt >= kPingPongStepSeconds)
+                {
+                    m_PingPongLastStepAt = now;
+                    int64_t curMs  = active.GetTime();
+                    int64_t stepMs = static_cast<int64_t>(dt * 1000.0);
+                    int64_t newMs  = curMs - stepMs;
+
+                    if (newMs <= 0)
+                    {
+                        active.SetPosition(0.0f);
+                        active.SetPause(false);
+                        m_PingPongReverse = false;
+                    }
+                    else
+                    {
+                        active.SetPosition(static_cast<float>(newMs) / static_cast<float>(lenMs));
+                    }
+                }
+            }
+        }
     }
 
     void BackgroundLayer::Render(int outputW, int outputH)
@@ -677,6 +736,15 @@ void main() {
         m_IsVideo = true;
         m_ContentAllowsAudio = allowAudio;   // <-- se fija ANTES de reproducir
 
+        // Fondos con ping-pong activo NO deben loopear via libVLC
+        // (input-repeat): necesitamos que llegue un EndReached real al
+        // terminar el pase hacia adelante para poder arrancar la fase de
+        // reversa manual (ver Update()). Videos reales (allowAudio=true)
+        // nunca loopean de todos modos, con o sin ping-pong.
+        bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
+        m_PingPongReverse    = false;
+        m_PingPongLastStepAt = 0.0;
+
         // Cualquier carga directa (click manual en Fondos/Videos, etc.)
         // toma standby para si misma — invalida un prefetch de cola que
         // pudiera estar esperando ahi, para que CommitPrefetch() no lo
@@ -686,9 +754,10 @@ void main() {
 
         if (m_SwapPending || GetTextureID() != nullptr)
         {
-            // Ver comentario equivalente en la rama nativa de arriba: los
-            // fondos (allowAudio=false) loopean, los videos reales no.
-            Standby().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
+            // Ver comentario de wantNativeLoop arriba: los fondos
+            // (allowAudio=false) loopean via libVLC salvo que ping-pong
+            // este activo, los videos reales nunca.
+            Standby().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
             Standby().SetAudioActive(false);
             m_SwapPending      = true;
             m_PendingSwapStart = NowSeconds();
@@ -721,7 +790,7 @@ void main() {
         }
         else
         {
-            Active().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
+            Active().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
             if (!m_IsLiveToPublic || !allowAudio)
             {
                 Active().SetAudioActive(false);
@@ -775,8 +844,10 @@ void main() {
         m_PrefetchArmed  = true;
         m_PrefetchReadyAt = 0.0; // arranca de cero el asentamiento para ESTE prefetch
 
-        // Ver comentario en SetVideo(): fondos loopean, videos reales no.
-        Standby().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
+        // Ver comentario de wantNativeLoop en SetVideo(): fondos loopean via
+        // libVLC salvo que ping-pong este activo, videos reales nunca.
+        bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
+        Standby().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
         Standby().SetAudioActive(false);
     }
 
@@ -847,6 +918,12 @@ void main() {
         oldActive.Stop();
 
         m_SwapPending = false;
+
+        // El contenido que acaba de quedar activo arranca su propio pase
+        // desde cero (ver ping-pong en Update()), sin arrastrar la fase de
+        // reversa de lo que se estaba mostrando antes.
+        m_PingPongReverse    = false;
+        m_PingPongLastStepAt = 0.0;
     }
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)

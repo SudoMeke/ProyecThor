@@ -62,57 +62,56 @@ namespace ProyecThor::UI::Settings {
         ImGui::TextDisabled("Selecciona el idioma de la interfaz de usuario.");
         ImGui::Spacing();
 
-        SectionTitle("Idioma de la Interfaz");
+        if (SectionTitle("Idioma de la Interfaz")) {
+            int langIdx   = static_cast<int>(g.language);
+            int langCount = static_cast<int>(ProyecThor::Settings::Language::COUNT);
 
-        int langIdx   = static_cast<int>(g.language);
-        int langCount = static_cast<int>(ProyecThor::Settings::Language::COUNT);
+            for (int i = 0; i < langCount; i++) {
+                bool selected = (langIdx == i);
+                auto lang = static_cast<ProyecThor::Settings::Language>(i);
 
-        for (int i = 0; i < langCount; i++) {
-            bool selected = (langIdx == i);
-            auto lang = static_cast<ProyecThor::Settings::Language>(i);
+                if (selected)
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
 
-            if (selected)
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
+                if (ImGui::RadioButton(ProyecThor::Settings::LanguageName(lang), selected))
+                    g.language = lang;
 
-            if (ImGui::RadioButton(ProyecThor::Settings::LanguageName(lang), selected))
-                g.language = lang;
+                if (selected)
+                    ImGui::PopStyleColor();
+            }
 
-            if (selected)
-                ImGui::PopStyleColor();
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.53f, 1.0f));
+            ImGui::TextWrapped(
+                "El cambio de idioma se aplica al guardar y reiniciar la aplicación.\n"
+                "Algunas cadenas de texto pueden requerir reinicio completo."
+            );
+            ImGui::PopStyleColor();
         }
 
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.53f, 1.0f));
-        ImGui::TextWrapped(
-            "El cambio de idioma se aplica al guardar y reiniciar la aplicación.\n"
-            "Algunas cadenas de texto pueden requerir reinicio completo."
-        );
-        ImGui::PopStyleColor();
+        if (SectionTitle("Vista Previa de Cadenas")) {
+            const auto& str = GetUIStrings();
+            ImGui::Columns(2, "langpreview", false);
+            ImGui::SetColumnWidth(0, 180);
 
-        ImGui::Spacing();
-        SectionTitle("Vista Previa de Cadenas");
+            auto Row = [](const char* key, const char* val) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.48f, 1.0f));
+                ImGui::TextUnformatted(key);
+                ImGui::PopStyleColor();
+                ImGui::NextColumn();
+                ImGui::TextUnformatted(val);
+                ImGui::NextColumn();
+            };
 
-        const auto& str = GetUIStrings();
-        ImGui::Columns(2, "langpreview", false);
-        ImGui::SetColumnWidth(0, 180);
+            Row("Biblioteca:",  str.library);
+            Row("Buscar:",      str.search);
+            Row("Libros:",      str.books);
+            Row("Capítulos:",   str.chapters);
+            Row("Guardar:",     str.save);
+            Row("Restablecer:", str.reset);
 
-        auto Row = [](const char* key, const char* val) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.48f, 1.0f));
-            ImGui::TextUnformatted(key);
-            ImGui::PopStyleColor();
-            ImGui::NextColumn();
-            ImGui::TextUnformatted(val);
-            ImGui::NextColumn();
-        };
-
-        Row("Biblioteca:",  str.library);
-        Row("Buscar:",      str.search);
-        Row("Libros:",      str.books);
-        Row("Capítulos:",   str.chapters);
-        Row("Guardar:",     str.save);
-        Row("Restablecer:", str.reset);
-
-        ImGui::Columns(1);
+            ImGui::Columns(1);
+        }
     }
 
 } // namespace ProyecThor::UI::Settings

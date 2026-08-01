@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory>
+#include <functional>
 #include <GLFW/glfw3.h>
 #include "IPanel.h"
 #include "../toolbar/ConfigPanel.h"
@@ -13,11 +14,11 @@
 #include "panels/DatabasePanel.h"
 #include "panels/WikiPanel.h"
 #include "panels/PerformancePanel.h"
-#include "panels/YggdrasilPanel.h"
-#include "panels/BibleFullscreenPanel.h"
 #include "panels/StreamingPanel.h"
 #include "panels/TeamChatPanel.h"
 #include "panels/BroadcastPanel.h"
+#include "panels/SyncPanel.h"
+#include "panels/OSCPanel.h"
 #include "frontend/views/QuickNotes.h"
 
 namespace ProyecThor::UI {
@@ -35,16 +36,15 @@ enum class ActiveLeftPanel {
 //  - Hub: pantalla de inicio/novedades (Hub.cpp), tal cual ya existia.
 //  - Projector: el workspace de siempre (Biblioteca/Home/Vista en Vivo/
 //    Herramientas/Diseño dockeados), antes controlado por el bool m_HubMode.
-//  - Yggdrasil: OSC, Red, Chat y Streaming (RTMP), todo en un rail propio
-//    (YggdrasilPanel) -- Streaming fue su propio modo un tiempo, se
-//    combino aca por pedido.
-//  - Biblia: el mismo BibleView de Home, a pantalla completa
-//    (BibleFullscreenPanel).
+// Yggdrasil (OSC/Red/Chat/Streaming) y Biblia (BibleView a pantalla completa)
+// se retiraron del todo: OSC/Red/Streaming ahora son subcategorias de
+// Ajustes > Proyeccion (ver CategoryProjection.cpp), Capture/Layer/Iniciar
+// tambien viven en Vista en Vivo (ver ViewPanel::RenderStreamingPopup),
+// Red/Chat ya estaban duplicados en Library/Vista en Vivo, y Biblia ya se
+// puede buscar desde Home -- ninguno necesitaba su propio modo de workspace.
 enum class WorkspaceMode {
     Hub,
     Projector,
-    Yggdrasil,
-    Biblia,
 };
 
 class UIManager {
@@ -72,6 +72,22 @@ uint64_t m_LastTransitionTrigger = 0;
 
     void OpenHub();
 
+    // ── Editor a pantalla completa (Overlay/Estilos) ──────────────────────
+    // Permite a un panel (editor de Overlays, editor de Estilos) tomar TODA
+    // el area de "main" por un frame, ocultando Biblioteca/Home/Diseño/etc.
+    // La toolbar superior (RenderModeToolbar) sigue dibujandose siempre --
+    // eso es una regla aparte, no se toca aca. El llamador es dueño del
+    // ciclo de vida: entra al abrir el editor, sale al Guardar/Cancelar.
+    void EnterFullscreenEditor(std::function<void()> renderFn) {
+        m_FullscreenEditorActive   = true;
+        m_FullscreenEditorRenderFn = std::move(renderFn);
+    }
+    void ExitFullscreenEditor() {
+        m_FullscreenEditorActive = false;
+        m_FullscreenEditorRenderFn = nullptr;
+    }
+    bool IsFullscreenEditorActive() const { return m_FullscreenEditorActive; }
+
     // Red (LAN)/Chat/Streaming viven aca (no en Yggdrasil ni en Biblioteca/
     // Herramientas) para que Update() corra SIEMPRE, sin importar el
     // WorkspaceMode activo -- una transmision o el chat no se pueden pausar
@@ -83,6 +99,8 @@ uint64_t m_LastTransitionTrigger = 0;
     StreamingPanel& GetRedPanel()      { return m_Red; }
     TeamChatPanel&  GetChatPanel()     { return m_Chat; }
     BroadcastPanel& GetBroadcastPanel() { return m_Broadcast; }
+    SyncPanel&      GetSyncPanel()      { return m_Sync; }
+    OSCPanel&       GetOSCPanel()       { return m_OSC; }
 
 private:
     void BeginDockspace();
@@ -107,15 +125,21 @@ private:
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
 
+    // Popup de acceso rapido a "Estilos" -- boton propio en RenderModeToolbar
+    // (junto a Notas), lista los estilos guardados (Diseño > Estilos, ver
+    // Core::PresentationCore::GetSavedStyleNames/ApplyStyleByName) para
+    // aplicar uno sin salir de donde este el operador.
+    void RenderStylesPopup();
+
  DatabasePanel m_DatabasePanel;
     WikiPanel     m_WikiPanel;
-    YggdrasilPanel      m_YggdrasilPanel;
-    BibleFullscreenPanel m_BiblePanel;
 
-    // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel).
+    // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel/GetOSCPanel).
     StreamingPanel m_Red;
     TeamChatPanel  m_Chat;
     BroadcastPanel m_Broadcast;
+    SyncPanel      m_Sync;
+    OSCPanel       m_OSC;
     GLFWwindow*                          m_Window               = nullptr;
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;
@@ -142,6 +166,10 @@ private:
     // Selector rapido (Alt+Espacio) — ver RenderQuickSwitcher.
     bool m_QuickSwitchOpen  = false;
     int  m_QuickSwitchIndex = 0;
+
+    // Ver EnterFullscreenEditor/ExitFullscreenEditor.
+    bool                   m_FullscreenEditorActive = false;
+    std::function<void()>  m_FullscreenEditorRenderFn;
 };
 
 } // namespace ProyecThor::UI

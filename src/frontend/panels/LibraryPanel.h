@@ -11,8 +11,10 @@
 #include "biblio/LibraryContext.h"
 #include "biblio/LibraryMultimedia.h"
 #include "backend/core/MediaConverter.h"
+#include "overlay/OverlayLibraryTab.h"
+#include <memory>
 
-namespace ProyecThor::UI { class UIManager; class MonitorView; class StreamingPanel; }
+namespace ProyecThor::UI { class UIManager; class MonitorView; }
 enum class ActiveLeftPanel;
 
 namespace ProyecThor::UI {
@@ -36,13 +38,19 @@ enum class LibraryCategory {
 // LibraryCategory/m_CurrentCategory -- es un modo de vista independiente.
 enum class LibrarySideMode {
     Categories = 0,
-    Streaming  = 1, // "Red" — antes vivia en ViewToolsPanel; tambien
-                    // disponible en Yggdrasil (misma instancia, ver
-                    // SetStreamingPanelRef mas abajo).
-    Clock      = 2, // "Reloj" — antes vivia en ViewToolsPanel.
+    // Red y Mobile se mudaron a Ajustes > Conexiones (ver
+    // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC -- una
+    // sola pagina para "todo lo que conecta ProyecThor con el exterior",
+    // en vez de repartido entre aca y el rail de Conexiones (retirado).
+    // "Reloj" (antes indice 2) se saco de aca -- ya vive en el toolbar
+    // inline de ViewPanel (ver ViewPanel::InlineTool::Clock), duplicaba
+    // el acceso.
     Render     = 3, // "Render" — conversor de formato (ver MediaConverter.h),
                      // mudado desde la seccion "Biblioteca" del workspace
                      // (LibraryManagerPanel, retirada del todo).
+    Overlay    = 4, // "Overlay" — galeria + editor de overlays PNG (ver
+                     // OverlayLibraryTab), se abre a pantalla completa
+                     // (UIManager::EnterFullscreenEditor) al crear/editar uno.
 };
 
 class LibraryPanel : public IPanel {
@@ -53,13 +61,8 @@ public:
     std::string GetName() const override { return "Library"; }
     AudioPanel* GetAudioPanel() { return &m_AudioPanel; }
     void Render() override;
-    void SetUIManager(UIManager* manager) { m_UIManagerRef = manager; }
+    void SetUIManager(UIManager* manager);
     void SetMonitorView(MonitorView* monitor) { m_MonitorRef = monitor; }
-
-    // Misma instancia que UIManager::GetRedPanel() (Yggdrasil) -- Red
-    // aparece "en las dos partes" pero es un unico servidor real. Ver
-    // cableado en main.cpp.
-    void SetStreamingPanelRef(StreamingPanel* ref) { m_StreamingPanelRef = ref; }
 
 private:
     Library::LibraryContext BuildContext();
@@ -100,14 +103,14 @@ private:
     DocumentView              m_DocumentView;
     std::string              m_LoadedDocPath;
 
-    // ── Grupo "Red"/"Reloj" del sidebar (ver LibrarySideMode) ────────────
-    // Mudados desde ViewToolsPanel: la propiedad de OClock (y el registro
-    // en PresentationCore::SetOClockRef) se movio junto con el boton. Red
-    // NO se posee aca -- es un puntero a la misma StreamingPanel que
-    // tambien vive en Yggdrasil (ver SetStreamingPanelRef).
+    // ── Grupo "Reloj" del sidebar (ver LibrarySideMode) ───────────────────
+    // Mudado desde ViewToolsPanel: la propiedad de OClock (y el registro en
+    // PresentationCore::SetOClockRef) se movio junto con el boton.
     LibrarySideMode  m_SideMode = LibrarySideMode::Categories;
     OClock           m_OClock;
-    StreamingPanel*  m_StreamingPanelRef = nullptr;
+
+    // ── Grupo "Overlay" del sidebar (ver LibrarySideMode) ─────────────────
+    std::unique_ptr<OverlayLibraryTab> m_OverlayTab;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

@@ -6,7 +6,6 @@
 #include "biblio/LibraryVideos.h"
 #include "biblio/LibraryDocuments.h"
 #include "biblio/LibraryModals.h"
-#include "StreamingPanel.h"
 #include "frontend/views/audio/AudioHelpers.h"
 
 #ifdef _WIN32
@@ -236,6 +235,16 @@ LibraryPanel::LibraryPanel()
     }
     RefreshList();
     LoadStreamURLs();
+}
+
+// El editor de Overlays necesita UIManager (para pedirle el modo pantalla
+// completa, ver UIManager::EnterFullscreenEditor) -- se crea aca en vez de
+// en el constructor porque SetUIManager corre despues (ver main.cpp).
+void LibraryPanel::SetUIManager(UIManager* manager)
+{
+    m_UIManagerRef = manager;
+    if (!m_OverlayTab && m_UIManagerRef)
+        m_OverlayTab = std::make_unique<OverlayLibraryTab>(m_UIManagerRef);
 }
 
 // =============================================================================
@@ -473,7 +482,7 @@ void LibraryPanel::Render()
     // Mudado desde ViewToolsPanel junto con m_OClock: debe seguir corriendo
     // aunque el operador este mirando otra categoria de Biblioteca (Reloj
     // alimenta LAN/pantalla), sin importar si el grupo Reloj esta activo
-    // ahora. StreamingPanel ("Red") se mudo a Yggdrasil.
+    // ahora.
     m_OClock.Update();
 
     const auto& str = ProyecThor::UI::GetUIStrings();
@@ -584,17 +593,13 @@ void LibraryPanel::Render()
     {
         Library::LibraryContext ctx = BuildContext();
 
-        if (m_SideMode == LibrarySideMode::Streaming)
-        {
-            if (m_StreamingPanelRef) m_StreamingPanelRef->RenderContent();
-        }
-        else if (m_SideMode == LibrarySideMode::Clock)
-        {
-            if (m_UIManagerRef) m_OClock.Render(m_UIManagerRef->GetGlassRenderer());
-        }
-        else if (m_SideMode == LibrarySideMode::Render)
+        if (m_SideMode == LibrarySideMode::Render)
         {
             RenderConverterSection();
+        }
+        else if (m_SideMode == LibrarySideMode::Overlay)
+        {
+            if (m_OverlayTab) m_OverlayTab->Render();
         }
         else if (m_CurrentCategory == LibraryCategory::Audio)
         {
@@ -855,14 +860,45 @@ void LibraryPanel::RefreshConvertibleItems()
     m_ConvertibleNeedsRefresh = false;
 }
 
+// Estilo de combo/frame compartido con la barra de busqueda de Multimedia
+// (ver RenderMultimediaSection en LibraryMultimedia.cpp) -- mismo look en
+// toda la biblioteca en vez del combo gris por defecto de ImGui.
+static void PushConverterFrameStyle() {
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
+    ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,    ImVec2(10.f, 7.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+}
+static void PopConverterFrameStyle() {
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(4);
+}
+
 void LibraryPanel::RenderConverterSection()
 {
     if (m_ConvertibleNeedsRefresh) RefreshConvertibleItems();
 
+    // Titulo + descripcion envuelta -- antes iban en la misma linea
+    // (SameLine) y la descripcion se cortaba contra el borde del panel en
+    // ventanas angostas (ver reporte del usuario, "esta cortado").
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
+    ImGui::SetWindowFontScale(1.25f);
     ImGui::TextUnformatted("Render");
-    ImGui::SameLine();
-    ImGui::TextDisabled("(convertir Video/Audio ya importados a otro formato)");
-    ImGui::Spacing();
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleColor();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX());
+    ImGui::TextUnformatted("Convierte Video o Audio ya importados a otro formato.");
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+    DS::GlassSeparator();
+    ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
     // Si termino una conversion desde el ultimo frame, actualizar estado.
     bool        finishedOk = false;
@@ -874,7 +910,9 @@ void LibraryPanel::RenderConverterSection()
     }
 
     if (m_ConvertibleItems.empty()) {
-        ImGui::TextDisabled("Todavia no importaste ningun Video o Audio para convertir.");
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
+        ImGui::TextUnformatted("Todavia no importaste ningun Video o Audio para convertir.");
+        ImGui::PopStyleColor();
         return;
     }
 
@@ -882,11 +920,13 @@ void LibraryPanel::RenderConverterSection()
     if (running) ImGui::BeginDisabled();
 
     // ── Origen ────────────────────────────────────────────────────────────
+    DS::GlassSectionHeader("ARCHIVO DE ORIGEN");
     std::string sourcePreview = (m_ConvertSourceIndex >= 0 && m_ConvertSourceIndex < (int)m_ConvertibleItems.size())
         ? m_ConvertibleItems[m_ConvertSourceIndex].filename : "Elegi un archivo...";
 
-    ImGui::SetNextItemWidth(360.0f);
-    if (ImGui::BeginCombo("Archivo de origen", sourcePreview.c_str())) {
+    PushConverterFrameStyle();
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##convertSource", sourcePreview.c_str())) {
         for (int i = 0; i < (int)m_ConvertibleItems.size(); i++) {
             const auto& item = m_ConvertibleItems[i];
             std::string label = std::string(item.isVideo ? "[Video] " : "[Audio] ") + item.filename;
@@ -899,6 +939,9 @@ void LibraryPanel::RenderConverterSection()
         }
         ImGui::EndCombo();
     }
+    PopConverterFrameStyle();
+
+    ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
     // ── Formato de destino ───────────────────────────────────────────────
     static const char* kVideoFormats[] = { "mp4", "mkv", "webm", "avi", "mov" };
@@ -913,8 +956,10 @@ void LibraryPanel::RenderConverterSection()
     }
     if (m_ConvertFormatIndex >= formatCount) m_ConvertFormatIndex = 0;
 
-    ImGui::SetNextItemWidth(160.0f);
-    if (ImGui::BeginCombo("Formato de destino", haveSource ? formats[m_ConvertFormatIndex] : "-")) {
+    DS::GlassSectionHeader("FORMATO DE DESTINO");
+    PushConverterFrameStyle();
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::BeginCombo("##convertFormat", haveSource ? formats[m_ConvertFormatIndex] : "-")) {
         for (int i = 0; i < formatCount; i++) {
             bool sel = (i == m_ConvertFormatIndex);
             if (ImGui::Selectable(formats[i], sel)) m_ConvertFormatIndex = i;
@@ -922,14 +967,17 @@ void LibraryPanel::RenderConverterSection()
         }
         ImGui::EndCombo();
     }
+    PopConverterFrameStyle();
 
     if (running) ImGui::EndDisabled();
 
-    ImGui::Spacing();
+    ImGui::Dummy(ImVec2(0.0f, 18.0f));
     if (!m_ConvertStatus.empty()) {
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX());
         ImGui::TextColored(m_ConvertStatusIsError ? ImVec4(0.90f, 0.35f, 0.35f, 1.0f) : ImVec4(0.40f, 0.85f, 0.55f, 1.0f),
                             "%s", m_ConvertStatus.c_str());
-        ImGui::Spacing();
+        ImGui::PopTextWrapPos();
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
     }
 
     if (running) {
@@ -938,7 +986,7 @@ void LibraryPanel::RenderConverterSection()
     }
 
     if (!haveSource) { ImGui::BeginDisabled(); }
-    if (ImGui::Button("Convertir", ImVec2(160, 36)) && haveSource) {
+    if (DS::GlassButton("Convertir", ImVec2(200.0f, DS::ButtonHeight + 6.0f)) && haveSource) {
         const auto& src     = m_ConvertibleItems[m_ConvertSourceIndex];
         std::string dirPath = src.isVideo ? (GetAssetsPath() + "/videos/") : (ProyecThor::Audio::GetAudioPath() + "/");
         fs::path    dir     = U8Path(dirPath);

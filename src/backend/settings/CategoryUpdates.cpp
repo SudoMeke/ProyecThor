@@ -411,51 +411,51 @@ void SettingsPanel::RenderCategoryUpdates() {
     auto  st  = s_Status.load();
 
     // ── Versión instalada ─────────────────────────────────────────────────────
-    SectionTitle("Version instalada");
+    if (SectionTitle("Version instalada")) {
+        // Badge de versión
+        {
+            ImDrawList* dl  = ImGui::GetWindowDrawList();
+            ImVec2      p   = ImGui::GetCursorScreenPos();
+            char        vtxt[32];
+            snprintf(vtxt, sizeof(vtxt), "  v%s  ", u.currentVersion.c_str());
+            ImVec2 tsz = ImGui::CalcTextSize(vtxt);
 
-    // Badge de versión
-    {
-        ImDrawList* dl  = ImGui::GetWindowDrawList();
-        ImVec2      p   = ImGui::GetCursorScreenPos();
-        char        vtxt[32];
-        snprintf(vtxt, sizeof(vtxt), "  v%s  ", u.currentVersion.c_str());
-        ImVec2 tsz = ImGui::CalcTextSize(vtxt);
+            dl->AddRectFilled(p, ImVec2(p.x + tsz.x, p.y + tsz.y + 8.0f),
+                              IM_COL32(30, 56, 110, 180), 6.0f);
+            dl->AddRect(p, ImVec2(p.x + tsz.x, p.y + tsz.y + 8.0f),
+                        IM_COL32(61, 127, 245, 100), 6.0f, 0, 1.0f);
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + 4.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.78f, 1.00f, 1.0f));
+            ImGui::TextUnformatted(vtxt);
+            ImGui::PopStyleColor();
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + tsz.y + 8.0f + 8.0f));
+        }
 
-        dl->AddRectFilled(p, ImVec2(p.x + tsz.x, p.y + tsz.y + 8.0f),
-                          IM_COL32(30, 56, 110, 180), 6.0f);
-        dl->AddRect(p, ImVec2(p.x + tsz.x, p.y + tsz.y + 8.0f),
-                    IM_COL32(61, 127, 245, 100), 6.0f, 0, 1.0f);
-        ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + 4.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.78f, 1.00f, 1.0f));
-        ImGui::TextUnformatted(vtxt);
-        ImGui::PopStyleColor();
-        ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + tsz.y + 8.0f + 8.0f));
-    }
+        // Fecha de última comprobación
+        if (!u.lastChecked.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
+            ImGui::Text("Ultima comprobacion: %s", u.lastChecked.c_str());
+            ImGui::PopStyleColor();
+        }
 
-    // Fecha de última comprobación
-    if (!u.lastChecked.empty()) {
+        // Recordatorio: el instalador (ver packaging/windows/ProyecThor.iss) ya
+        // borra automaticamente cualquier version anterior detectada (Inno o el
+        // .msi viejo de WiX), pero eso no cubre instalaciones MUY viejas hechas
+        // a mano fuera de esos dos sistemas — dejamos el aviso para que el
+        // usuario lo verifique el mismo desde "Agregar o quitar programas".
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
-        ImGui::Text("Ultima comprobacion: %s", u.lastChecked.c_str());
+        ImGui::TextUnformatted("Verificar versiones antiguas instaladas");
         ImGui::PopStyleColor();
+        HelpTooltip("El instalador borra automaticamente cualquier version anterior de "
+                    "ProyecThor que haya quedado instalada. Si igual sospechas que te "
+                    "quedo mas de una version (por ejemplo, de antes de que existiera "
+                    "este sistema de actualizaciones), revisa 'Agregar o quitar "
+                    "programas' de Windows y desinstala a mano cualquier version vieja "
+                    "sobrante.");
     }
-
-    // Recordatorio: el instalador (ver packaging/windows/ProyecThor.iss) ya
-    // borra automaticamente cualquier version anterior detectada (Inno o el
-    // .msi viejo de WiX), pero eso no cubre instalaciones MUY viejas hechas
-    // a mano fuera de esos dos sistemas — dejamos el aviso para que el
-    // usuario lo verifique el mismo desde "Agregar o quitar programas".
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
-    ImGui::TextUnformatted("Verificar versiones antiguas instaladas");
-    ImGui::PopStyleColor();
-    HelpTooltip("El instalador borra automaticamente cualquier version anterior de "
-                "ProyecThor que haya quedado instalada. Si igual sospechas que te "
-                "quedo mas de una version (por ejemplo, de antes de que existiera "
-                "este sistema de actualizaciones), revisa 'Agregar o quitar "
-                "programas' de Windows y desinstala a mano cualquier version vieja "
-                "sobrante.");
 
     // ── Caja de estado ───────────────────────────────────────────────────────
-    SectionTitle("Estado");
+    if (SectionTitle("Estado")) {
     ImGui::Spacing();
 
     // Dimensiones y colores según estado
@@ -538,13 +538,16 @@ void SettingsPanel::RenderCategoryUpdates() {
     ImGui::SetCursorScreenPos(ImVec2(boxPos.x, boxPos.y + boxH + 14.0f));
 
     // ── Sección de descarga activa ─────────────────────────────────────────────
+    // No es un SectionTitle propio a proposito: es parte de la MISMA pagina
+    // "Estado" (aparece/desaparece segun s_IsDownloading), no una
+    // subcategoria navegable aparte que vaya y venga del sidebar.
     if (s_IsDownloading) {
         float pct   = s_DownloadProgress.load();
         float dlMB  = s_DownloadedMB.load();
         float totMB = s_TotalMB.load();
         float speed = s_DownloadSpeedMBs.load();
 
-        SectionTitle("Descargando actualizacion");
+        ImGui::SeparatorText("Descargando actualizacion");
 
         // Barra de progreso animada personalizada (helper del panel)
         AnimatedProgressBar(pct, ImVec2(ImGui::GetContentRegionAvail().x - 56.0f, 8.0f),
@@ -608,58 +611,59 @@ void SettingsPanel::RenderCategoryUpdates() {
 
     ImGui::PopStyleVar(2);
     if (busy) ImGui::EndDisabled();
+    } // if (SectionTitle("Estado"))
 
     // ── Configuración ──────────────────────────────────────────────────────────
-    SectionTitle("Configuracion");
+    if (SectionTitle("Configuracion")) {
+        ImGui::Checkbox("Comprobar al iniciar", &u.checkOnStartup);
+        HelpTooltip("Comprueba actualizaciones automaticamente al abrir ProyecThor.");
 
-    ImGui::Checkbox("Comprobar al iniciar", &u.checkOnStartup);
-    HelpTooltip("Comprueba actualizaciones automaticamente al abrir ProyecThor.");
+        ImGui::Checkbox("Descarga automatica", &u.autoDownload);
+        HelpTooltip("Descarga la nueva version en segundo plano sin pedir confirmacion.");
 
-    ImGui::Checkbox("Descarga automatica", &u.autoDownload);
-    HelpTooltip("Descarga la nueva version en segundo plano sin pedir confirmacion.");
+        ImGui::Spacing();
 
-    ImGui::Spacing();
+        // Canal
+        const char* channels[] = { "stable", "beta" };
+        const char* labels[]   = { "Estable", "Beta" };
+        int         chIdx      = (u.updateChannel == "beta") ? 1 : 0;
 
-    // Canal
-    const char* channels[] = { "stable", "beta" };
-    const char* labels[]   = { "Estable", "Beta" };
-    int         chIdx      = (u.updateChannel == "beta") ? 1 : 0;
+        ImGui::TextUnformatted("Canal de actualizacion:");
+        HelpTooltip("'Estable': versiones probadas y recomendadas.\n'Beta': acceso anticipado, puede contener errores.");
 
-    ImGui::TextUnformatted("Canal de actualizacion:");
-    HelpTooltip("'Estable': versiones probadas y recomendadas.\n'Beta': acceso anticipado, puede contener errores.");
+        ImGui::Spacing();
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 5.0f));
 
-    ImGui::Spacing();
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 5.0f));
+        for (int i = 0; i < 2; i++) {
+            bool isActive = (chIdx == i);
 
-    for (int i = 0; i < 2; i++) {
-        bool isActive = (chIdx == i);
+            if (isActive) {
+                ImGui::PushStyleColor(ImGuiCol_Button,
+                    i == 0 ? ImVec4(0.10f,0.28f,0.14f,1.0f) : ImVec4(0.28f,0.18f,0.04f,1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                    i == 0 ? ImVec4(0.14f,0.36f,0.18f,1.0f) : ImVec4(0.36f,0.24f,0.06f,1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                    i == 0 ? ImVec4(0.18f,0.44f,0.22f,1.0f) : ImVec4(0.44f,0.30f,0.08f,1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                    i == 0 ? ImVec4(0.30f,0.86f,0.48f,1.0f) : ImVec4(0.96f,0.65f,0.14f,1.0f));
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.08f,0.09f,0.14f,1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.11f,0.12f,0.18f,1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f,0.15f,0.22f,1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.40f,0.42f,0.56f,1.0f));
+            }
 
-        if (isActive) {
-            ImGui::PushStyleColor(ImGuiCol_Button,
-                i == 0 ? ImVec4(0.10f,0.28f,0.14f,1.0f) : ImVec4(0.28f,0.18f,0.04f,1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                i == 0 ? ImVec4(0.14f,0.36f,0.18f,1.0f) : ImVec4(0.36f,0.24f,0.06f,1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                i == 0 ? ImVec4(0.18f,0.44f,0.22f,1.0f) : ImVec4(0.44f,0.30f,0.08f,1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text,
-                i == 0 ? ImVec4(0.30f,0.86f,0.48f,1.0f) : ImVec4(0.96f,0.65f,0.14f,1.0f));
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.08f,0.09f,0.14f,1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.11f,0.12f,0.18f,1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f,0.15f,0.22f,1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.40f,0.42f,0.56f,1.0f));
+            if (i > 0) ImGui::SameLine(0, 6.0f);
+
+            if (ImGui::Button(labels[i], ImVec2(100.0f, 28.0f)))
+                u.updateChannel = channels[i];
+
+            ImGui::PopStyleColor(4);
         }
 
-        if (i > 0) ImGui::SameLine(0, 6.0f);
-
-        if (ImGui::Button(labels[i], ImVec2(100.0f, 28.0f)))
-            u.updateChannel = channels[i];
-
-        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar(2);
     }
-
-    ImGui::PopStyleVar(2);
 }
 
 } // namespace ProyecThor::UI::Settings

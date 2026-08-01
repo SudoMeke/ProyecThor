@@ -33,6 +33,7 @@
 #include "SystemStats.h"
 #include "ui/UIManager.h"
 #include "frontend/panels/LibraryPanel.h"
+#include "frontend/panels/overlay/OverlayExportService.h"
 #include "frontend/panels/HomePanel.h"
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
@@ -782,7 +783,6 @@ homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     ProyecThor::Core::PresentationCore::Get().SetAudioPanelRef(libraryPanel->GetAudioPanel());
     homePanel->m_UIManagerRef = &uiManager;
     libraryPanel->SetUIManager(&uiManager);
-    libraryPanel->SetStreamingPanelRef(&uiManager.GetRedPanel());
 
     uiManager.AddPanel(libraryPanel);
     uiManager.AddPanel(homePanel);
@@ -888,6 +888,12 @@ core.RenderAllSecondaryWindows();
 
         ImGui::Render();
         FrameProfiler::Add(FrameProfiler::s_ImGuiBuild, FrameProfiler::ElapsedMs(t2));
+
+        // Overlays: si el editor pidio "Guardar" este frame, el ImDrawList
+        // del canvas todavia es valido aca (ImGui::Render() ya lo construyo,
+        // ImGui_ImplOpenGL3_RenderDrawData todavia no lo consumio) -- ver
+        // OverlayExportService.
+        ProyecThor::UI::OverlayExportService::Get().ProcessPending();
 
         auto t3 = Clock::now();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

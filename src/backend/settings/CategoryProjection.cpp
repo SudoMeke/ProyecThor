@@ -4,6 +4,10 @@
 #include "backend/core/PresentationCore.h"
 #include "backend/core/AppPaths.h"
 #include "frontend/ui/FilePicker.h"
+#include "frontend/panels/OSCPanel.h"
+#include "frontend/panels/BroadcastPanel.h"
+#include "frontend/panels/StreamingPanel.h"
+#include "frontend/panels/SyncPanel.h"
 #include <imgui.h>
 #include <filesystem>
 #include <GLFW/glfw3.h>
@@ -39,6 +43,43 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
     return clicked;
 }
 
+// Switch deslizante estilo celular (track pildora + circulo que se desliza)
+// -- pedido explicito para el toggle de "bucle falso" de Fondos, en vez del
+// checkbox cuadrado de siempre. *value se invierte in-place si se clickea;
+// devuelve true ese frame. El progreso de deslizamiento se anima via
+// ImGuiStorage, mismo patron que RailLabelProgress (LibrarySidebar.cpp).
+static bool ModernToggle(const char* id, bool* value, const float accent[4], const float track[4]) {
+    ImGui::PushID(id);
+
+    const float w = 42.0f, h = 22.0f;
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##sw", ImVec2(w, h));
+    bool hovered = ImGui::IsItemHovered();
+    bool clicked = ImGui::IsItemClicked();
+    if (clicked) *value = !*value;
+
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* t = storage->GetFloatRef(ImGui::GetID("##swT"), *value ? 1.0f : 0.0f);
+    *t += ((*value ? 1.0f : 0.0f) - *t) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    auto Lerp = [](float a, float b, float x) { return a + (b - a) * x; };
+    ImVec4 trackCol(
+        Lerp(track[0], accent[0], *t), Lerp(track[1], accent[1], *t),
+        Lerp(track[2], accent[2], *t), 1.0f);
+    if (hovered) { trackCol.x = std::min(1.0f, trackCol.x * 1.08f); trackCol.y = std::min(1.0f, trackCol.y * 1.08f); trackCol.z = std::min(1.0f, trackCol.z * 1.08f); }
+
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), ImGui::ColorConvertFloat4ToU32(trackCol), h * 0.5f);
+
+    float thumbR = h * 0.5f - 2.5f;
+    float thumbX = p.x + h * 0.5f + (w - h) * (*t);
+    float thumbY = p.y + h * 0.5f;
+    dl->AddCircleFilled(ImVec2(thumbX, thumbY), thumbR, IM_COL32(255, 255, 255, 255), 16);
+
+    ImGui::PopID();
+    return clicked;
+}
+
     void SettingsPanel::RenderCategoryProjection() {
         auto& p   = ProyecThor::Settings::SettingsManager::Get().GetSettings().projection;
         bool  changed = false;
@@ -47,8 +88,7 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
         ImGui::Spacing();
 
         // ── Monitor de Salida ─────────────────────────────────────────────────
-        SectionTitle("Monitor de Salida");
-        {
+        if (SectionTitle("Monitor de Salida")) {
             int monitorCount = 0;
             GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
 
@@ -85,8 +125,7 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
         ImGui::Spacing();
 
         // ── Calidad de Salida (video de fondo) ────────────────────────────────
-        SectionTitle("Calidad de Salida (Video de Fondo)");
-        {
+        if (SectionTitle("Calidad de Salida (Video de Fondo)")) {
             int monitorCount = 0;
             GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
             int monW = 1920, monH = 1080;
@@ -178,8 +217,7 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
         ImGui::Spacing();
 
         // ── Motor de renderizado (Videos) ─────────────────────────────────────
-        SectionTitle("Motor de Renderizado (Videos)");
-        {
+        if (SectionTitle("Motor de Renderizado (Videos)")) {
             int engine = Core::PresentationCore::Get().GetVideoRenderEngine();
             float w2    = ImGui::GetContentRegionAvail().x;
             float btnW2 = (w2 - 6.0f) * 0.5f;
@@ -215,40 +253,37 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
         ImGui::Spacing();
 
         // ── FSR Upscaling ─────────────────────────────────────────────────────
-        // FIX: Sección FSR colocada correctamente fuera del bloque del Combo,
-        //      con todas las llaves balanceadas.
-        ImGui::SeparatorText("FSR Upscaling");
-
-        // OJO: la fuente de verdad es p.fsrEnabled/p.fsrSharpness (el mismo
-        // ProjectionSettings que usa Ajustes > Diseño > Shaders), no el
-        // estado en vivo de PresentationCore directamente -- leer/escribir
-        // solo el getter/setter en vivo (como hacía esto antes) dejaba a
-        // este control y al de Shaders mostrando/guardando cosas distintas
-        // (uno mostraba el valor viejo, y Guardar terminaba pisando el
-        // cambio hecho acá con ese valor viejo). Mismo patrón que
-        // ShadersPanel::RenderContent().
-        if (ImGui::Checkbox("Activar FSR 1.0", &p.fsrEnabled)) {
-            Core::PresentationCore::Get().SetFSREnabled(p.fsrEnabled);
-            changed = true;
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("(Mejora calidad de video de baja resolucion)");
-
-        if (p.fsrEnabled) {
-            ImGui::SetNextItemWidth(200.0f);
-            if (ImGui::SliderFloat("Nitidez FSR", &p.fsrSharpness, 0.0f, 2.0f, "%.2f")) {
-                Core::PresentationCore::Get().SetFSRSharpness(p.fsrSharpness);
+        if (SectionTitle("FSR Upscaling")) {
+            // OJO: la fuente de verdad es p.fsrEnabled/p.fsrSharpness (el mismo
+            // ProjectionSettings que usa Ajustes > Diseño > Shaders), no el
+            // estado en vivo de PresentationCore directamente -- leer/escribir
+            // solo el getter/setter en vivo (como hacía esto antes) dejaba a
+            // este control y al de Shaders mostrando/guardando cosas distintas
+            // (uno mostraba el valor viejo, y Guardar terminaba pisando el
+            // cambio hecho acá con ese valor viejo). Mismo patrón que
+            // ShadersPanel::RenderContent().
+            if (ImGui::Checkbox("Activar FSR 1.0", &p.fsrEnabled)) {
+                Core::PresentationCore::Get().SetFSREnabled(p.fsrEnabled);
                 changed = true;
             }
             ImGui::SameLine();
-            ImGui::TextDisabled("0=Max  2=Suave");
+            ImGui::TextDisabled("(Mejora calidad de video de baja resolucion)");
+
+            if (p.fsrEnabled) {
+                ImGui::SetNextItemWidth(200.0f);
+                if (ImGui::SliderFloat("Nitidez FSR", &p.fsrSharpness, 0.0f, 2.0f, "%.2f")) {
+                    Core::PresentationCore::Get().SetFSRSharpness(p.fsrSharpness);
+                    changed = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("0=Max  2=Suave");
+            }
         }
 
         ImGui::Spacing();
 
         // ── Logo (pantalla de carga) ─────────────────────────────────────────
-        SectionTitle("Logo");
-        {
+        if (SectionTitle("Logo")) {
             std::string display = p.loadingLogoPath.empty()
                 ? "(sin logo)"
                 : std::filesystem::path(p.loadingLogoPath).filename().string();
@@ -287,6 +322,104 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
                     changed = true;
                 }
             }
+        }
+
+        ImGui::Spacing();
+
+        // ── Fondos ────────────────────────────────────────────────────────────
+        if (SectionTitle("Fondos")) {
+            const auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
+
+            bool pingPong = p.bgPingPongLoop;
+            if (ModernToggle("##bgPingPong", &pingPong, theme.accent, theme.surface3)) {
+                p.bgPingPongLoop = pingPong;
+                Core::PresentationCore::Get().SetBackgroundPingPongLoop(pingPong);
+                changed = true;
+            }
+            ImGui::SameLine(0.0f, 10.0f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Bucle falso (reproducir y luego en reversa)");
+            HelpTooltip("Un Fondo en bucle normal siempre vuelve de golpe al mismo frame "
+                        "inicial, lo que se nota como un salto o corte cada vez que repite.\n\n"
+                        "Con esto activado, el Fondo reproduce hacia adelante hasta el final "
+                        "y despues \"hacia atras\" hasta el principio (en vez de cortar), dando "
+                        "sensacion de bucle continuo aunque en realidad nunca deja de ser el "
+                        "mismo clip yendo y viniendo.\n\n"
+                        "Solo afecta a Fondos (loops decorativos) -- Videos reales de la "
+                        "Biblioteca o la cola del Monitor nunca se reproducen en reversa. "
+                        "El cambio se aplica al proximo Fondo que se cargue, no al que ya "
+                        "esta reproduciendose ahora mismo.");
+        }
+
+        ImGui::Spacing();
+
+        // ── Red (LAN) ──────────────────────────────────────────────────────────
+        // Antes vivia en su propia categoria "Conexiones" -- se mudo aca porque
+        // en realidad ES parte de la proyeccion (transmite lo mismo que se
+        // proyecta hacia otros equipos de la sala), separarla en una categoria
+        // de nivel superior la dejaba suelta de con que tiene que ver de
+        // verdad. Sigue teniendo su propia entrada navegable en el sidebar
+        // (ver m_SectionAnchors/RenderSidebar), solo que como subcategoria de
+        // Proyeccion, no como categoria propia.
+        if (SectionTitle("Red (LAN)")) {
+            ImGui::TextDisabled("Conexion LAN con Stage y otros equipos de la sala.");
+            ImGui::Spacing();
+            if (m_StreamingPanelRef)
+                m_StreamingPanelRef->RenderContent();
+            else
+                ImGui::TextDisabled("Red no disponible.");
+        }
+
+        ImGui::Spacing();
+
+        // ── Mobile ────────────────────────────────────────────────────────────
+        if (SectionTitle("Mobile")) {
+            ImGui::TextDisabled("App movil complementaria: control remoto y sincronizacion.");
+            ImGui::Spacing();
+            if (m_SyncPanelRef)
+                m_SyncPanelRef->RenderContent();
+            else
+                ImGui::TextDisabled("Mobile no disponible.");
+        }
+
+        ImGui::Spacing();
+
+        // ── Streaming (RTMP) ─────────────────────────────────────────────────
+        // Los 3 bloques comparten navGroup="Streaming": una sola entrada en el
+        // sidebar (la del primero) en vez de 3 sueltas, mismo criterio que ya
+        // usa CategoryTheme.cpp para Temas/Colores/Fuentes/Diseño. Los 3 se
+        // muestran/ocultan juntos (misma pagina "Streaming").
+        if (SectionTitle("Captura", "Streaming")) {
+            ImGui::TextDisabled("Transmision RTMP: que se captura, como se compone y cuando arranca.");
+            ImGui::Spacing();
+            if (m_BroadcastPanelRef)
+                m_BroadcastPanelRef->RenderCaptureSection();
+            else
+                ImGui::TextDisabled("Streaming no disponible.");
+
+            ImGui::Spacing();
+
+            if (m_BroadcastPanelRef) {
+                ImGui::SeparatorText("Capa (Layer)");
+                m_BroadcastPanelRef->RenderLayerSection();
+
+                ImGui::Spacing();
+
+                ImGui::SeparatorText("Iniciar");
+                m_BroadcastPanelRef->RenderStartSection();
+            }
+        }
+
+        ImGui::Spacing();
+
+        // ── OSC ───────────────────────────────────────────────────────────────
+        if (SectionTitle("OSC")) {
+            ImGui::TextDisabled("Luces y controladores externos via OSC.");
+            ImGui::Spacing();
+            if (m_OSCPanelRef)
+                m_OSCPanelRef->RenderContent();
+            else
+                ImGui::TextDisabled("OSC no disponible.");
         }
 
         ImGui::Spacing();

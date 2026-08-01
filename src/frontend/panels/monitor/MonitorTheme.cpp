@@ -11,7 +11,7 @@ void Sync(const ProyecThor::Settings::ThemeSettings& t) {
     k_Bg0 = V(t.base);
     k_Bg1 = V(t.surface0);
     k_Bg2 = V(t.surface1);
-    k_Bg3 = V(t.base, 0.9f);
+    k_Bg3 = V(t.base); // opaco -- antes 0.9 dejaba ver lo de atras (transparencia no pedida)
 
     k_BorderSubtle = V(t.border, 1.0f);
     k_BorderFocus  = V(t.accentDim);
@@ -49,10 +49,14 @@ void Sync(const ProyecThor::Settings::ThemeSettings& t) {
     k_LiveTrack = V(t.danger, 0.4f);
     k_LiveGrab  = V(t.danger);
 
-    k_QueueAccent = V(t.success);
-    k_BtnGreen    = V(t.success, 0.55f);
-    k_BtnGreenH   = V(t.success, 0.75f);
-    k_BtnGreenA   = V(t.success, 0.40f);
+    // Acento de la Cola = el acento del TEMA, no "success" (que casi
+    // siempre es verde) -- pedido explicito: la Cola debe verse gris en un
+    // tema oscuro neutro, no verde fijo sin importar el tema elegido. Verde
+    // de verdad solo en el preset que efectivamente es verde (Deadlock).
+    k_QueueAccent = V(t.accent);
+    k_BtnGreen    = V(t.accent, 0.55f);
+    k_BtnGreenH   = V(t.accent, 0.75f);
+    k_BtnGreenA   = V(t.accent, 0.40f);
     k_BtnDel      = V(t.danger, 0.55f);
     k_BtnDelH     = V(t.danger, 0.75f);
     k_BtnDelA     = V(t.danger, 0.40f);

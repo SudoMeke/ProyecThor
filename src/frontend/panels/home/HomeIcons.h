@@ -121,4 +121,23 @@ inline void DrawIcon_Chat(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         dl->AddCircleFilled(IcPt(o, sz, x, 0.41f), sz * 0.045f, col, 8);
 }
 
+inline void DrawIcon_Sync(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.09f;
+    ImVec2 center = IcPt(o, sz, 0.5f, 0.5f);
+    float  r = sz * 0.30f;
+
+    // Dos arcos opuestos (arriba-derecha / abajo-izquierda), como el
+    // clasico icono de "sincronizar" de dos flechas circulares.
+    dl->PathArcTo(center, r, -IM_PI * 0.85f, IM_PI * 0.05f, 16);
+    dl->PathStroke(col, ImDrawFlags_None, thick);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.80f, 0.14f), IcPt(o, sz, 0.80f, 0.34f), IcPt(o, sz, 0.98f, 0.24f), col);
+
+    dl->PathArcTo(center, r, IM_PI * 0.15f, IM_PI * 1.05f, 16);
+    dl->PathStroke(col, ImDrawFlags_None, thick);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.20f, 0.86f), IcPt(o, sz, 0.20f, 0.66f), IcPt(o, sz, 0.02f, 0.76f), col);
+}
+
 } // namespace ProyecThor::UI::HomeIcons

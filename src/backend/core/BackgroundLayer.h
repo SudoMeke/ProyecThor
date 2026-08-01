@@ -152,6 +152,21 @@ namespace ProyecThor::Core {
 
         bool  m_StretchToFill = true;
 
+        // ── Ping-pong "bucle falso" (ver Ajustes > Proyeccion > Fondos) ───
+        // Solo aplica a Fondos (allowAudio=false) -- nunca a Videos/cola.
+        // libVLC no soporta reproduccion en reversa real de forma confiable,
+        // asi que la ilusion se logra a pura fuerza de SetPosition(): al
+        // terminar el pase hacia adelante (EndReached real, ver SetVideo(),
+        // que para este caso carga SIN input-repeat cuando esto esta
+        // activo) se pausa el player y se lo hace "retroceder" a pasos,
+        // hasta cerca del inicio, donde se reanuda hacia adelante de nuevo.
+        // Preferencia persistida (Ajustes); estado en tiempo real de en que
+        // fase esta el pase actual, ver Update().
+        bool   m_PingPongEnabled    = false;
+        bool   m_PingPongReverse    = false;
+        double m_PingPongLastStepAt = 0.0;
+        static constexpr double kPingPongStepSeconds = 0.15;
+
         // ── Motor de renderizado alternativo: "libvlc (ventana nativa)" ──
         // Aplica SOLO a contenido de VIDEO real (allowAudio=true — Videos/
         // cola del Monitor), nunca a Fondos/imagenes/color solido: esos
@@ -302,6 +317,19 @@ namespace ProyecThor::Core {
 
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
+
+        // "Bucle falso" de Fondos: en vez de repetir siempre desde el mismo
+        // frame 0 (corte visible), reproduce hacia adelante y despues
+        // "hacia atras" (scrub por SetPosition, ver comentario del miembro
+        // arriba), dando sensacion de bucle continuo. Solo tiene efecto en
+        // contenido de Fondos (allowAudio=false); Videos/cola lo ignoran
+        // por completo. Cambiarlo mientras un Fondo ya esta cargado no
+        // afecta al pase en curso -- se aplica recien en el proximo
+        // SetVideo()/CommitPrefetch() (el mismo criterio que ya usan
+        // m_UseNativeEngine/m_StretchToFill para ajustes que solo pueden
+        // tomarse al abrir el archivo).
+        void SetPingPongLoop(bool enabled) { m_PingPongEnabled = enabled; }
+        bool GetPingPongLoop() const { return m_PingPongEnabled; }
 
         // Preferencia de motor para VIDEOS reales (allowAudio=true): false
         // (default) = compuesto OpenGL de siempre; true = libvlc en

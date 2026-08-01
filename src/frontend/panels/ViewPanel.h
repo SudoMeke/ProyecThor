@@ -3,6 +3,7 @@
 #include "backend/core/PresentationCore.h"
 #include "AudioMeters.h"
 #include <string>
+#include <unordered_map>
 #include <imgui.h>
 
 namespace ProyecThor::UI {
@@ -18,9 +19,8 @@ public:
     void        Render() override;
     std::string GetName() const override { return "Vista en Vivo"; }
 
-    // Misma instancia que Yggdrasil/Herramientas (retirado) -- Chat aparece
-    // en varios lugares pero es un unico servidor real. Ver cableado en
-    // main.cpp.
+    // Misma instancia que Herramientas (retirado) -- Chat aparece en varios
+    // lugares pero es un unico servidor real. Ver cableado en main.cpp.
     void SetTeamChatPanelRef(TeamChatPanel* ref) { m_TeamChatPanelRef = ref; }
 
 private:
@@ -30,26 +30,33 @@ private:
     void RenderContent(float panelW, float panelH);
 
     // Riel vertical de iconos a la derecha del video ("Limpiar <tipo>",
-    // contenido en vivo) + franja horizontal abajo de TODO el panel
+    // contenido en vivo) + franja horizontal debajo del transporte
     // (configuracion/vista: proporcion, ajustes, que fuente previsualizar,
-    // mostrar tira de Stage, calidad, Chat, Pads) -- separados a proposito
-    // para no mezclar "accion destructiva" con "ajuste de vista". La franja
-    // de config es horizontal (no un segundo riel vertical) para no
-    // restarle ancho al video en las dos puntas.
+    // Overlays, Chat, Pads) -- separados a proposito para no mezclar "accion
+    // destructiva" con "ajuste de vista".
     void RenderQuickActionsClear(float railW);
     void RenderQuickActionsConfig(float stripH);
 
-    // Popup de acceso rapido a "Calidad de salida" (mismos valores que
-    // Ajustes > Proyeccion, ver ProjectionQualityPresets.h) — pensado para
-    // bajar la calidad sin tener que salir de Vista en Vivo, ej. en una PC
-    // de bajos recursos durante el evento.
-    void RenderQualityPopup();
+    // Herramienta inline activa (ver RenderInlineTool) -- en vez de abrir un
+    // popup flotante separado, Overlays/Chat/Pads se muestran EN EL MISMO
+    // panel, ocupando el espacio libre entre el transporte y la franja de
+    // config de abajo (pedido explicito: "que muestren el contenido abajo,
+    // no como panel aparte sino como si fuera parte del mismo panel").
+    // Click de nuevo en el mismo boton = cerrar (volver a None).
+    enum class InlineTool { None, Overlays, Chat, Pads, Clock };
+    InlineTool m_ActiveTool = InlineTool::None;
 
-    // Chat y Pads -- movidos aca desde ViewToolsPanel (retirado, ver
-    // UIManager.cpp), accesibles como popup desde un boton del riel
-    // izquierdo en vez de ocupar su propio panel/dock permanente.
-    void RenderChatPopup();
-    void RenderPadsPopup();
+    // Alto minimo que se le reserva siempre al transporte (progreso + pads +
+    // fader) aunque haya una herramienta inline abierta -- ver RenderContent
+    // de cada seccion en Render().
+    static constexpr float kLiveTransportMinH = 120.0f;
+
+    void RenderInlineTool(float w, float h);
+    void RenderOverlaysContent();
+    void RenderChatContent();
+    void RenderPadsContent();
+    void RenderClockContent();
+    std::unordered_map<std::string, ImTextureID> m_OverlayThumbCache;
 
     // Barra de streaming en red — extraída para no ensuciar RenderContent.
     // Recibe los límites del contenedor de video (p0/p1) y el estado ya leído.
@@ -74,13 +81,6 @@ private:
     // monitor (ver boton "vaPreviewSource" en RenderQuickActions).
     enum class PreviewSource { Publico, Stage };
     PreviewSource m_PreviewSource = PreviewSource::Publico;
-
-    // Tira de preview de Stage, arriba del video de "Público" -- a
-    // diferencia de m_PreviewSource (que REEMPLAZA que se ve en el video
-    // principal), esto se ve EN SIMULTANEO con Público, para poder tener
-    // ambas salidas a la vista sin pararse frente al segundo monitor.
-    // Toggle en el riel izquierdo (ver "vaStageStrip" en RenderQuickActionsConfig).
-    bool m_ShowStageStrip = false;
 
     AudioMeters m_AudioMeters;
     bool        m_LivePlaying = false;

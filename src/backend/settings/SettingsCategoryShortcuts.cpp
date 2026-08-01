@@ -42,29 +42,33 @@ void SettingsPanel::RenderCategoryShortcuts() {
     ImGui::TextDisabled("Atajos de teclado disponibles en toda la aplicacion.");
     ImGui::Spacing();
 
-    SectionTitle("Navegacion en Biblioteca");
-    DrawShortcutRow("Flecha arriba / abajo", "Mover la seleccion en la lista de la biblioteca");
-    DrawShortcutRow("Click derecho",         "Abrir menu contextual (renombrar, eliminar, etiquetas)");
+    if (SectionTitle("Navegacion en Biblioteca")) {
+        DrawShortcutRow("Flecha arriba / abajo", "Mover la seleccion en la lista de la biblioteca");
+        DrawShortcutRow("Click derecho",         "Abrir menu contextual (renombrar, eliminar, etiquetas)");
+    }
 
-    SectionTitle("Navegacion en Biblia");
-    DrawShortcutRow("Flecha izquierda / derecha", "Ir al versiculo anterior / siguiente");
-    DrawShortcutRow("Ctrl (toque rapido)",         "Saltar a un capitulo por numero");
-    DrawShortcutRow("Alt (toque rapido)",          "Saltar a un versiculo por numero");
-    DrawShortcutRow("Enter",                       "Confirmar el salto de capitulo o versiculo");
-    DrawShortcutRow("Ctrl + F",                    "Abrir el buscador rapido de la biblia");
+    if (SectionTitle("Navegacion en Biblia")) {
+        DrawShortcutRow("Flecha izquierda / derecha", "Ir al versiculo anterior / siguiente");
+        DrawShortcutRow("Ctrl (toque rapido)",         "Saltar a un capitulo por numero");
+        DrawShortcutRow("Alt (toque rapido)",          "Saltar a un versiculo por numero");
+        DrawShortcutRow("Enter",                       "Confirmar el salto de capitulo o versiculo");
+        DrawShortcutRow("Ctrl + F",                    "Abrir el buscador rapido de la biblia");
+    }
 
-    SectionTitle("Categorias de Biblioteca");
-    DrawShortcutRow("Shift + 1", "Ir a Canciones");
-    DrawShortcutRow("Shift + 2", "Ir a Video");
-    DrawShortcutRow("Shift + 3", "Ir a Imagen");
-    DrawShortcutRow("Shift + 4", "Ir a Biblia");
-    DrawShortcutRow("Shift + 5", "Ir a Documentos");
-    DrawShortcutRow("Shift + 6", "Ir a Audio");
+    if (SectionTitle("Categorias de Biblioteca")) {
+        DrawShortcutRow("Shift + 1", "Ir a Canciones");
+        DrawShortcutRow("Shift + 2", "Ir a Video");
+        DrawShortcutRow("Shift + 3", "Ir a Imagen");
+        DrawShortcutRow("Shift + 4", "Ir a Biblia");
+        DrawShortcutRow("Shift + 5", "Ir a Documentos");
+        DrawShortcutRow("Shift + 6", "Ir a Audio");
+    }
 
-    SectionTitle("General");
-    DrawShortcutRow("Ctrl + P", "Abrir Configuraciones");
-    DrawShortcutRow("F1",       "Abrir documentacion");
-    DrawShortcutRow("Alt + F4", "Cerrar ProyecThor");
+    if (SectionTitle("General")) {
+        DrawShortcutRow("Ctrl + P", "Abrir Configuraciones");
+        DrawShortcutRow("F1",       "Abrir documentacion");
+        DrawShortcutRow("Alt + F4", "Cerrar ProyecThor");
+    }
 }
 
 } // namespace ProyecThor::UI::Settings

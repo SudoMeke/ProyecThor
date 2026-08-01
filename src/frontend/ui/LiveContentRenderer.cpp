@@ -4,6 +4,7 @@
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/StageLayoutTemplates.h"
 #include "frontend/panels/capture/CapturePanel.h"
+#include "frontend/panels/monitor/MonitorTheme.h"
 #include "frontend/ui/TextEffectsRenderer.h"
 #include <algorithm>
 #include <cfloat>
@@ -14,6 +15,8 @@
 
 namespace ProyecThor::UI {
 
+namespace { namespace MT = MonitorTheme; }
+
 void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float drawH)
 {
     auto& core  = ProyecThor::Core::PresentationCore::Get();
@@ -22,17 +25,17 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     // ── Fondo de video / Estado Inactivo ──────────────────────────────────
     if (!state.isProjecting)
     {
-        dl->AddRectFilled(p0, p1, IM_COL32(8, 9, 16, 255));
+        dl->AddRectFilled(p0, p1, ImGui::GetColorU32(MT::k_Bg3));
 
         const char* msg     = "Sin proyeccion activa";
         ImVec2      msgSize = ImGui::CalcTextSize(msg);
         dl->AddText(
             ImVec2(p0.x + (drawW - msgSize.x) * 0.5f,
                    p0.y + (drawH - msgSize.y) * 0.5f),
-            IM_COL32(60, 65, 90, 255),
+            ImGui::GetColorU32(MT::k_TextDim),
             msg);
 
-        dl->AddRect(p0, p1, IM_COL32(40, 44, 64, 255), 0.0f, 0, 1.0f);
+        dl->AddRect(p0, p1, ImGui::GetColorU32(MT::k_BorderSubtle), 0.0f, 0, 1.0f);
         return;
     }
 
@@ -195,6 +198,13 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
 
         dl->PopClipRect();
     }
+
+    // ── Overlay (PNG transparente) ──────────────────────────────────────────
+    // Capa APARTE de fondo/texto (ver PresentationCore::SetOverlayMedia) --
+    // se dibuja encima de los dos, dejando ver lo que haya debajo gracias al
+    // alpha real del PNG. Mismo orden que en la salida real (UIManager.cpp).
+    if (void* overlayTex = core.GetOverlayTexture())
+        dl->AddImage(overlayTex, p0, p1);
 
     // ── Captura (cámara/pantalla/ventana) ──────────────────────────────────
     // Antes esto NUNCA se dibujaba en el preview -- en la salida real

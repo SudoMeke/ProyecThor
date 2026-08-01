@@ -20,7 +20,7 @@ void SettingsPanel::RenderCategorySongs() {
                         "pintar el fondo de cada cancion en la Biblioteca.");
     ImGui::Spacing();
 
-    SectionTitle("Etiquetas");
+    if (!SectionTitle("Etiquetas")) return;
 
     static char        editNameBuffer[128] = {};
     static std::string editingId; // "" = ninguna fila en edicion inline
@@ -85,7 +85,7 @@ void SettingsPanel::RenderCategorySongs() {
     ImGui::PopStyleVar();
 
     ImGui::Spacing();
-    SectionTitle("Nueva etiqueta");
+    ImGui::SeparatorText("Nueva etiqueta");
 
     static char   newNameBuffer[128] = {};
     static ImVec4 newColorBuffer     = ImVec4(0.35f, 0.55f, 0.95f, 1.0f);

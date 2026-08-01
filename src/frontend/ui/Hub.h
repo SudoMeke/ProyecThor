@@ -58,6 +58,19 @@ private:
     void UpdateBgParticles(float dt, float w, float h);
     void RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h);
 
+    // --- Nebulosas de fondo (solo tema "Galaxia") -----------------------------
+    // Manchas grandes y suaves (varios circulos concentricos con alpha
+    // decreciente, sin textura) que derivan lento por el fondo del Hub,
+    // tenidas con el acento del tema -- para el preset Galaxia, que ya es un
+    // violeta profundo, esto le da sensacion de nebulosa/espacio en vez de
+    // fondo plano. Solo se inicializan/dibujan si el preset activo es Galaxy.
+    struct NebulaBlob { float x, y, r, vx, vy; };
+    static constexpr int NEBULA_COUNT = 4;
+    std::array<NebulaBlob, NEBULA_COUNT> m_Nebulas;
+    bool m_NebulasInit = false;
+    void InitNebulas(float w, float h);
+    void UpdateNebulas(float dt, float w, float h);
+
     std::chrono::steady_clock::time_point m_LastFrameTime;
 };
 

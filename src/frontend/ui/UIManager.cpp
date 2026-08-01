@@ -78,9 +78,10 @@ bool UIManager::Initialize(GLFWwindow* window)
     m_TransitionPanelOwned = std::make_shared<TransitionPanel>();
     m_TransitionPanel      = m_TransitionPanelOwned.get();
 
-    m_YggdrasilPanel.SetRedPanel(&m_Red);
-    m_YggdrasilPanel.SetChatPanel(&m_Chat);
-    m_YggdrasilPanel.SetBroadcastPanel(&m_Broadcast);
+    m_SettingsPanel.SetOSCPanelRef(&m_OSC);
+    m_SettingsPanel.SetBroadcastPanelRef(&m_Broadcast);
+    m_SettingsPanel.SetStreamingPanelRef(&m_Red);
+    m_SettingsPanel.SetSyncPanelRef(&m_Sync);
 
     ApplyProfessionalTheme();
     m_SettingsPanel.InitializeTheme();
@@ -90,6 +91,16 @@ m_GlassRenderer.Initialize(fbWidth, fbHeight);
     return true;
 }
 
+// SOLO proporciones (padding/spacing/rounding/border) -- ya NO toca ningun
+// ImGuiCol_* de color. Antes tenia una paleta gris fija completa (WindowBg,
+// PopupBg, Button, Header, Tab, etc, unos 70 colores) que pisaba SIEMPRE lo
+// que SettingsManager::ApplyTheme() (el tema realmente elegido en Ajustes >
+// Apariencia) ya habia dejado bien puesto un instante antes en main.cpp,
+// porque UIManager::Initialize() -> esta funcion corre DESPUES de ese
+// ApplyTheme() inicial. Resultado: el tema elegido nunca se veia reflejado
+// en el arranque, solo despues de tocar algo en Ajustes > Apariencia (que
+// vuelve a llamar ApplyTheme() y "gana" recien ahi). Los colores ahora los
+// pone una unica vez ApplyTheme(), nadie mas los toca.
 void UIManager::ApplyProfessionalTheme()
 {
     ImGuiStyle& s = ImGui::GetStyle();
@@ -120,82 +131,10 @@ void UIManager::ApplyProfessionalTheme()
     s.TabBorderSize          = 0.0f;
     s.TabBarBorderSize       = 0.0f;
 
-    ImVec4* c = s.Colors;
-
-    c[ImGuiCol_WindowBg]             = ImVec4(0.036f, 0.040f, 0.060f, 1.000f);
-    c[ImGuiCol_ChildBg]              = ImVec4(0.030f, 0.034f, 0.052f, 0.650f);
-    c[ImGuiCol_PopupBg]              = ImVec4(0.040f, 0.044f, 0.066f, 0.985f);
-    c[ImGuiCol_Border]               = ImVec4(1.000f, 1.000f, 1.000f, 0.075f);
-    c[ImGuiCol_BorderShadow]         = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
-
-    c[ImGuiCol_FrameBg]              = ImVec4(1.000f, 1.000f, 1.000f, 0.042f);
-    c[ImGuiCol_FrameBgHovered]       = ImVec4(1.000f, 1.000f, 1.000f, 0.075f);
-    c[ImGuiCol_FrameBgActive]        = ImVec4(1.000f, 1.000f, 1.000f, 0.108f);
-
-    c[ImGuiCol_TitleBg]              = ImVec4(0.025f, 0.028f, 0.044f, 1.000f);
-    c[ImGuiCol_TitleBgActive]        = ImVec4(0.032f, 0.036f, 0.056f, 1.000f);
-    c[ImGuiCol_TitleBgCollapsed]     = ImVec4(0.025f, 0.028f, 0.044f, 0.800f);
-    c[ImGuiCol_MenuBarBg]            = ImVec4(0.022f, 0.025f, 0.040f, 1.000f);
-
-    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
-    c[ImGuiCol_ScrollbarGrab]        = ImVec4(1.000f, 1.000f, 1.000f, 0.110f);
-    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(1.000f, 1.000f, 1.000f, 0.185f);
-    c[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.550f, 0.560f, 0.580f, 0.880f);
-
-    c[ImGuiCol_CheckMark]            = ImVec4(0.700f, 0.700f, 0.720f, 1.000f);
-    c[ImGuiCol_SliderGrab]           = ImVec4(0.700f, 0.700f, 0.720f, 1.000f);
-    c[ImGuiCol_SliderGrabActive]     = ImVec4(0.720f, 0.730f, 0.750f, 1.000f);
-
-    c[ImGuiCol_Button]               = ImVec4(1.000f, 1.000f, 1.000f, 0.048f);
-    c[ImGuiCol_ButtonHovered]        = ImVec4(1.000f, 1.000f, 1.000f, 0.088f);
-    c[ImGuiCol_ButtonActive]         = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
-
-    c[ImGuiCol_Header]               = ImVec4(0.550f, 0.560f, 0.580f, 0.148f);
-    c[ImGuiCol_HeaderHovered]        = ImVec4(0.550f, 0.560f, 0.580f, 0.215f);
-    c[ImGuiCol_HeaderActive]         = ImVec4(0.550f, 0.560f, 0.580f, 0.375f);
-
-    c[ImGuiCol_Separator]            = ImVec4(1.000f, 1.000f, 1.000f, 0.055f);
-    c[ImGuiCol_SeparatorHovered]     = ImVec4(0.550f, 0.560f, 0.580f, 0.380f);
-    c[ImGuiCol_SeparatorActive]      = ImVec4(0.550f, 0.560f, 0.580f, 0.780f);
-
-    c[ImGuiCol_ResizeGrip]           = ImVec4(0.550f, 0.560f, 0.580f, 0.095f);
-    c[ImGuiCol_ResizeGripHovered]    = ImVec4(0.550f, 0.560f, 0.580f, 0.360f);
-    c[ImGuiCol_ResizeGripActive]     = ImVec4(0.550f, 0.560f, 0.580f, 0.780f);
-
-    c[ImGuiCol_Tab]                  = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
-    c[ImGuiCol_TabHovered]           = ImVec4(1.000f, 1.000f, 1.000f, 0.068f);
-    c[ImGuiCol_TabActive]            = ImVec4(1.000f, 1.000f, 1.000f, 0.108f);
-    c[ImGuiCol_TabUnfocused]         = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
-    c[ImGuiCol_TabUnfocusedActive]   = ImVec4(1.000f, 1.000f, 1.000f, 0.058f);
-
-    c[ImGuiCol_DockingPreview]       = ImVec4(0.550f, 0.560f, 0.580f, 0.268f);
-    c[ImGuiCol_DockingEmptyBg]       = ImVec4(0.026f, 0.029f, 0.044f, 1.000f);
-
-    c[ImGuiCol_PlotLines]            = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
-    c[ImGuiCol_PlotLinesHovered]     = ImVec4(0.720f, 0.730f, 0.750f, 1.000f);
-    c[ImGuiCol_PlotHistogram]        = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
-    c[ImGuiCol_PlotHistogramHovered] = ImVec4(0.720f, 0.730f, 0.750f, 1.000f);
-
-    c[ImGuiCol_TableHeaderBg]        = ImVec4(1.000f, 1.000f, 1.000f, 0.038f);
-    c[ImGuiCol_TableBorderStrong]    = ImVec4(1.000f, 1.000f, 1.000f, 0.095f);
-    c[ImGuiCol_TableBorderLight]     = ImVec4(1.000f, 1.000f, 1.000f, 0.038f);
-    c[ImGuiCol_TableRowBg]           = ImVec4(0.000f, 0.000f, 0.000f, 0.000f);
-    c[ImGuiCol_TableRowBgAlt]        = ImVec4(1.000f, 1.000f, 1.000f, 0.022f);
-
-    c[ImGuiCol_TextSelectedBg]       = ImVec4(0.550f, 0.560f, 0.580f, 0.215f);
-    c[ImGuiCol_DragDropTarget]       = ImVec4(0.550f, 0.560f, 0.580f, 0.780f);
-    c[ImGuiCol_NavHighlight]         = ImVec4(0.550f, 0.560f, 0.580f, 1.000f);
-    c[ImGuiCol_NavWindowingHighlight]= ImVec4(1.000f, 1.000f, 1.000f, 0.580f);
-    c[ImGuiCol_NavWindowingDimBg]    = ImVec4(0.000f, 0.000f, 0.000f, 0.440f);
-    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.000f, 0.000f, 0.000f, 0.540f);
-
-    c[ImGuiCol_Text]                 = ImVec4(0.921f, 0.929f, 0.960f, 1.000f);
-    c[ImGuiCol_TextDisabled]         = ImVec4(1.000f, 1.000f, 1.000f, 0.265f);
-
     if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
-        s.WindowRounding       = 0.0f;
-        c[ImGuiCol_WindowBg].w = 1.0f;
+        s.WindowRounding                = 0.0f;
+        s.Colors[ImGuiCol_WindowBg].w    = 1.0f; // fuerza opaco (multi-viewport), no toca RGB
     }
 }
 
@@ -218,6 +157,16 @@ void UIManager::RequestSettings()
 
 void UIManager::RenderAll()
 {
+    // Re-sincroniza el tema TODOS los frames, no solo cuando se clickea un
+    // preset en Ajustes > Apariencia -- pedido explicito: varios paneles
+    // (Biblioteca, Monitor de Control) se quedaban con colores de un tema
+    // anterior sin importar cual estuviera realmente elegido. ApplyTheme()
+    // es barato (unas pocas asignaciones de ImVec4/ImU32, sin IO), asi que
+    // hacerlo incondicional cada frame es mas robusto que confiar en que
+    // CADA lugar que cambia el tema se acuerde de llamarlo -- si algo queda
+    // "atrasado" un frame, se autocorrige en el siguiente en vez de
+    // quedarse mal para siempre.
+    ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
 
      {
         ImGuiIO& io = ImGui::GetIO();
@@ -238,20 +187,18 @@ void UIManager::RenderAll()
     m_Red.Update();
     m_Chat.Update();
     m_Broadcast.Update();
+    m_Sync.Update();
+    m_OSC.Update();
 
     RenderModeToolbar();
 
-    if (m_Mode == WorkspaceMode::Yggdrasil)
+    // Editor a pantalla completa (Overlay/Estilos) activo -- ver
+    // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
+    // Ajustes/etc) por el contenido del editor, sin tocar la toolbar de
+    // arriba (esa nunca se oculta, ver comentario en el header).
+    if (m_FullscreenEditorActive && m_FullscreenEditorRenderFn)
     {
-        m_YggdrasilPanel.Render();
-        RenderMainMenuBar();
-        return;
-    }
-
-    if (m_Mode == WorkspaceMode::Biblia)
-    {
-        m_BiblePanel.Render();
-        RenderMainMenuBar();
+        m_FullscreenEditorRenderFn();
         return;
     }
 
@@ -652,6 +599,20 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         DrawTextBlock(state.currentText, 0.0f, 0.0f, 1.0f, 1.0f);
                     }
                 }
+
+                // ── Overlay (PNG transparente) ───────────────────────────────
+                // Capa APARTE de fondo/texto (ver PresentationCore::
+                // SetOverlayMedia) -- se dibuja encima de los dos, dejando ver
+                // lo que haya debajo gracias al alpha real del PNG (por eso
+                // AddImage sin tint opaco: el blending normal de ImGui ya
+                // respeta el canal alpha de la textura).
+                if (void* overlayTex = Core::PresentationCore::Get().GetOverlayTexture())
+                {
+                    drawList->AddImage(overlayTex,
+                        ImVec2((float)mx, (float)my),
+                        ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                        ImVec2(0, 0), ImVec2(1, 1));
+                }
 }
 
                 if (!showingLoadingScreen)
@@ -898,22 +859,20 @@ void UIManager::ToggleFullscreen()
 
 void UIManager::RenderModeToolbar()
 {
-
+    // SIEMPRE visible -- pedido explicito, no ocultable (ni por Ajustes ni
+    // por el menu Vista): es el punto principal para saltar entre Hub y
+    // Proyector y para el acceso rapido a Notas/Estilos/Streaming, asi que
+    // no puede depender de una preferencia que la deje escondida.
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-    if (!general.showModeToolbar) return;
 
     // Grupo izquierdo (Hub/Proyector) separado del resto por una linea
-    // vertical -- pedido explicito para que Conexiones/Notas/Biblia queden
-    // claramente aparte de los dos modos "de trabajo" principales.
+    // vertical -- Conexiones/Biblia ya no viven aca (ver comentario de
+    // WorkspaceMode en UIManager.h): a la derecha de la linea solo quedan
+    // Notas y Estilos, que no son WorkspaceMode (no reemplazan el contenido
+    // de abajo, abren su propia ventana/popup encima).
     static const IconRailItem kItemsLeft[] = {
         { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
-    };
-    static const IconRailItem kItemsRight[] = {
-        { (int)WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Antenna,    "Conexiones" },
-    };
-    static const IconRailItem kItemsTail[] = {
-        { (int)WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
     };
 
     ImVec4 accent = ImGui::ColorConvertU32ToFloat4(DS::AccentColor);
@@ -948,7 +907,10 @@ void UIManager::RenderModeToolbar()
 
         ImFont* font          = ImGui::GetFont();
         const float labelSz   = std::max(9.0f, std::floor(ImGui::GetFontSize() * 0.72f));
-        const float iconSz    = std::max(12.0f, btnH - (showLbl ? (labelSz + iconGap) : 0.0f) - 2.0f);
+        // *0.85: iconos un poco mas chicos que el maximo que entraria en
+        // btnH -- pedido explicito, ahora que la barra queda prendida por
+        // defecto se queria mas discreta.
+        const float iconSz    = std::max(11.0f, (btnH - (showLbl ? (labelSz + iconGap) : 0.0f) - 2.0f) * 0.85f);
 
         ImGuiStorage* storage = ImGui::GetStateStorage();
 
@@ -1049,18 +1011,30 @@ void UIManager::RenderModeToolbar()
             ImGui::Dummy(ImVec2(1.0f, btnH));
         }
 
-        // ── Grupo derecho: Conexiones, luego (con su propio espacio) Notas
-        //    y Biblia ──────────────────────────────────────────────────────
-        for (int i = 0; i < (int)(sizeof(kItemsRight) / sizeof(kItemsRight[0])); i++)
-            RenderModeItem(kItemsRight[i], true, gap * 2.0f);
-
+        // ── Grupo derecho: Notas y Estilos -- ninguno de los dos es un
+        //    WorkspaceMode (no reemplazan el contenido de abajo): Notas
+        //    abre/cierra una ventana flotante (ver RenderNotesWindow) y
+        //    Estilos abre un popup para aplicar un estilo guardado sin ir
+        //    hasta Diseño > Estilos.
         {
             bool clicked = RenderPill("Notas", HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
             if (clicked) m_ShowNotes = !m_ShowNotes;
         }
-
-        for (int i = 0; i < (int)(sizeof(kItemsTail) / sizeof(kItemsTail[0])); i++)
-            RenderModeItem(kItemsTail[i], true, gap);
+        {
+            bool clicked = RenderPill("Estilos", AppIcons::DrawIcon_Layers, false, true, gap);
+            if (clicked) ImGui::OpenPopup("##modeTbStylesPopup");
+        }
+        {
+            // Abre Ajustes directo en "Proyeccion" (indice 1 de k_Categories,
+            // ver SettingsPanel.cpp) -- Streaming (RTMP) vive ahi como
+            // subcategoria, junto a Red/Mobile/OSC (ver CategoryProjection.cpp).
+            bool clicked = RenderPill("Streaming", HomeIcons::DrawIcon_Broadcast, false, true, gap);
+            if (clicked) {
+                m_ShowConfig = true;
+                m_SettingsPanel.SetInitialCategory(1);
+            }
+        }
+        RenderStylesPopup();
     }
 
     RenderModeToolbarStatusActions(ImGui::GetWindowWidth(), railH);
@@ -1237,16 +1211,54 @@ void UIManager::RenderNotesWindow()
         s_WasOpenLastFrame = false;
 }
 
+void UIManager::RenderStylesPopup()
+{
+    // Sin color de fondo propio -- hereda ImGuiCol_PopupBg del tema activo
+    // (ver SettingsManager::ApplyTheme), como cualquier otro popup sin
+    // override. Antes tenia un ImVec4 fijo aca que lo tapaba y quedaba
+    // desentonado con el tema elegido en Ajustes > Apariencia.
+    ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_Appearing);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(14.0f, 12.0f));
+
+    if (ImGui::BeginPopup("##modeTbStylesPopup"))
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
+        ImGui::TextUnformatted("ESTILOS");
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        auto& core  = Core::PresentationCore::Get();
+        auto  names = core.GetSavedStyleNames();
+
+        if (names.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+            ImGui::TextWrapped("Todavia no guardaste ningun estilo (Diseño > Estilos).");
+            ImGui::PopStyleColor();
+        } else {
+            for (const auto& name : names) {
+                if (ImGui::Selectable(name.c_str())) {
+                    core.ApplyStyleByName(name);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+}
+
 void UIManager::RenderQuickSwitcher()
 {
     struct QSItem { WorkspaceMode mode; DrawIconFn icon; const char* label; };
     static const QSItem kItems[] = {
         { WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
-        { WorkspaceMode::Yggdrasil,  AppIcons::DrawIcon_Antenna,    "Conexiones" },
-        { WorkspaceMode::Biblia,     Library::DrawIcon_Cross,       "Biblia"     },
     };
-    constexpr int kCount = 4;
+    constexpr int kCount = 2;
 
     ImGuiIO& io = ImGui::GetIO();
     if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Space, false))
@@ -1280,10 +1292,11 @@ void UIManager::RenderQuickSwitcher()
     ImGui::SetNextWindowSize(winSize);
     ImGui::SetNextWindowFocus();
 
+    // Sin colores propios -- hereda WindowBg/Border del tema activo (ver
+    // SettingsManager::ApplyTheme), antes fijos y desentonados con el tema
+    // elegido en Ajustes > Apariencia.
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(10.0f, 10.0f));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.070f, 0.075f, 0.100f, 0.97f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.300f, 0.320f, 0.420f, 0.90f));
 
     ImGui::Begin("##QuickSwitcher", &m_QuickSwitchOpen,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
@@ -1316,7 +1329,6 @@ void UIManager::RenderQuickSwitcher()
     }
 
     ImGui::End();
-    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
 }
 
@@ -1326,11 +1338,12 @@ void UIManager::RenderMainMenuBar()
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
+    // Sin MenuBarBg/Text propios -- heredan del tema activo (ver
+    // SettingsManager::ApplyTheme), antes fijos y ademas ignorando el
+    // color realmente elegido en Ajustes > Apariencia.
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 4.0f));
-    ImGui::PushStyleColor(ImGuiCol_MenuBarBg,        ImVec4(0.052f, 0.056f, 0.078f, 1.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(14.0f, 10.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text,             ImVec4(0.860f, 0.880f, 0.940f, 1.0f));
 
     if (ImGui::BeginMainMenuBar())
     {
@@ -1342,9 +1355,7 @@ void UIManager::RenderMainMenuBar()
                 m_ShowConfig = true;
 
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
             ImGui::Separator();
-            ImGui::PopStyleColor();
             ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
@@ -1384,9 +1395,7 @@ void UIManager::RenderMainMenuBar()
                 OpenHub();
 
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
             ImGui::Separator();
-            ImGui::PopStyleColor();
             ImGui::Spacing();
 
             auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
@@ -1408,11 +1417,6 @@ void UIManager::RenderMainMenuBar()
                 ProyecThor::Settings::SettingsManager::Get().Save();
             }
 
-            if (ImGui::MenuItem("Barra de modos (Streaming/Conexiones)", nullptr, general.showModeToolbar))
-            {
-                general.showModeToolbar = !general.showModeToolbar;
-                ProyecThor::Settings::SettingsManager::Get().Save();
-            }
 
             ImGui::Spacing();
             ImGui::EndMenu();
@@ -1429,9 +1433,7 @@ void UIManager::RenderMainMenuBar()
                 ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/wiki");
 
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
             ImGui::Separator();
-            ImGui::PopStyleColor();
             ImGui::Spacing();
 
             if (ImGui::MenuItem(str.menuDocs, "F1"))
@@ -1472,14 +1474,30 @@ void UIManager::RenderMainMenuBar()
             ImGui::PopStyleColor();
 
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.200f, 0.210f, 0.300f, 0.600f));
             ImGui::Separator();
-            ImGui::PopStyleColor();
             ImGui::Spacing();
 
             if (ImGui::MenuItem(str.menuAbout))
                 g_ShowAbout = true;
 
+            ImGui::Spacing();
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Pantallas"))
+        {
+            // Salto directo a Ajustes > Pantallas (indice 3 de k_Categories,
+            // ver SettingsPanel.cpp -- categoria de Stage, renombrada a
+            // "Pantallas"): que monitor/LAN usa, layout de celdas, etc. son
+            // varios ajustes relacionados entre si (a diferencia de un
+            // toggle simple), asi que abre esa seccion en vez de intentar
+            // duplicarlos sueltos en un menu.
+            ImGui::Spacing();
+            if (ImGui::MenuItem("Configuración de Stage"))
+            {
+                m_ShowConfig = true;
+                m_SettingsPanel.SetInitialCategory(2);
+            }
             ImGui::Spacing();
             ImGui::EndMenu();
         }
@@ -1497,7 +1515,6 @@ void UIManager::RenderMainMenuBar()
         ImGui::EndMainMenuBar();
     }
 
-    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
 }
 

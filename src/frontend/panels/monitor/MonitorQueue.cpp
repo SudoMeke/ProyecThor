@@ -56,7 +56,13 @@ static RowColors GetRowColors(bool isPlaying, bool isSelected, int rowIndex)
     }
     return c;
 }
-static void DrawBtnIcon(const char* iconName, float leftPad = 12.0f, float size = 18.0f)
+// tint: pedido explicito -- antes siempre blanco (el default de AddImage),
+// invisible contra botones con fondo claro (temas claros/Cola ya no fuerza
+// verde). Cada call site pasa el MISMO color que ya usa de texto para ese
+// boton (QueueColorBtn textCol), que ya esta elegido para contrastar contra
+// su propio fondo.
+static void DrawBtnIcon(const char* iconName, float leftPad = 12.0f, float size = 18.0f,
+                        ImVec4 tint = { 1.0f, 1.0f, 1.0f, 1.0f })
 {
     if (StyleGeneralApp::Icons.count(iconName) == 0) return;
     void* icon = StyleGeneralApp::Icons[iconName].textureID;
@@ -71,7 +77,9 @@ static void DrawBtnIcon(const char* iconName, float leftPad = 12.0f, float size 
     ImGui::GetWindowDrawList()->AddImage(
         icon,
         { bMin.x + leftPad, y },
-        { bMin.x + leftPad + sz, y + sz });
+        { bMin.x + leftPad + sz, y + sz },
+        ImVec2(0, 0), ImVec2(1, 1),
+        ImGui::ColorConvertFloat4ToU32(tint));
 }
 void MonitorView::RenderQueue(float w)
 {
@@ -427,7 +435,7 @@ void MonitorView::RenderQueue(float w)
             if (isEmpty) ImGui::BeginDisabled();
             bool apClicked = QueueColorBtn(apLabel, { innerW, apBtnH }, apBase, apHov, apAct,
                               k_QueueAccent, k_R * 0.7f);
-            DrawBtnIcon(isActive ? "stop" : "play", 14.0f, 20.0f);
+            DrawBtnIcon(isActive ? "stop" : "play", 14.0f, 20.0f, k_QueueAccent);
             if (apClicked)
             {
                 m_QueueEngine.TogglePlayStop();
@@ -445,7 +453,7 @@ void MonitorView::RenderQueue(float w)
             if (!hasPrev) ImGui::BeginDisabled();
             bool prevClicked = QueueColorBtn("      Anterior", { bw2, btnH },
                               k_BtnGreen, k_BtnGreenH, k_BtnGreenA, k_QueueAccent, k_R * 0.7f);
-            DrawBtnIcon("skip_prev", 10.0f, 16.0f);
+            DrawBtnIcon("skip_prev", 10.0f, 16.0f, k_QueueAccent);
             if (prevClicked)
                 PlayQueueItem(currentIdx - 1);
             if (!hasPrev) ImGui::EndDisabled();
@@ -455,7 +463,7 @@ void MonitorView::RenderQueue(float w)
             if (!hasNext) ImGui::BeginDisabled();
             bool nextClicked = QueueColorBtn("      Siguiente", { bw2, btnH },
                               k_BtnGreen, k_BtnGreenH, k_BtnGreenA, k_QueueAccent, k_R * 0.7f);
-            DrawBtnIcon("skip_next", 10.0f, 16.0f);
+            DrawBtnIcon("skip_next", 10.0f, 16.0f, k_QueueAccent);
             if (nextClicked)
                 PlayQueueItem(currentIdx + 1);
             if (!hasNext) ImGui::EndDisabled();
@@ -467,7 +475,7 @@ void MonitorView::RenderQueue(float w)
             bool addClicked = QueueColorBtn("      Agregar", { bw2, btnH },
                               k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralA,
                               k_BtnNeutralT, k_R * 0.7f);
-            DrawBtnIcon("add_to_queue", 10.0f, 16.0f);
+            DrawBtnIcon("add_to_queue", 10.0f, 16.0f, k_BtnNeutralT);
             if (addClicked)
             {
                 auto sel = Core::PresentationCore::Get().PeekSelection();
@@ -486,7 +494,7 @@ void MonitorView::RenderQueue(float w)
             if (isEmpty) ImGui::BeginDisabled();
             bool clearClicked = QueueColorBtn("      Limpiar", { bw2, btnH },
                               k_BtnDel, k_BtnDelH, k_BtnDelA, k_BtnDelT, k_R * 0.7f);
-            DrawBtnIcon("cleaning_services", 10.0f, 16.0f);
+            DrawBtnIcon("cleaning_services", 10.0f, 16.0f, k_BtnDelT);
             if (clearClicked)
             {
                 m_QueueEngine.Clear();

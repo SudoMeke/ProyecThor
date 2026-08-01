@@ -48,4 +48,18 @@ namespace ProyecThor {
     // maquina.
     inline std::string BrandingPath()  { return GetAssetsPath() + "/branding/";  }
 
+    // Raiz real de AppData\ProyecThor (un nivel arriba de assets/): ahi
+    // tambien viven settings.json, songs_authors.ini, themes/, etc. Usada
+    // por SyncServer para sincronizar TODO el arbol de datos del usuario,
+    // no solo assets/ -- ver SyncServer.cpp.
+    inline std::string GetAppDataRoot() {
+        std::string assets = GetAssetsPath(); // ".../ProyecThor/assets"
+        const std::string suffix = "/assets";
+        if (assets.size() > suffix.size() &&
+            assets.compare(assets.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            return assets.substr(0, assets.size() - suffix.size());
+        }
+        return assets;
+    }
+
 } // namespace ProyecThor

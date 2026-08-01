@@ -134,81 +134,88 @@ void SettingsPanel::RenderCategoryTheme() {
     ImGui::TextDisabled("Elige un tema predeterminado o personaliza los colores.");
     ImGui::Spacing();
 
-    SectionTitle("Temas predeterminados", "Temas");
+    if (SectionTitle("Temas predeterminados", "Temas")) {
+        struct PresetEntry { const char* label; ThemePreset preset; };
+        static const PresetEntry presets[] = {
+            { "Oscuro",           ThemePreset::Dark        },
+            { "Claro",            ThemePreset::Light       },
+            { "Naranja y Negro",  ThemePreset::OrangeBlack },
+            { "Jazz",             ThemePreset::Jazz        },
+            { "Ko-fi",            ThemePreset::Kofi        },
+            { "Verde",            ThemePreset::Deadlock    },
+            { "Galaxia",          ThemePreset::Galaxy      },
+        };
 
-    struct PresetEntry { const char* label; ThemePreset preset; };
-    static const PresetEntry presets[] = {
-        { "Oscuro",           ThemePreset::Dark        },
-        { "Claro",            ThemePreset::Light       },
-        { "Naranja y Negro",  ThemePreset::OrangeBlack },
-        { "Jazz",             ThemePreset::Jazz        },
-        { "Ko-fi",            ThemePreset::Kofi        },
-        { "Verde",            ThemePreset::Deadlock    },
-        { "Galaxia",          ThemePreset::Galaxy      },
-    };
-
-    int perRow = std::max(1, (int)(ImGui::GetContentRegionAvail().x / 90.0f));
-    for (int i = 0; i < (int)(sizeof(presets) / sizeof(presets[0])); i++) {
-        if (PresetSwatch(presets[i].label, presets[i].preset, theme.preset)) {
-            ProyecThor::Settings::SettingsManager::Get().ApplyPreset(presets[i].preset);
+        int perRow = std::max(1, (int)(ImGui::GetContentRegionAvail().x / 90.0f));
+        for (int i = 0; i < (int)(sizeof(presets) / sizeof(presets[0])); i++) {
+            if (PresetSwatch(presets[i].label, presets[i].preset, theme.preset)) {
+                ProyecThor::Settings::SettingsManager::Get().ApplyPreset(presets[i].preset);
+            }
+            if ((i + 1) % perRow != 0) ImGui::SameLine();
         }
-        if ((i + 1) % perRow != 0) ImGui::SameLine();
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Preset activo: %s",
+            ProyecThor::Settings::ThemePresetName(theme.preset));
     }
 
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-    ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Preset activo: %s",
-        ProyecThor::Settings::ThemePresetName(theme.preset));
-
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
-
-    SectionTitle("Personalizar colores", "Colores");
-    ImGui::TextDisabled("Editar cualquier color aquí lo marca como tema \"Personalizado\".");
-    ImGui::Spacing();
-
+    // Compartidas por todos los bloques de "Colores"/"Diseño" de abajo --
+    // declaradas afuera de cualquier if(SectionTitle) para que `changed`
+    // acumule sin importar cual bloque este visible este frame, y el
+    // chequeo final (ver mas abajo) sea incondicional.
     bool changed = false;
     static ImGuiColorEditFlags flags =
         ImGuiColorEditFlags_AlphaBar |
         ImGuiColorEditFlags_AlphaPreviewHalf |
         ImGuiColorEditFlags_NoInputs;
 
-    SectionTitle("Fondos y superficies", "Colores");
-    changed |= ImGui::ColorEdit4("Fondo principal##base", theme.base, flags);
-    HelpTooltip("Color de ventanas principales.");
-    changed |= ImGui::ColorEdit4("Superficie 0##s0", theme.surface0, flags);
-    changed |= ImGui::ColorEdit4("Superficie 1##s1", theme.surface1, flags);
-    changed |= ImGui::ColorEdit4("Superficie 2##s2", theme.surface2, flags);
-    changed |= ImGui::ColorEdit4("Superficie 3##s3", theme.surface3, flags);
+    if (SectionTitle("Personalizar colores", "Colores")) {
+        ImGui::TextDisabled("Editar cualquier color aquí lo marca como tema \"Personalizado\".");
+        ImGui::Spacing();
+    }
 
-    SectionTitle("Acento", "Colores");
-    changed |= ImGui::ColorEdit4("Acento##ac",       theme.accent,      flags);
-    changed |= ImGui::ColorEdit4("Acento claro##acl",theme.accentLight, flags);
-    changed |= ImGui::ColorEdit4("Acento oscuro##acd",theme.accentDim,  flags);
-    changed |= ImGui::ColorEdit4("Acento tenue##acf",theme.accentFaint, flags);
+    if (SectionTitle("Fondos y superficies", "Colores")) {
+        changed |= ImGui::ColorEdit4("Fondo principal##base", theme.base, flags);
+        HelpTooltip("Color de ventanas principales.");
+        changed |= ImGui::ColorEdit4("Superficie 0##s0", theme.surface0, flags);
+        changed |= ImGui::ColorEdit4("Superficie 1##s1", theme.surface1, flags);
+        changed |= ImGui::ColorEdit4("Superficie 2##s2", theme.surface2, flags);
+        changed |= ImGui::ColorEdit4("Superficie 3##s3", theme.surface3, flags);
+    }
 
-    SectionTitle("Bordes", "Colores");
-    changed |= ImGui::ColorEdit4("Borde##bd",        theme.border,      flags);
-    changed |= ImGui::ColorEdit4("Borde tenue##bdf",  theme.borderFaint, flags);
+    if (SectionTitle("Acento", "Colores")) {
+        changed |= ImGui::ColorEdit4("Acento##ac",       theme.accent,      flags);
+        changed |= ImGui::ColorEdit4("Acento claro##acl",theme.accentLight, flags);
+        changed |= ImGui::ColorEdit4("Acento oscuro##acd",theme.accentDim,  flags);
+        changed |= ImGui::ColorEdit4("Acento tenue##acf",theme.accentFaint, flags);
+    }
 
-    SectionTitle("Texto", "Colores");
-    changed |= ImGui::ColorEdit4("Texto principal##tp",   theme.textPrimary, flags);
-    changed |= ImGui::ColorEdit4("Texto secundario##td",  theme.textDim,     flags);
-    changed |= ImGui::ColorEdit4("Texto inactivo##tf",    theme.textFaint,   flags);
+    if (SectionTitle("Bordes", "Colores")) {
+        changed |= ImGui::ColorEdit4("Borde##bd",        theme.border,      flags);
+        changed |= ImGui::ColorEdit4("Borde tenue##bdf",  theme.borderFaint, flags);
+    }
 
-    SectionTitle("Estados", "Colores");
-    changed |= ImGui::ColorEdit4("Error##dg",   theme.danger,  flags);
-    changed |= ImGui::ColorEdit4("Éxito##sc",   theme.success, flags);
+    if (SectionTitle("Texto", "Colores")) {
+        changed |= ImGui::ColorEdit4("Texto principal##tp",   theme.textPrimary, flags);
+        changed |= ImGui::ColorEdit4("Texto secundario##td",  theme.textDim,     flags);
+        changed |= ImGui::ColorEdit4("Texto inactivo##tf",    theme.textFaint,   flags);
+    }
 
-    SectionTitle("Forma", "Diseño");
-    changed |= ImGui::SliderFloat("Redondeo de ventanas", &theme.windowRounding, 0.0f, 24.0f, "%.0f");
-    changed |= ImGui::SliderFloat("Redondeo de controles", &theme.frameRounding, 0.0f, 16.0f, "%.0f");
-    changed |= ImGui::SliderFloat("Grosor de scrollbar",   &theme.scrollbarSize, 4.0f, 16.0f, "%.0f");
+    if (SectionTitle("Estados", "Colores")) {
+        changed |= ImGui::ColorEdit4("Error##dg",   theme.danger,  flags);
+        changed |= ImGui::ColorEdit4("Éxito##sc",   theme.success, flags);
+    }
+
+    if (SectionTitle("Forma", "Diseño")) {
+        changed |= ImGui::SliderFloat("Redondeo de ventanas", &theme.windowRounding, 0.0f, 24.0f, "%.0f");
+        changed |= ImGui::SliderFloat("Redondeo de controles", &theme.frameRounding, 0.0f, 16.0f, "%.0f");
+        changed |= ImGui::SliderFloat("Grosor de scrollbar",   &theme.scrollbarSize, 4.0f, 16.0f, "%.0f");
+    }
 
     if (changed) {
         theme.preset = ThemePreset::Custom;
         ProyecThor::Settings::SettingsManager::Get().ApplyTheme(); // preview en vivo
     }
-
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
 
     // ── Fuente de la interfaz ────────────────────────────────────────────────
     // Mismo selector que "Edición de estilo" (ver TabTypography::
@@ -217,67 +224,71 @@ void SettingsPanel::RenderCategoryTheme() {
     // .ttf suelto del disco cada vez -- se elige de la misma lista/carpeta
     // que usa el resto de la app. El cambio se valida (IsValidFontFile) y
     // se aplica la próxima vez que se abra ProyecThor -- ver main.cpp.
-    SectionTitle("Fuente de la interfaz", "Fuentes");
-    ImGui::TextDisabled("Cambia la tipografía de toda la app.");
-    ImGui::Spacing();
+    if (SectionTitle("Fuente de la interfaz", "Fuentes")) {
+        ImGui::TextDisabled("Cambia la tipografía de toda la app.");
+        ImGui::Spacing();
 
-    std::vector<std::string> fontList;
-    ProyecThor::Core::PresentationCore::Get().SyncFontListFromDisk(fontList);
+        std::vector<std::string> fontList;
+        ProyecThor::Core::PresentationCore::Get().SyncFontListFromDisk(fontList);
 
-    std::string currentFontName = theme.customFontPath.empty()
-        ? "Predeterminada"
-        : std::filesystem::path(theme.customFontPath).stem().string();
+        std::string currentFontName = theme.customFontPath.empty()
+            ? "Predeterminada"
+            : std::filesystem::path(theme.customFontPath).stem().string();
 
-    const float importBtnW = 90.0f;
-    const float comboGap    = 6.0f;
-    float comboW = ImGui::GetContentRegionAvail().x - importBtnW - comboGap;
+        const float importBtnW = 90.0f;
+        const float comboGap    = 6.0f;
+        float comboW = ImGui::GetContentRegionAvail().x - importBtnW - comboGap;
 
-    ImGui::SetNextItemWidth(comboW);
-    if (ImGui::BeginCombo("##uiFont", currentFontName.c_str())) {
-        for (const auto& name : fontList) {
-            bool sel = (name == currentFontName);
-            if (ImGui::Selectable(name.c_str(), sel)) {
-                theme.customFontPath = ResolveFontPathByName(name);
-                ProyecThor::Settings::SettingsManager::Get().Save();
-                m_ShowFontRestartPrompt = true;
+        ImGui::SetNextItemWidth(comboW);
+        if (ImGui::BeginCombo("##uiFont", currentFontName.c_str())) {
+            for (const auto& name : fontList) {
+                bool sel = (name == currentFontName);
+                if (ImGui::Selectable(name.c_str(), sel)) {
+                    theme.customFontPath = ResolveFontPathByName(name);
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                    m_ShowFontRestartPrompt = true;
+                }
+                if (sel) ImGui::SetItemDefaultFocus();
             }
-            if (sel) ImGui::SetItemDefaultFocus();
+            ImGui::EndCombo();
         }
-        ImGui::EndCombo();
-    }
 
-    ImGui::SameLine(0.0f, comboGap);
-    if (ImGui::Button("+ Fuente", ImVec2(importBtnW, 0.0f))) {
-        std::string picked = PickFontFileDialog();
-        if (!picked.empty()) {
-            try {
-                std::filesystem::path fontsDir = std::filesystem::path(ProyecThor::GetAssetsPath()) / "fonts";
-                std::filesystem::create_directories(fontsDir);
+        ImGui::SameLine(0.0f, comboGap);
+        if (ImGui::Button("+ Fuente", ImVec2(importBtnW, 0.0f))) {
+            std::string picked = PickFontFileDialog();
+            if (!picked.empty()) {
+                try {
+                    std::filesystem::path fontsDir = std::filesystem::path(ProyecThor::GetAssetsPath()) / "fonts";
+                    std::filesystem::create_directories(fontsDir);
 
-                std::filesystem::path src(picked);
-                std::filesystem::path dst = fontsDir / src.filename();
-                std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);
+                    std::filesystem::path src(picked);
+                    std::filesystem::path dst = fontsDir / src.filename();
+                    std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);
 
-                theme.customFontPath = dst.string();
-                ProyecThor::Settings::SettingsManager::Get().Save();
-                m_ShowFontRestartPrompt = true;
-            } catch (const std::exception&) {
-                // Import fallido (permisos, disco, etc.): se deja la
-                // selección de fuente tal como estaba.
+                    theme.customFontPath = dst.string();
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                    m_ShowFontRestartPrompt = true;
+                } catch (const std::exception&) {
+                    // Import fallido (permisos, disco, etc.): se deja la
+                    // selección de fuente tal como estaba.
+                }
             }
         }
-    }
 
-    if (!theme.customFontPath.empty() && !IsValidFontFile(theme.customFontPath)) {
-        ImGui::TextColored(ImVec4(0.93f, 0.35f, 0.35f, 1.0f),
-            "\"%s\" no se pudo leer -- se usará la predeterminada.", currentFontName.c_str());
+        if (!theme.customFontPath.empty() && !IsValidFontFile(theme.customFontPath)) {
+            ImGui::TextColored(ImVec4(0.93f, 0.35f, 0.35f, 1.0f),
+                "\"%s\" no se pudo leer -- se usará la predeterminada.", currentFontName.c_str());
+        }
     }
 
     // La fuente de la interfaz cambia el atlas de ImGui completo (y el de
     // la pantalla de carga) -- eso no se puede "reemplazar en caliente" de
     // forma segura mientras la app esta corriendo con VLC/GL en varias
     // ventanas a la vez, asi que en vez de aplicarla en silencio recien en
-    // el proximo arranque, se ofrece reiniciar ya mismo.
+    // el proximo arranque, se ofrece reiniciar ya mismo. Fuera del
+    // if(SectionTitle) a proposito: el modal tiene que seguir pudiendo
+    // dibujarse aunque el usuario cambie de subcategoria mientras esta
+    // abierto.
     if (m_ShowFontRestartPrompt) {
         ImGui::OpenPopup("Reiniciar para aplicar la fuente");
         m_ShowFontRestartPrompt = false;
@@ -299,84 +310,80 @@ void SettingsPanel::RenderCategoryTheme() {
         ImGui::EndPopup();
     }
 
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
-
     // ── Colores de categorías (sidebar de Biblioteca) ───────────────────────
     // Independiente del tema general: solo afecta el color de identidad de
     // cada categoría en el sidebar izquierdo de la Biblioteca (Letra/Video/
     // Imagen/Biblia/Documentos/Audio). Ver LibrarySidebar.cpp.
-    SectionTitle("Colores de categorías (Biblioteca)", "Colores");
-    ImGui::TextDisabled("Color de identidad de cada categoría en el sidebar de la Biblioteca.");
-    ImGui::Spacing();
+    if (SectionTitle("Colores de categorías (Biblioteca)", "Colores")) {
+        ImGui::TextDisabled("Color de identidad de cada categoría en el sidebar de la Biblioteca.");
+        ImGui::Spacing();
 
-    auto& sidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
-    static const char* kCatLabels[6] = { "Letra", "Video", "Imagen", "Biblia", "Documentos", "Audio" };
-    bool sidebarChanged = false;
-    for (int i = 0; i < 6; i++) {
-        std::string id = std::string(kCatLabels[i]) + "##libcat" + std::to_string(i);
-        sidebarChanged |= ImGui::ColorEdit4(id.c_str(), sidebar.categoryColor[i], flags);
+        auto& sidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+        static const char* kCatLabels[6] = { "Letra", "Video", "Imagen", "Biblia", "Documentos", "Audio" };
+        bool sidebarChanged = false;
+        for (int i = 0; i < 6; i++) {
+            std::string id = std::string(kCatLabels[i]) + "##libcat" + std::to_string(i);
+            sidebarChanged |= ImGui::ColorEdit4(id.c_str(), sidebar.categoryColor[i], flags);
+        }
+        if (sidebarChanged) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
     }
-    if (sidebarChanged) {
-        ProyecThor::Settings::SettingsManager::Get().Save();
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
 
     // ── Colores de categorías (sidebar de Home) ─────────────────────────────
     // Independiente del tema general: solo afecta el color de identidad de
     // cada sección en el sidebar de Home (Home/Reloj/Anuncios/Notas/Captura/
     // Transmisión). Ver HomeSidebar.cpp.
-    SectionTitle("Colores de categorías (Home)", "Colores");
-    ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Home.");
-    ImGui::Spacing();
+    if (SectionTitle("Colores de categorías (Home)", "Colores")) {
+        ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Home.");
+        ImGui::Spacing();
 
-    auto& homeSidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().homeSidebar;
-    static const char* kHomeCatLabels[6] = {
-        "Home", "Reloj y Contadores", "Anuncios", "Notas Rápidas", "Captura", "Transmisión en Red"
-    };
-    bool homeSidebarChanged = false;
-    for (int i = 0; i < 6; i++) {
-        std::string id = std::string(kHomeCatLabels[i]) + "##homecat" + std::to_string(i);
-        homeSidebarChanged |= ImGui::ColorEdit4(id.c_str(), homeSidebar.categoryColor[i], flags);
+        auto& homeSidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().homeSidebar;
+        static const char* kHomeCatLabels[6] = {
+            "Home", "Reloj y Contadores", "Anuncios", "Notas Rápidas", "Captura", "Transmisión en Red"
+        };
+        bool homeSidebarChanged = false;
+        for (int i = 0; i < 6; i++) {
+            std::string id = std::string(kHomeCatLabels[i]) + "##homecat" + std::to_string(i);
+            homeSidebarChanged |= ImGui::ColorEdit4(id.c_str(), homeSidebar.categoryColor[i], flags);
+        }
+        if (homeSidebarChanged) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
     }
-    if (homeSidebarChanged) {
-        ProyecThor::Settings::SettingsManager::Get().Save();
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
 
     // ── Colores de categorías (hub de Control) ──────────────────────────────
-    SectionTitle("Colores de categorías (Control)", "Colores");
-    ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Control.");
-    ImGui::Spacing();
+    if (SectionTitle("Colores de categorías (Control)", "Colores")) {
+        ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Control.");
+        ImGui::Spacing();
 
-    auto& controlHub = ProyecThor::Settings::SettingsManager::Get().GetSettings().controlHub;
-    static const char* kControlCatLabels[2] = { "Control", "Stage Display" };
-    bool controlHubChanged = false;
-    for (int i = 0; i < 2; i++) {
-        std::string id = std::string(kControlCatLabels[i]) + "##controlcat" + std::to_string(i);
-        controlHubChanged |= ImGui::ColorEdit4(id.c_str(), controlHub.categoryColor[i], flags);
+        auto& controlHub = ProyecThor::Settings::SettingsManager::Get().GetSettings().controlHub;
+        static const char* kControlCatLabels[2] = { "Control", "Stage Display" };
+        bool controlHubChanged = false;
+        for (int i = 0; i < 2; i++) {
+            std::string id = std::string(kControlCatLabels[i]) + "##controlcat" + std::to_string(i);
+            controlHubChanged |= ImGui::ColorEdit4(id.c_str(), controlHub.categoryColor[i], flags);
+        }
+        if (controlHubChanged) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
     }
-    if (controlHubChanged) {
-        ProyecThor::Settings::SettingsManager::Get().Save();
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, 15.0f));
 
     // ── Colores de categorías (hub de Diseño) ───────────────────────────────
-    SectionTitle("Colores de categorías (Diseño)", "Colores");
-    ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Diseño.");
-    ImGui::Spacing();
+    if (SectionTitle("Colores de categorías (Diseño)", "Colores")) {
+        ImGui::TextDisabled("Color de identidad de cada sección en el sidebar de Diseño.");
+        ImGui::Spacing();
 
-    auto& stylesHub = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
-    static const char* kStylesCatLabels[3] = { "Fondos", "Estilos", "Transiciones" };
-    bool stylesHubChanged = false;
-    for (int i = 0; i < 3; i++) {
-        std::string id = std::string(kStylesCatLabels[i]) + "##stylescat" + std::to_string(i);
-        stylesHubChanged |= ImGui::ColorEdit4(id.c_str(), stylesHub.categoryColor[i], flags);
-    }
-    if (stylesHubChanged) {
-        ProyecThor::Settings::SettingsManager::Get().Save();
+        auto& stylesHub = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
+        static const char* kStylesCatLabels[3] = { "Fondos", "Estilos", "Transiciones" };
+        bool stylesHubChanged = false;
+        for (int i = 0; i < 3; i++) {
+            std::string id = std::string(kStylesCatLabels[i]) + "##stylescat" + std::to_string(i);
+            stylesHubChanged |= ImGui::ColorEdit4(id.c_str(), stylesHub.categoryColor[i], flags);
+        }
+        if (stylesHubChanged) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
     }
 }
 

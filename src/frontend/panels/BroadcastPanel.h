@@ -7,10 +7,10 @@
 namespace ProyecThor::UI {
 
 // ── BroadcastPanel ───────────────────────────────────────────────────────────
-// Transmision en vivo por RTMP, estilo OBS. Vive dentro del rail de
-// Yggdrasil (Capture/Layer/Iniciar, ver YggdrasilPanel.cpp) -- no es un
-// IPanel/modo propio, mismo criterio que StreamingPanel ("Red") y
-// TeamChatPanel ("Chat") dentro de ese mismo rail.
+// Transmision en vivo por RTMP, estilo OBS. Vive dentro de un popup de Vista
+// en Vivo (Capture/Layer/Iniciar, ver ViewPanel::RenderStreamingPopup) -- no
+// es un IPanel/modo propio, mismo criterio que StreamingPanel ("Red") y
+// TeamChatPanel ("Chat").
 //  - Capture: la MISMA fuente de captura que ya usa el resto de ProyecThor
 //    (CapturePanel — camara/ventana/monitor), pero el boton clave aca es
 //    "Mostrar en Layer" en vez de "Enviar a Proyector".

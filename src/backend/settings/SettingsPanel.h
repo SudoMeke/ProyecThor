@@ -2,8 +2,9 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
-#include <utility>
 #include "frontend/panels/StageDisplayPanel.h"
+
+namespace ProyecThor::UI { class OSCPanel; class BroadcastPanel; class StreamingPanel; class SyncPanel; }
 
 namespace ProyecThor::UI::Settings {
 
@@ -13,6 +14,28 @@ namespace ProyecThor::UI::Settings {
         void Render(bool* isOpen);
         void InitializeTheme();
         void SetInitialCategory(int idx) { m_SelectedCategory = idx; }
+
+        // Misma instancia que UIManager::GetOSCPanel() -- subcategoria "OSC"
+        // dentro de Ajustes > Proyeccion (ver CategoryProjection.cpp) pero
+        // UIManager sigue siendo el dueño, para poder llamarle Update()
+        // incondicionalmente cada frame sin importar si Ajustes esta
+        // abierto. Ver cableado en UIManager::Initialize.
+        void SetOSCPanelRef(ProyecThor::UI::OSCPanel* ref) { m_OSCPanelRef = ref; }
+
+        // Misma instancia que UIManager::GetBroadcastPanel() -- subcategoria
+        // "Streaming" (RTMP: Captura/Capa/Iniciar) dentro de Ajustes >
+        // Proyeccion, junto a Red/Mobile/OSC.
+        void SetBroadcastPanelRef(ProyecThor::UI::BroadcastPanel* ref) { m_BroadcastPanelRef = ref; }
+
+        // Misma instancia que UIManager::GetRedPanel() -- subcategoria "Red"
+        // dentro de Ajustes > Proyeccion (antes vivia en el sidebar de
+        // Library junto a Reloj/Render/Mobile).
+        void SetStreamingPanelRef(ProyecThor::UI::StreamingPanel* ref) { m_StreamingPanelRef = ref; }
+
+        // Misma instancia que UIManager::GetSyncPanel() -- subcategoria
+        // "Mobile" dentro de Ajustes > Proyeccion (control del SyncServer/
+        // app movil companion).
+        void SetSyncPanelRef(ProyecThor::UI::SyncPanel* ref) { m_SyncPanelRef = ref; }
     private:
         int         m_SelectedCategory  = 0;
         int         m_PrevCategory      = -1;   // para detectar cambio de categoría
@@ -22,18 +45,26 @@ namespace ProyecThor::UI::Settings {
 
         bool  m_WasOpenLastFrame = false; // para detectar la transición cerrado -> abierto (sin animar la apertura)
 
-        // ── Subcategorías (navegación por ancla dentro de la misma página) ──
+        // Buscador del sidebar (ver RenderSidebar) -- filtra k_Categories por
+        // etiqueta/descripción, sin agrupar por tema mientras hay texto.
+        char m_SearchBuffer[64] = "";
+
+        // ── Subcategorías (cada una es su propia "página", no un ancla de
+        // scroll) ─────────────────────────────────────────────────────────
         // Cada llamada a SectionTitle() durante el render de la categoría
-        // activa registra aquí su (etiqueta, posición Y local en
-        // "##content_scroll"). El sidebar, para la categoría seleccionada,
-        // muestra esta lista como subcategorías clickeables -- clickear una
-        // no cambia de categoría, solo hace scroll hasta esa sección (sigue
-        // siendo la misma página). Se recalcula cada frame en RenderContent(),
-        // así que no hace falta declarar nada a mano por categoría.
-        std::vector<std::pair<std::string, float>> m_SectionAnchors;
-        std::string m_ActiveSubsection;   // cual sección esta a la vista segun el scroll actual
-        bool        m_HasPendingScroll = false;
-        float       m_PendingScrollY   = 0.0f;
+        // activa se registra aquí (su nombre de grupo, en orden de
+        // aparición) y SOLO dibuja su cuerpo si es la subcategoría
+        // seleccionada -- las demás no dibujan nada ese frame (ver
+        // SectionTitle). El sidebar, para la categoría seleccionada,
+        // muestra esta lista como subcategorías clickeables; clickear una
+        // cambia m_SelectedSubsection, reemplazando por completo lo que se
+        // ve en el área de contenido (pedido explícito: "dar más atención
+        // una por una" en vez de un scroll largo con todo junto). Se
+        // recalcula cada frame en RenderContent(), así que no hace falta
+        // declarar nada a mano por categoría.
+        std::vector<std::string> m_SectionAnchors;
+        std::string m_SelectedSubsection; // subcategoría actualmente visible (vacío = todavía sin definir, ver SectionTitle)
+        std::string m_PrevSubsection;     // para detectar cambio y resetear el scroll a 0
 
         // La fuente de la interfaz solo se aplica reiniciando (ver
         // CategoryTheme.cpp): al elegir una nueva se dispara este modal de
@@ -45,7 +76,6 @@ namespace ProyecThor::UI::Settings {
         void RenderSaveBar();
 
         void RenderCategoryTheme();
-        void RenderCategoryGeneral();
         void RenderCategoryProjection();
         void RenderCategoryStage();
         void RenderCategoryAudio();
@@ -54,18 +84,26 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryShortcuts();
 void RenderCategorySongs();
 
+        ProyecThor::UI::OSCPanel*       m_OSCPanelRef       = nullptr;
+        ProyecThor::UI::BroadcastPanel* m_BroadcastPanelRef = nullptr;
+        ProyecThor::UI::StreamingPanel* m_StreamingPanelRef = nullptr;
+        ProyecThor::UI::SyncPanel*      m_SyncPanelRef      = nullptr;
+
         // Antes vivia dentro del hub "Control" (ver ControlPanel, eliminado);
         // ahora es directamente el contenido de la categoria Stage de Ajustes.
         ProyecThor::UI::StageDisplayPanel m_StageDisplay;
 
         // Helpers
         // navGroup: agrupa varios SectionTitle bajo UNA sola entrada de
-        // subcategoría en el sidebar (la primera con ese grupo define la
-        // posición del ancla) -- por defecto (nullptr) cada título es su
-        // propia subcategoría, como antes. Ver uso agrupado en
-        // CategoryTheme.cpp (Temas/Colores/Fuentes/Diseño en vez de una
-        // subcategoría por cada bloque de color).
-        void SectionTitle(const char* label, const char* navGroup = nullptr);
+        // subcategoría en el sidebar (el primero con ese grupo decide si el
+        // grupo entero se ve o no) -- por defecto (nullptr) cada título es
+        // su propia subcategoría. Ver uso agrupado en CategoryTheme.cpp
+        // (Temas/Colores/Fuentes/Diseño) y CategoryProjection.cpp (los 3
+        // bloques de Streaming). Devuelve true si esta sección es la
+        // seleccionada actualmente (el caller debe envolver su contenido en
+        // "if (SectionTitle(...)) { ... }" -- si devuelve false no dibuja
+        // nada, ni siquiera el título, para no filtrar nada de otra página).
+        bool SectionTitle(const char* label, const char* navGroup = nullptr);
         void HelpTooltip(const char* desc);
         void AnimatedProgressBar(float fraction, ImVec2 size, ImVec4 col);
         void SpinnerWidget(float radius, float thickness, const ImVec4& color);

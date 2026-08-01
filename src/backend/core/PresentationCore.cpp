@@ -51,6 +51,14 @@ namespace ProyecThor::Core {
         // background) porque corre en un punto distinto del pipeline (sobre
         // el ImDrawData ya compuesto, no sobre una textura de fondo).
         Shaders::CompositePostChain compositeFX;
+
+        // Overlay (ver SetOverlayMedia/ClearOverlay) -- un PNG estatico con
+        // transparencia, no necesita nada del aparato de BackgroundLayer
+        // (VLC/crossfade/audio): se carga una vez con stb_image, se sube a
+        // una sola textura GL y listo.
+        GLuint overlayTex  = 0;
+        int    overlayTexW = 0;
+        int    overlayTexH = 0;
     };
 
     PresentationCore::PresentationCore()
@@ -180,6 +188,14 @@ bool PresentationCore::GetGlobalMute() const {
     }
     float PresentationCore::GetFillBlurBrightness() const {
         return m_Impl ? m_Impl->background.GetFillBlurBrightness() : 0.6f;
+    }
+
+    void PresentationCore::SetBackgroundPingPongLoop(bool enabled) {
+        if (m_Impl) m_Impl->background.SetPingPongLoop(enabled);
+    }
+
+    bool PresentationCore::GetBackgroundPingPongLoop() const {
+        return m_Impl ? m_Impl->background.GetPingPongLoop() : false;
     }
 
     void PresentationCore::SetFSREnabled(bool enabled) {
@@ -608,6 +624,66 @@ void PresentationCore::SetBackgroundAudio() {
     // debe seguir sonando por debajo del audio que se acaba de mandar en vivo.
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
+
+    void PresentationCore::SetOverlayMedia(const std::string& pngPath) {
+        if (!m_Impl) return;
+
+        int w = 0, h = 0, n = 0;
+        unsigned char* data = stbi_load(pngPath.c_str(), &w, &h, &n, 4);
+        if (!data) return;
+
+        if (m_Impl->overlayTex) {
+            GLuint old = m_Impl->overlayTex;
+            glDeleteTextures(1, &old);
+            m_Impl->overlayTex = 0;
+        }
+
+        GLuint tex = 0;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+
+        m_Impl->overlayTex  = tex;
+        m_Impl->overlayTexW = w;
+        m_Impl->overlayTexH = h;
+
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_OverlayPath = pngPath;
+        m_HasOverlay  = true;
+    }
+
+    void PresentationCore::ClearOverlay() {
+        if (m_Impl && m_Impl->overlayTex) {
+            GLuint old = m_Impl->overlayTex;
+            glDeleteTextures(1, &old);
+            m_Impl->overlayTex  = 0;
+            m_Impl->overlayTexW = 0;
+            m_Impl->overlayTexH = 0;
+        }
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_OverlayPath.clear();
+        m_HasOverlay = false;
+    }
+
+    bool PresentationCore::HasOverlay() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_HasOverlay;
+    }
+
+    std::string PresentationCore::GetOverlayPath() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayPath;
+    }
+
+    void* PresentationCore::GetOverlayTexture() {
+        if (!m_Impl || !m_Impl->overlayTex) return nullptr;
+        return (void*)(intptr_t)m_Impl->overlayTex;
+    }
 
     void PresentationCore::PreloadNextBackgroundMedia(const std::string& path, bool allowAudio) {
         // A proposito NO toca m_State/transitionTrigger: este preload debe

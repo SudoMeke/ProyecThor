@@ -811,7 +811,7 @@ void CapturePanel::RenderSourceSelector() {
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.06f, 0.09f, 0.55f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
     ImGui::PushStyleColor(ImGuiCol_Header,        ColA(DS::AccentColor, 55));
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ColA(DS::AccentColor, 80));
     ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ColA(DS::AccentColor, 110));
@@ -876,7 +876,7 @@ void CapturePanel::RenderPreview() {
 
     ImU32 borderCol = m_IsCapturing ? ColA(DS::AccentColor, 160) : ColA(DS::TextHint, 120);
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.03f, 0.035f, 0.05f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::GlassFillBot));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, DS::RadiusLarge);
     ImGui::BeginChild("##capPreview", ImVec2(avail, previewH), false, ImGuiWindowFlags_NoScrollbar);
 

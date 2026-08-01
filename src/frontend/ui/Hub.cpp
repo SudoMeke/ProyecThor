@@ -67,9 +67,22 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        11, "0.4.4",
+        "ACTUALIZACION", "ACTUALIZACION",
+        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Nueva seccion de Overlays: crea textos, formas e imagenes en un editor a pantalla "
+        "completa y proyectalos como una capa transparente encima del fondo y la letra "
+        "(antes tapaban el fondo por error). Vista en Vivo renovada: reproductor mas simple, "
+        "Overlays/Chat/Pads/Reloj ahora se abren dentro del mismo panel en vez de ventanas "
+        "flotantes sueltas, y se saco la tira de Stage duplicada. Nueva seccion \"Pantallas\" "
+        "en el menu para la configuracion de Stage. Corregidos varios colores que quedaban "
+        "fijos sin importar el tema elegido (menu superior, ventanas emergentes, Monitor de "
+        "Control) y los fondos de los paneles ahora son solidos en vez de verse transparentes."
+    },
+    {
         10, "0.4.3",
         "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
+        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
         "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
         "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
         "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
@@ -81,7 +94,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         9, "0.4.2",
         "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
+        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
         "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
         "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
         "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
@@ -92,7 +105,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         8, "0.4.1",
         "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg2.png",
+        "bg_splash3.png",
         "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
         "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
         "y vista en grilla/lista en Biblioteca > Videos, escenas rapidas "
@@ -113,7 +126,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         6, "0.3.5",
         "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg2.png",  // TODO: reemplazar por portada propia cuando este lista
+        "splash_bg1.png",  // TODO: reemplazar por portada propia cuando este lista
         "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
         "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "
         "teclado globales y mejoras de estabilidad en toda la aplicacion."
@@ -428,6 +441,7 @@ bool Hub::Render() {
     ImGuiViewport* vp = ImGui::GetMainViewport();
 
     UpdateBgParticles(dt, vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
+    UpdateNebulas(dt, vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
 
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
@@ -614,15 +628,15 @@ void Hub::RenderSidebar(float w, float h) {
         ImGui::PopStyleColor(4);
     };
 
-    // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia, 1=General,
-    // 2=Proyeccion, 3=Stage, 4=Audio, 5=Canciones, 6=Teclas, 7=Idioma,
-    // 8=Actualizaciones). Antes "Idioma"/"Actualizaciones" apuntaban a
-    // indices que ya no correspondian a esas categorias.
+    // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia,
+    // 1=Proyeccion, 2=Stage, 3=Audio, 4=Canciones, 5=Teclas, 6=Idioma,
+    // 7=Actualizaciones). "General" se quito del todo (pedido explicito, no
+    // se usaba), de ahi que ya no aparezca aca.
     QuickBtn("", "Apariencia",      0);
-    QuickBtn("", "Proyección",      2);
-    QuickBtn("", "Stage",           3);
-    QuickBtn("", "Idioma",          7);
-    QuickBtn("", "Actualizaciones", 8);
+    QuickBtn("", "Proyección",      1);
+    QuickBtn("", "Stage",           2);
+    QuickBtn("", "Idioma",          6);
+    QuickBtn("", "Actualizaciones", 7);
 
     ImGui::EndChild();
 }
@@ -660,37 +674,108 @@ void Hub::UpdateBgParticles(float dt, float w, float h) {
     }
 }
 
-void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
-    // Grilla como un tinte muy tenue del color de texto primario: se ve
-    // sutil tanto en temas oscuros (linea clara) como claros (linea oscura).
-    const ImU32 gridCol = ColA(HT::TextPri, 6);
-    for (float x = 0.0f; x < w; x += BG_GRID_SIZE)
-        dl->AddLine(ImVec2(origin.x + x, origin.y), ImVec2(origin.x + x, origin.y + h), gridCol, 0.5f);
-    for (float y = 0.0f; y < h; y += BG_GRID_SIZE)
-        dl->AddLine(ImVec2(origin.x, origin.y + y), ImVec2(origin.x + w, origin.y + y), gridCol, 0.5f);
+void Hub::InitNebulas(float w, float h) {
+    std::mt19937 rng(static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(m_Nebulas.data()) ^ 0x9E3779B9u));
+    auto frand = [&](float lo, float hi) -> float {
+        return lo + (hi - lo) * (static_cast<float>(rng()) / static_cast<float>(rng.max()));
+    };
+    for (auto& n : m_Nebulas) {
+        n.x  = frand(0.0f, w);
+        n.y  = frand(0.0f, h);
+        n.r  = frand(160.0f, 320.0f);
+        n.vx = frand(-0.04f, 0.04f);
+        n.vy = frand(-0.03f, 0.03f);
+    }
+    m_NebulasInit = true;
+}
 
+void Hub::UpdateNebulas(float dt, float w, float h) {
+    for (auto& n : m_Nebulas) {
+        n.x += n.vx * dt * 60.0f;
+        n.y += n.vy * dt * 60.0f;
+        if (n.x < -n.r) n.x = w + n.r;
+        if (n.x > w + n.r) n.x = -n.r;
+        if (n.y < -n.r) n.y = h + n.r;
+        if (n.y > h + n.r) n.y = -n.r;
+    }
+}
+
+void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
+    using ProyecThor::Settings::ThemePreset;
+    const bool isGalaxy = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.preset
+        == ThemePreset::Galaxy;
+
+    // ── Nebulosas (solo Galaxia) — se dibujan primero, detras de todo ────────
+    if (isGalaxy) {
+        if (!m_NebulasInit) InitNebulas(w, h);
+
+        ImVec4 accentV = ImGui::ColorConvertU32ToFloat4(HT::AccentBlue);
+        ImVec4 softV   = ImGui::ColorConvertU32ToFloat4(HT::AccentSoft);
+        for (int i = 0; i < NEBULA_COUNT; i++) {
+            const auto& n     = m_Nebulas[i];
+            const ImVec4& tint = (i % 2 == 0) ? accentV : softV;
+            // Varios circulos concentricos con alpha decreciente = glow suave
+            // sin textura ni assets externos (mismo truco que DrawSoftShadow).
+            for (int layer = 4; layer >= 1; layer--) {
+                float t     = (float)layer / 4.0f;
+                float rad   = n.r * t;
+                float alpha = 0.030f * (1.0f - t * 0.6f);
+                dl->AddCircleFilled(ImVec2(origin.x + n.x, origin.y + n.y), rad,
+                    ImGui::ColorConvertFloat4ToU32(ImVec4(tint.x, tint.y, tint.z, alpha)), 40);
+            }
+        }
+    }
+
+    // Grilla: solo en los temas "normales" — en Galaxia una cuadricula
+    // geometrica desentona con el look de nebulosa/estrellas.
+    if (!isGalaxy) {
+        // Tinte muy tenue del color de texto primario: se ve sutil tanto en
+        // temas oscuros (linea clara) como claros (linea oscura).
+        const ImU32 gridCol = ColA(HT::TextPri, 6);
+        for (float x = 0.0f; x < w; x += BG_GRID_SIZE)
+            dl->AddLine(ImVec2(origin.x + x, origin.y), ImVec2(origin.x + x, origin.y + h), gridCol, 0.5f);
+        for (float y = 0.0f; y < h; y += BG_GRID_SIZE)
+            dl->AddLine(ImVec2(origin.x, origin.y + y), ImVec2(origin.x + w, origin.y + y), gridCol, 0.5f);
+    }
+
+    // ── Particulas — en Galaxia se ven como estrellas: mas grandes, con mas
+    //    contraste de brillo (centelleo) y un halo suave en el pico del
+    //    "parpadeo" en vez del punto chico y parejo de las demas paletas.
     for (const auto& p : m_BgParticles) {
         const float sinVal = sinf(m_Time * 0.75f + p.phase);
-        const float alpha  = 0.18f + 0.14f * sinVal;
+        const float alpha  = isGalaxy ? (0.32f + 0.34f * sinVal) : (0.18f + 0.14f * sinVal);
         const ImU32 col    = p.isCyan
             ? ColAf(HT::ParticleA, alpha)
             : ColAf(HT::ParticleB, alpha);
-        dl->AddCircleFilled(ImVec2(origin.x + p.x, origin.y + p.y), p.r, col, 8);
+        const float r = isGalaxy ? p.r * 1.5f : p.r;
+        const ImVec2 pos = ImVec2(origin.x + p.x, origin.y + p.y);
+        dl->AddCircleFilled(pos, r, col, 8);
+
+        if (isGalaxy && sinVal > 0.80f) {
+            const float haloAlpha = (sinVal - 0.80f) * 0.9f;
+            dl->AddCircleFilled(pos, r * 3.2f,
+                ColAf(p.isCyan ? HT::ParticleA : HT::ParticleB, haloAlpha * 0.20f), 12);
+        }
     }
 
-    for (int i = 0; i < BG_PARTICLE_COUNT; i++) {
-        for (int j = i + 1; j < BG_PARTICLE_COUNT; j++) {
-            const float dx   = m_BgParticles[i].x - m_BgParticles[j].x;
-            const float dy   = m_BgParticles[i].y - m_BgParticles[j].y;
-            const float dist = sqrtf(dx * dx + dy * dy);
-            if (dist < BG_CONNECT_DIST) {
-                const float t       = 1.0f - (dist / BG_CONNECT_DIST);
-                const float alpha   = t * t * 0.09f;
-                const ImU32 lineCol = ColAf(HT::ParticleB, alpha);
-                dl->AddLine(
-                    ImVec2(origin.x + m_BgParticles[i].x, origin.y + m_BgParticles[i].y),
-                    ImVec2(origin.x + m_BgParticles[j].x, origin.y + m_BgParticles[j].y),
-                    lineCol, 0.5f);
+    // Lineas de conexion tipo "red/constelacion": se sacan en Galaxia (se ve
+    // mas a cableado de red que a cielo estrellado sin ellas).
+    if (!isGalaxy) {
+        for (int i = 0; i < BG_PARTICLE_COUNT; i++) {
+            for (int j = i + 1; j < BG_PARTICLE_COUNT; j++) {
+                const float dx   = m_BgParticles[i].x - m_BgParticles[j].x;
+                const float dy   = m_BgParticles[i].y - m_BgParticles[j].y;
+                const float dist = sqrtf(dx * dx + dy * dy);
+                if (dist < BG_CONNECT_DIST) {
+                    const float t       = 1.0f - (dist / BG_CONNECT_DIST);
+                    const float alpha   = t * t * 0.09f;
+                    const ImU32 lineCol = ColAf(HT::ParticleB, alpha);
+                    dl->AddLine(
+                        ImVec2(origin.x + m_BgParticles[i].x, origin.y + m_BgParticles[i].y),
+                        ImVec2(origin.x + m_BgParticles[j].x, origin.y + m_BgParticles[j].y),
+                        lineCol, 0.5f);
+                }
             }
         }
     }
@@ -700,7 +785,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 10; // id de kUpdateRegistry (10 = v0.4.3, la mas reciente)
+    static int    selectedUpdateVer = 11; // id de kUpdateRegistry (11 = v0.4.4, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -872,7 +957,7 @@ void Hub::RenderMainContent(float w, float h) {
     ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
     if (ImGui::Button("Buscar actualizaciones", ImVec2(180.0f, actionsRowH))) {
-        m_ActiveTab = 8; m_OpenSettingsRequested = true; // 8 = Actualizaciones (ver QuickBtn arriba)
+        m_ActiveTab = 7; m_OpenSettingsRequested = true; // 7 = Actualizaciones (ver QuickBtn arriba)
     }
     ImGui::SameLine(0.0f, 15.0f);
     if (ImGui::Button("Foro / Soporte", ImVec2(180.0f, actionsRowH)))
@@ -1188,7 +1273,30 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            if (selectedUpdateVer == 10) { // v0.4.3
+            if (selectedUpdateVer == 11) { // v0.4.4
+                Cat("Nueva seccion: Overlays");
+                Bul("Crea overlays (textos, formas e imagenes) en un editor nuevo a pantalla completa, desde Biblioteca > Overlay.");
+                Bul("Un overlay se guarda como imagen PNG con transparencia real: al mostrarlo, se proyecta como una capa aparte ENCIMA del fondo y la letra, dejando ver lo que haya debajo — antes, por error, lo reemplazaba todo como si fuera un fondo mas.");
+                Bul("El editor tiene una barra flotante para agregar texto, formas o imagenes, lista de capas, y boton de Eliminar para la capa seleccionada.");
+                Bul("Acceso rapido tambien desde Vista en Vivo (boton Overlays de la barra inferior), con galeria de miniaturas para aplicar uno sin salir de la pantalla.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Vista en Vivo renovada");
+                Bul("Reproductor mas simple: se saco el encabezado \"PROGRAM - ON AIR\" y los botones de transporte pasaron a iconos chicos y planos, mas parecidos al resto de apps de proyeccion.");
+                Bul("Overlays, Chat, Pads y Reloj ahora se abren DENTRO del mismo panel de Vista en Vivo (con scroll propio si hay mucho contenido), en vez de ventanas flotantes sueltas que quedaban desconectadas del boton que las abria.");
+                Bul("La barra de botones de abajo quedo pegada justo debajo del reproductor, sin espacio vacio en el medio, y con los botones mas parejos entre si.");
+                Bul("Se saco la tira de Stage que aparecia arriba del video: quedaba duplicada con el boton que ya permite alternar toda la vista entre Publico y Stage.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Nueva seccion: Pantallas");
+                Bul("La configuracion de Stage (que monitor usa, si es por red, que muestra cada pantalla) ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyeccion.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Correcciones de tema y apariencia");
+                Bul("Varias ventanas y menus (el menu superior, los popups de Estilos y el selector rapido Alt+Espacio, el Monitor de Control) ignoraban el tema elegido en Ajustes > Apariencia y se quedaban siempre con los mismos colores fijos — ahora todos respetan el tema.");
+                Bul("Los fondos de los paneles eran levemente transparentes y dejaban ver lo que hubiera atras, dando un aspecto \"lavado\" o inconsistente segun el tema — ahora son solidos.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 10) { // v0.4.3
                 Cat("Nueva seccion: Conexiones");
                 Bul("Toolbar nueva arriba de todo (Hub / Proyector / Conexiones / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
                 Bul("OSC: enviar mensajes a luces/controladores externos con direccion IP y puerto configurables, mas \"Aprender\" (OSC Learn) para vincular un fader externo a parametros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");

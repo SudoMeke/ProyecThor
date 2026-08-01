@@ -189,6 +189,14 @@ void SetGlobalMute(bool mute);
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
+        // "Bucle falso" de Fondos (ver Ajustes > Proyeccion > Fondos y el
+        // comentario largo en BackgroundLayer.h): reproduce hacia adelante
+        // y despues "hacia atras" en vez de siempre cortar al mismo frame
+        // 0, para disimular el salto de un loop real. Solo afecta a Fondos
+        // (nunca a Videos/cola).
+        void  SetBackgroundPingPongLoop(bool enabled);
+        bool  GetBackgroundPingPongLoop() const;
+
         void ClearQuickNote();
 
         void SetTransitionConfig(int type, float durationSeconds);
@@ -520,6 +528,19 @@ void SetGlobalMute(bool mute);
         // MonitorQueueEngine, LibraryVideos "Enviar al monitor").
         void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio = false);
 
+        // ── Overlay (PNG transparente) ───────────────────────────────────────
+        // Capa APARTE de Layer0 (fondo) y Layer2 (texto): se dibuja ENCIMA de
+        // los dos, dejando ver lo que haya debajo gracias al canal alpha real
+        // del PNG (a diferencia de SetBackgroundMedia, que REEMPLAZA el
+        // fondo). Se compone tanto en la salida real ("ProjectorLive", ver
+        // UIManager.cpp) como en el preview (LiveContentRenderer::
+        // DrawPublicContent, usado por Vista en Vivo y el mirror de Stage).
+        void        SetOverlayMedia(const std::string& pngPath);
+        void        ClearOverlay();
+        bool        HasOverlay() const;
+        std::string GetOverlayPath() const;
+        void*       GetOverlayTexture(); // GLuint cacheado, cargado on-demand desde el PNG
+
         // ── Fondo "now playing" (disco + caratula + ondas) ──────────────────
         // Manda el bgType a Audio y para cualquier video/color previo (mismo
         // criterio que StopBackgroundMedia) — quien realmente dibuja el
@@ -553,16 +574,6 @@ void SetGlobalMute(bool mute);
 
         void                       SetCapturePanelRef(ProyecThor::UI::CapturePanel* c) { m_CapturePanelRef = c; }
         ProyecThor::UI::CapturePanel* GetCapturePanelRef() const { return m_CapturePanelRef; }
-
-        // Puente para que HomePanel pueda dibujar el editor de estilos
-        // "acoplado" dentro de su propia ventana (ver CanvaStyleEditor::Render
-        // con embedded=true) sin que HomePanel necesite conocer LayersStyleTab
-        // (quien realmente es dueño del CanvaStyleEditor). LayersStyleTab
-        // registra el hook una vez en su constructor; HomePanel lo llama todos
-        // los frames y, si devuelve true (el editor estaba abierto y se
-        // dibujo), muestra eso en vez de su contenido normal de biblioteca.
-        void SetStyleEditorHook(std::function<bool()> hook) { m_StyleEditorHook = std::move(hook); }
-        bool RenderStyleEditorIfOpen() const { return m_StyleEditorHook ? m_StyleEditorHook() : false; }
 
         // ── Preload adelantado (ver BackgroundLayer::Prefetch/CommitPrefetch) ──
         // Usado por la cola del Monitor para cargar el SIGUIENTE clip en
@@ -619,6 +630,12 @@ bool m_GlobalMuted = false;
         bool m_stretchToFill = false;
         ImGuiID m_ProjectorPostFXViewportID = 0;
         std::unique_ptr<PresentationCoreImpl> m_Impl;
+
+        // Ver SetOverlayMedia/ClearOverlay/HasOverlay/GetOverlayPath -- la
+        // textura GL en si vive en PresentationCoreImpl (m_Impl), esto solo
+        // guarda la ruta/estado bajo m_Mutex, igual que m_State.bgPath.
+        std::string m_OverlayPath;
+        bool        m_HasOverlay = false;
         mutable std::mutex m_Mutex;
 
         PresentationState m_State;
@@ -684,7 +701,6 @@ bool m_GlobalMuted = false;
         ProyecThor::UI::Announcements* m_AnnouncementsRef = nullptr;
         ProyecThor::UI::OClock*        m_OClockRef        = nullptr;
         ProyecThor::UI::CapturePanel*  m_CapturePanelRef  = nullptr;
-        std::function<bool()>         m_StyleEditorHook;
 
         // Unico lugar que escribe m_State.bgType: si se esta dejando Audio
         // por otra cosa, apaga el boton "En vivo" del panel de audio. Debe

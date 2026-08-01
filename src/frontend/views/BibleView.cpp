@@ -1172,7 +1172,11 @@ void BibleView::RenderEditModal() {
 void BibleView::Render() {
     auto selection = Core::PresentationCore::Get().PeekSelection();
 
-    if (selection.title != m_LastSelectedFile) {
+    // Guarda selection.type == Bible: sin esto, elegir una CANCION/VIDEO en
+    // el medio (selection.title cambia igual, aunque no sea una Biblia) le
+    // pisaba m_LastSelectedFile e intentaba cargar ese archivo como XML de
+    // Biblia -- rompia m_BibleLoaded hasta la proxima Biblia elegida.
+    if (selection.type == Core::ItemType::Bible && selection.title != m_LastSelectedFile) {
         int oldBookNum = 1, oldChapNum = 1, oldVerseNum = 1;
         if (!m_CurrentBible.books.empty() && m_SelectedBook >= 0
             && m_SelectedBook < (int)m_CurrentBible.books.size()) {
@@ -1213,6 +1217,15 @@ void BibleView::Render() {
                     m_SelectedVerse = 0;
             }
         }
+
+        // FIX: el estado interno (m_Selected*) ya quedaba bien restaurado,
+        // pero nada le decia a RenderVerseList que hiciera scroll hasta ahi
+        // -- el versiculo preservado quedaba seleccionado "a ciegas", fuera
+        // de la parte visible de la lista si el capitulo era largo o la
+        // lista habia quedado scrolleada en otro lado. Mismo mecanismo que
+        // usan Historial/Favoritos/Quick Nav para saltar a un versiculo.
+        m_ScrollToVerse = m_SelectedVerse;
+
         ReprojectInCurrentBible();
     }
 
