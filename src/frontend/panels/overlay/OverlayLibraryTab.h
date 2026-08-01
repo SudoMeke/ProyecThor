@@ -28,9 +28,15 @@ public:
     void Render();
 
 private:
-    struct OverlayEntry { std::string name, pngPath; };
+    struct OverlayEntry {
+        std::string name, pngPath;
+        bool        hasClock = false;
+        OverlayLayer clockLayer;
+        int         canvasW = 1920, canvasH = 1080;
+    };
 
     void ReloadList();
+    void SeedDefaultOverlaysIfEmpty();
     void LoadFontsList();
     std::string ResolvePngPath(const std::string& name);
     std::vector<std::string> ListBgImages();

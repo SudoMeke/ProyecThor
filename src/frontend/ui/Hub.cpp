@@ -19,6 +19,8 @@
 
 extern GLuint LoadTextureFromFile(const char* filename);
 
+static void RenderSplashScreen(GLFWwindow *splashWindow, const std::string &status, float progress, GLuint logoTexture, GLuint bgTexture, ImFont *titleFont, ImFont *regularFont, ImFont *smallFont, const std::string &creditText, const ProyecThor::Settings::ThemeSettings &theme);
+
 static constexpr float HUB_SIDEBAR_W  = 280.0f;
 static constexpr float HUB_APPEAR_SPD = 3.0f;
 
@@ -67,21 +69,35 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
-        11, "0.4.4",
+        12, "0.5.1",
         "ACTUALIZACION", "ACTUALIZACION",
-        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Nueva seccion de Overlays: crea textos, formas e imagenes en un editor a pantalla "
-        "completa y proyectalos como una capa transparente encima del fondo y la letra "
-        "(antes tapaban el fondo por error). Vista en Vivo renovada: reproductor mas simple, "
-        "Overlays/Chat/Pads/Reloj ahora se abren dentro del mismo panel en vez de ventanas "
-        "flotantes sueltas, y se saco la tira de Stage duplicada. Nueva seccion \"Pantallas\" "
-        "en el menu para la configuracion de Stage. Corregidos varios colores que quedaban "
-        "fijos sin importar el tema elegido (menu superior, ventanas emergentes, Monitor de "
-        "Control) y los fondos de los paneles ahora son solidos en vez de verse transparentes."
+        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro de reloj dentro del "
+        "editor de Overlays: lo posicionas y le das estilo una sola vez, y se reemplaza en vivo "
+        "por la hora/cronometro activo — la transmision a pantalla ahora depende de que overlay "
+        "tengas activo, en vez de un modo aparte. Overlays con reordenar capas y overlays de "
+        "reloj predeterminados listos para probar. Corregido un bug por el cual el cuadriculado "
+        "de \"sin fondo\" del editor de Overlays podia quedar horneado como fondo opaco al "
+        "guardar."
+    },
+    {
+        11, "0.5.0",
+        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Ajustes reorganizado por completo: cada configuracion ahora es su propia pagina, con "
+        "buscador incluido, Proyeccion y Pantallas agrupadas juntas, y Red/Mobile/Streaming/OSC "
+        "viviendo dentro de Proyeccion. Nueva opcion \"Bucle falso\" para Fondos, que reproduce "
+        "hacia adelante y hacia atras en vez de cortar siempre al mismo frame. Nueva seccion de "
+        "Overlays: crea textos, formas e imagenes en un editor a pantalla completa y proyectalos "
+        "como una capa transparente encima del fondo y la letra (antes tapaban el fondo por "
+        "error). Vista en Vivo renovada: reproductor mas simple, Overlays/Chat/Pads/Reloj ahora "
+        "se abren dentro del mismo panel en vez de ventanas flotantes sueltas. Corregidos varios "
+        "colores que quedaban fijos sin importar el tema elegido y los fondos de los paneles "
+        "ahora son solidos en vez de verse transparentes."
     },
     {
         10, "0.4.3",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
         "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
         "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
         "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
@@ -93,7 +109,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         9, "0.4.2",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
         "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
         "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
         "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
@@ -117,7 +133,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         7, "0.4.0",
-        "ACTUALIZACION MAYOR", "ACTUALIZACION MAYOR",
+        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
         "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
         "Cola de videos mucho mas estable, nueva seccion de Overlays, "
         "Vista en Vivo con acciones rapidas, panel de Rendimiento y un "
@@ -125,7 +141,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         6, "0.3.5",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
         "splash_bg1.png",  // TODO: reemplazar por portada propia cuando este lista
         "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
         "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "
@@ -133,7 +149,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         2, "0.3.0",
-        "ACTUALIZACION MAYOR", "ACTUALIZACION MAYOR",
+        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
         "splash_bg1.png",
         "Nuevas herramientas de transmision, optimizaciones y estabilidad de red."
     },
@@ -289,20 +305,18 @@ void Hub::RenderWhatsNewIfNeeded() {
     static const Slide kSlides[] = {
         { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
           "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
-        { "Biblioteca con contenido de entrada",
-          "Canciones y Biblias ya no arrancan vacias: la Biblioteca viene con Biblias y una cancion de bienvenida cargadas de entrada, listas para usar." },
-        { "Conexiones",
-          "Nueva seccion que reune todo lo que conecta ProyecThor con el exterior: OSC (luces/controladores externos, con \"Aprender\"), Red y Chat (los mismos de siempre, ahora disponibles tambien aca), y Streaming en vivo por RTMP (Twitch, YouTube, etc. con captura de camara/pantalla y preview tipo OBS) -- todo en un mismo rail." },
-        { "Biblioteca",
-          "Nueva seccion para ver, renombrar y borrar tus archivos de Video/Imagen/Audio ya importados, sin afectar lo que este en Vista en Vivo. Incluye un panel \"Render\" para convertir formatos con ffmpeg." },
-        { "Biblia a pantalla completa",
-          "El mismo buscador de Biblia de siempre, ahora tambien disponible como su propia seccion a pantalla completa: libros/capitulos a la izquierda, texto grande a la derecha." },
-        { "Selector rapido (Alt+Espacio)",
-          "Apreta Alt+Espacio en cualquier momento para saltar entre secciones con el teclado, sin tocar el mouse." },
-        { "Monitor mas compacto",
-          "El panel de Preview del Monitor de Vista en Vivo ahora ocupa menos espacio y le deja mas lugar al video, con botones mas chicos y prolijos." },
-        { "Editor de Estilos renovado",
-          "El editor de estilos de texto (Diseño > Estilos) cambio de look: menos colores por seccion, bordes mas rectos, mas parecido al resto de ProyecThor." },
+        { "Ajustes reorganizado",
+          "Cada configuracion ahora es su propia pagina, con buscador incluido. Proyeccion y Pantallas quedaron agrupadas juntas, y Red, Mobile, Streaming y OSC pasaron a vivir dentro de Proyeccion en vez de tener su propia categoria aparte." },
+        { "Fondos: bucle falso",
+          "Nueva opcion en Ajustes > Proyeccion > Fondos: el video reproduce hacia adelante y despues \"hacia atras\" en vez de cortar siempre al mismo frame, dando sensacion de bucle continuo." },
+        { "Overlays",
+          "Crea textos, formas e imagenes en un editor a pantalla completa y proyectalos como una capa transparente encima del fondo y la letra, desde Biblioteca > Overlay o directo desde Vista en Vivo." },
+        { "Vista en Vivo renovada",
+          "Reproductor mas simple: Overlays, Chat, Pads y Reloj ahora se abren dentro del mismo panel en vez de ventanas flotantes sueltas." },
+        { "Nueva seccion: Pantallas",
+          "La configuracion de Stage ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyeccion." },
+        { "Correcciones de tema y apariencia",
+          "Varios menus y ventanas que ignoraban el tema elegido ahora lo respetan, y los fondos de los paneles son solidos en vez de verse transparentes." },
     };
     constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
 
@@ -785,7 +799,7 @@ void Hub::RenderMainContent(float w, float h) {
     static GLuint bgTex             = 0;
     static bool   texLoaded         = false;
     static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 11; // id de kUpdateRegistry (11 = v0.4.4, la mas reciente)
+    static int    selectedUpdateVer = 12; // id de kUpdateRegistry (12 = v0.5.1, la mas reciente)
 
     if (!texLoaded) {
         bgTex     = LoadTextureFromFile("splash_bg2.png");
@@ -1273,7 +1287,46 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            if (selectedUpdateVer == 11) { // v0.4.4
+            if (selectedUpdateVer == 12) { // v0.5.1
+                Cat("Contadores (antes \"Reloj y Contadores\")");
+                Bul("Se acorto el nombre de la seccion a secas \"Contadores\" en el sidebar de Home.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Reloj dentro de Overlays");
+                Bul("Nuevo cuadro de Reloj en el editor de Overlays (boton junto a Texto/Forma/Imagen): lo arrastras, le das tamaño y estilo de texto (fuente, color, sombra, contorno, fondo) una sola vez, como una capa mas.");
+                Bul("Ese cuadro es solo un marcador de posicion: al proyectar el overlay que lo contiene, se reemplaza en vivo por la hora o el cronometro activo — nunca queda \"horneado\" como texto fijo en el overlay guardado.");
+                Bul("La transmision a pantalla del reloj ya no es un modo aparte a elegir: aparece automaticamente si el overlay que tenes activo incluye un cuadro de Reloj. El panel de Contadores muestra un aviso si el overlay activo no tiene uno.");
+                Bul("La transmision a dispositivos en red (LAN) sigue siendo un interruptor propio (Apagado / Solo LAN), independiente del overlay.");
+                Bul("Se agregaron overlays de reloj predeterminados (barra inferior, esquina y centrado) listos para probar de una, sin tener que armar uno desde cero.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Overlays");
+                Bul("Las capas ahora se pueden reordenar (subir/bajar) desde la lista lateral, para elegir cual queda encima de cual.");
+                Bul("Encabezado del editor mas plano y compacto (se saco el degradado de color) y menos relleno en los margenes, para un look mas minimalista.");
+                Bul("Corregido: el cuadriculado que indica \"sin fondo\" en el editor podia terminar guardado como fondo opaco (gris/negro) en el PNG del overlay en vez de quedarse transparente, sobre todo en overlays sin capas de imagen.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Correcciones en Contadores");
+                Bul("El aviso de \"overlay activo sin cuadro de reloj\" y otros textos largos ya no se cortaban contra el borde del panel: ahora se ajustan en varias lineas.");
+                Bul("Corregido un icono roto en el boton \"Avanzar\" del titulo/mensaje del reloj.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 11) { // v0.5.0
+                Cat("Ajustes reorganizado");
+                Bul("Cada configuracion ahora es su propia pagina: al elegir una subcategoria en el menu de la izquierda, se ve sola en vez de tener que scrollear una lista larga con todo junto.");
+                Bul("Nuevo buscador arriba del menu de Ajustes, para encontrar una configuracion por nombre sin tener que navegar categoria por categoria.");
+                Bul("Proyeccion y Pantallas ahora estan agrupadas juntas en el menu, y Red, Mobile, Streaming y OSC pasaron a vivir DENTRO de Proyeccion en vez de tener su propia categoria aparte.");
+                Bul("Se saco la categoria General (Inicio, Guardado automatico, Carpetas por defecto): no se usaba.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Fondos: bucle falso");
+                Bul("Nueva opcion en Ajustes > Proyeccion > Fondos: en vez de cortar siempre al mismo frame inicial al repetir, el fondo reproduce hacia adelante y despues \"hacia atras\", dando sensacion de bucle continuo sin el salto de siempre.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca > Render");
+                Bul("El conversor de formato tiene un diseño mas moderno, con el texto que antes se cortaba contra el borde del panel ahora bien acomodado.");
+                Bul("Se saco el boton de Reloj del sidebar de Biblioteca: ya estaba disponible en la barra inferior de Vista en Vivo, quedaba duplicado.");
+                ImGui::Dummy(ImVec2(0,12));
+
                 Cat("Nueva seccion: Overlays");
                 Bul("Crea overlays (textos, formas e imagenes) en un editor nuevo a pantalla completa, desde Biblioteca > Overlay.");
                 Bul("Un overlay se guarda como imagen PNG con transparencia real: al mostrarlo, se proyecta como una capa aparte ENCIMA del fondo y la letra, dejando ver lo que haya debajo — antes, por error, lo reemplazaba todo como si fuera un fondo mas.");

@@ -824,7 +824,7 @@ void SettingsManager::LoadSettings() {
             p.taaIntensity          = jp.value("taaIntensity",          0.5f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
-            p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
+            p.videoRenderEngine     = jp.value("videoRenderEngine",     1);
         }
 
         if (j.contains("stageDisplay")) {

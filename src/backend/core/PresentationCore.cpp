@@ -122,6 +122,18 @@ void PresentationCore::ClearQuickNote() {
         ++m_StreamVersion;
     }
 
+    void PresentationCore::PushRemoteClockTitle(const std::string& text) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_PendingClockTitles.push_back(text);
+    }
+
+    std::vector<std::string> PresentationCore::DrainRemoteClockTitles() {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::vector<std::string> out;
+        out.swap(m_PendingClockTitles);
+        return out;
+    }
+
     PresentationState PresentationCore::GetState() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_State;
@@ -683,6 +695,59 @@ void PresentationCore::SetBackgroundAudio() {
     void* PresentationCore::GetOverlayTexture() {
         if (!m_Impl || !m_Impl->overlayTex) return nullptr;
         return (void*)(intptr_t)m_Impl->overlayTex;
+    }
+
+    void PresentationCore::SetOverlayClockLayer(bool hasClock, const ProyecThor::UI::OverlayLayer& layer,
+                                                 int canvasW, int canvasH) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_HasOverlayClockLayer = hasClock;
+        m_OverlayClockLayer    = layer;
+        m_OverlayClockCanvasW  = canvasW;
+        m_OverlayClockCanvasH  = canvasH;
+    }
+
+    bool PresentationCore::HasOverlayClockLayer() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_HasOverlayClockLayer;
+    }
+
+    ProyecThor::UI::OverlayLayer PresentationCore::GetOverlayClockLayer() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayClockLayer;
+    }
+
+    int PresentationCore::GetOverlayClockCanvasW() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayClockCanvasW;
+    }
+
+    int PresentationCore::GetOverlayClockCanvasH() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayClockCanvasH;
+    }
+
+    void PresentationCore::SetLiveOverlayClockText(const std::string& text, const float* colorOverride) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_LiveOverlayClockText = text;
+        m_HasLiveOverlayClockColorOverride = (colorOverride != nullptr);
+        if (colorOverride) {
+            for (int i = 0; i < 4; i++) m_LiveOverlayClockColorOverride[i] = colorOverride[i];
+        }
+    }
+
+    std::string PresentationCore::GetLiveOverlayClockText() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_LiveOverlayClockText;
+    }
+
+    bool PresentationCore::HasLiveOverlayClockColorOverride() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_HasLiveOverlayClockColorOverride;
+    }
+
+    void PresentationCore::GetLiveOverlayClockColorOverride(float outRGBA[4]) const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        for (int i = 0; i < 4; i++) outRGBA[i] = m_LiveOverlayClockColorOverride[i];
     }
 
     void PresentationCore::PreloadNextBackgroundMedia(const std::string& path, bool allowAudio) {

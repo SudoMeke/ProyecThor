@@ -1,5 +1,4 @@
 #include "OverlayExportService.h"
-#include <imgui_internal.h>
 #include <imgui_impl_opengl3.h>
 #include <GL/glew.h>
 #include <cstring>
@@ -13,27 +12,27 @@ OverlayExportService& OverlayExportService::Get() {
     return instance;
 }
 
-void OverlayExportService::RequestCapture(ImGuiWindow* canvasWindow,
+void OverlayExportService::RequestCapture(std::shared_ptr<ImDrawList> exportDrawList,
                                           ImVec2 canvasScreenPos, ImVec2 canvasScreenSize,
                                           const std::string& outPngPath,
                                           int exportW, int exportH,
                                           std::function<void(bool)> onDone)
 {
-    m_Pending.push_back({ canvasWindow, canvasScreenPos, canvasScreenSize,
+    m_Pending.push_back({ std::move(exportDrawList), canvasScreenPos, canvasScreenSize,
                           outPngPath, exportW, exportH, std::move(onDone) });
 }
 
 bool OverlayExportService::CaptureOne(const PendingCapture& req)
 {
-    if (!req.canvasWindow || !req.canvasWindow->DrawList) return false;
+    if (!req.exportDrawList) return false;
     if (req.screenSize.x <= 0.0f || req.screenSize.y <= 0.0f) return false;
     if (req.exportW <= 0 || req.exportH <= 0) return false;
 
-    ImDrawList* srcList = req.canvasWindow->DrawList;
+    ImDrawList* srcList = req.exportDrawList.get();
 
-    // ImDrawData "prestado": reutiliza el ImDrawList que ImGui ya construyo
-    // este frame para la child del canvas (nada de vertices a mano), pero
-    // pide al backend que lo renderice a una resolucion mas alta via
+    // ImDrawData a partir del draw list que armo el llamador este mismo
+    // frame (ver OverlayCanvasEditor::DrawLayersForExport) -- pide al
+    // backend que lo renderice a una resolucion mas alta via
     // FramebufferScale — el mismo mecanismo que usa ImGui para HiDPI/Retina.
     ImDrawData dd;
     dd.Clear();

@@ -56,6 +56,7 @@ struct SplashArt {
 
 static const std::vector<SplashArt> splashRegistry = {
     {"splash_bg1.png", "Fabiola Fernandez"},
+    {"splash_bg5.png", "TheVixcho"},
     {"splash_bg2.png", "TheVixcho"},
 };
 

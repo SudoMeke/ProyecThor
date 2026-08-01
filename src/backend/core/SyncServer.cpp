@@ -818,6 +818,31 @@ void SyncServer::ServerThreadFunc(int port, std::promise<bool> startedPromise) {
         res.set_content(R"({"ok":true})", "application/json");
     });
 
+    // ── POST /remote/clock-message?text=... ─────────────────────────────────
+    // "Mensaje al publico" desde Reloj y Contadores: agrega `text` a la
+    // lista de titulos de OClock (m_Titles), igual que si el operador
+    // hubiese escrito el mensaje y apretado "Agregar" en el panel de
+    // escritorio -- pero activandolo de inmediato, ya que el sentido de
+    // "enviar" desde el celular es que se vea en el momento (a diferencia
+    // de "Agregar" en escritorio, que no cambia la seleccion activa). Solo
+    // se transmite de verdad si Reloj y Contadores esta en modo Pantalla/
+    // Solo LAN/Ambos en ese momento (mismo comportamiento que si se
+    // hubiese escrito a mano). Encolado thread-safe (ver
+    // PresentationCore::PushRemoteClockTitle) porque este handler corre en
+    // el hilo httplib, no en el hilo de UI -- OClock::Update() lo drena una
+    // vez por frame.
+    svr.Post("/remote/clock-message", [&checkToken](const httplib::Request& req, httplib::Response& res) {
+        if (!checkToken(req, res)) return;
+        std::string text = req.has_param("text") ? req.get_param_value("text") : "";
+        if (text.empty()) {
+            res.status = 400;
+            res.set_content(R"({"ok":false,"error":"Mensaje vacio"})", "application/json");
+            return;
+        }
+        Core::PresentationCore::Get().PushRemoteClockTitle(text);
+        res.set_content(R"({"ok":true})", "application/json");
+    });
+
     // ── GET /remote/bibles ─────────────────────────────────────────────────────
     svr.Get("/remote/bibles", [&checkToken](const httplib::Request& req, httplib::Response& res) {
         if (!checkToken(req, res)) return;

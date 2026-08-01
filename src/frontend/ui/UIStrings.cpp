@@ -96,7 +96,7 @@ namespace ProyecThor::UI {
             "ACTIVO", "Guardar en XML",
 
             // OClock (reset reutiliza str.reset = "Restablecer" de Generales)
-            "Reloj y Contadores",
+            "Contadores",
             "Configurar Cuenta Regresiva",
             "Minutos",
             "Segundos",

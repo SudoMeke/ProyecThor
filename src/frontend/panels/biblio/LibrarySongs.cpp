@@ -1068,16 +1068,6 @@ static void RenderItemsListPane(LibraryContext& ctx)
     static std::vector<std::string> filteredItems;
     static std::string lastSearch;
 
-    // Popup de creditos de Biblia (ver icono "i" junto a cada fila mas
-    // abajo): nombre del archivo para el que esta abierto, vacio = cerrado.
-    // OpenPopupRequest en vez de llamar ImGui::OpenPopup() directo desde
-    // adentro del PushID(n) de la fila -- el ID quedaria distinto al de la
-    // fila donde despues se hace BeginPopup() (fuera del loop, sin ese
-    // PushID), y el popup nunca abriria. Mismo patron que
-    // m_OpenDurationPopupRequest en SongEditView.
-    static std::string s_BibleCreditsFor;
-    static bool        s_BibleCreditsOpenRequest = false;
-
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.f, 0.f, 0.f, 0.f));
     ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.f, 1.f, 1.f, 0.06f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
@@ -1211,23 +1201,8 @@ static void RenderItemsListPane(LibraryContext& ctx)
             }
 
             ImGui::PushID(n);
-            const bool isBibleRow = (ctx.currentCategoryInt == kCat_Bibles);
             bool clicked = SongListRow(disp.c_str(), sel, tagColor, hasTag,
-                                       14.0f, DS::RowHeight, isBibleRow ? 26.0f : 0.0f);
-
-            // Icono de creditos: solo Biblias (ver comentario en RenderRail
-            // sobre el origen del contenido por defecto en bin/assets/bibles).
-            // Va DESPUES del SongListRow, sobre el trailingReserve que le
-            // dejamos libre arriba, asi el area clickeable de seleccion de la
-            // fila no compite con el click del icono.
-            if (isBibleRow) {
-                ImGui::SameLine(0.0f, 2.0f);
-                if (GlassIconButton("bibleInfo", "info", "i", "Creditos de esta Biblia",
-                                    ImVec2(22.0f, DS::RowHeight))) {
-                    s_BibleCreditsFor         = filteredItems[n];
-                    s_BibleCreditsOpenRequest = true;
-                }
-            }
+                                       14.0f, DS::RowHeight, 0.0f);
 
             if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
                 if (ctx.currentCategoryInt == kCat_Songs) {
@@ -1296,66 +1271,6 @@ static void RenderItemsListPane(LibraryContext& ctx)
     }
     ImGui::EndChild();
     ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(2);
-
-    // ── Popup de creditos de Biblia ───────────────────────────────────────
-    // Todas las Biblias que vienen de fabrica con ProyecThor (ver
-    // bin/assets/bibles, sembradas en la biblioteca del usuario la primera
-    // vez que arranca la app -- LibraryPanel::SeedDefaultLibraryContent) son
-    // del mismo repositorio de origen, asi que el credito es el mismo para
-    // todas; una Biblia importada a mano por el operador no tiene creditos
-    // propios (el icono simplemente no aparece en su fila, ver isBibleRow
-    // mas arriba -- aparece para CUALQUIER Biblia de la lista, importada o
-    // no, ya que no hay forma de distinguirlas sin un sidecar propio).
-    if (s_BibleCreditsOpenRequest) {
-        ImGui::OpenPopup("BibleCreditsPopup##lib");
-        s_BibleCreditsOpenRequest = false;
-    }
-
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.078f, 0.078f, 0.082f, 0.98f));
-    ImGui::PushStyleColor(ImGuiCol_Border,  ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultBord));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(20.f, 16.f));
-    ImVec2 creditsCenter = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(creditsCenter, ImGuiCond_Appearing, { 0.5f, 0.5f });
-    ImGui::SetNextWindowSize({ 420.f, 0.f });
-
-    if (ImGui::BeginPopup("BibleCreditsPopup##lib"))
-    {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
-        ImGui::TextUnformatted(StripExtension(s_BibleCreditsFor).c_str());
-        ImGui::PopStyleColor();
-        AccentSep(ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::TextWrapped(
-            "Texto biblico en formato XML tomado del repositorio publico "
-            "Holy-Bible-XML-Format de Beblia, usado como contenido por "
-            "defecto de ProyecThor.");
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
-        ImGui::TextWrapped("github.com/Beblia/Holy-Bible-XML-Format");
-        ImGui::PopStyleColor();
-
-        ImGui::Spacing();
-        ImGui::Spacing();
-
-        const float avail = ImGui::GetContentRegionAvail().x;
-        const float sp    = ImGui::GetStyle().ItemSpacing.x;
-        const float bw2   = std::floor((avail - sp) * 0.5f);
-
-        if (DS::GlassButton("Copiar enlace", { bw2, 34.f }))
-            ImGui::SetClipboardText("https://github.com/Beblia/Holy-Bible-XML-Format");
-        ImGui::SameLine();
-        if (DS::GlassButton("Cerrar", { bw2, 34.f }, DS::TextSecondary))
-            ImGui::CloseCurrentPopup();
-
-        ImGui::EndPopup();
-    }
-    ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
 
     ImGui::Spacing();

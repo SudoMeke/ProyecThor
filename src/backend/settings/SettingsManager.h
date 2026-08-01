@@ -127,12 +127,13 @@ namespace ProyecThor::Settings {
         float fillBlurBrightness    = 0.6f;
 
         // ── Motor de renderizado del fondo de video ──────────────────────
-        // 0 = OpenGL compuesto (default: fondo + overlays + texto en vivo
-        // juntos, como siempre). 1 = VLC en ventana nativa (el fondo se
-        // muestra en una ventana propia con el renderer acelerado de VLC;
-        // sin overlays/texto encima ni transicion animada entre clips —
-        // ver BackgroundLayer::SetUseNativeEngine).
-        int videoRenderEngine = 0;
+        // 0 = OpenGL compuesto (fondo + overlays + texto en vivo juntos).
+        // 1 = VLC en ventana nativa (el fondo se muestra en una ventana
+        // propia con el renderer acelerado de VLC; sin overlays/texto
+        // encima ni transicion animada entre clips — ver
+        // BackgroundLayer::SetUseNativeEngine). Default libvlc (1): pedido
+        // explicito, sin que el operador tenga que ir a configurarlo.
+        int videoRenderEngine = 1;
     };
 
     // ── Audio ────────────────────────────────────────────────────────────

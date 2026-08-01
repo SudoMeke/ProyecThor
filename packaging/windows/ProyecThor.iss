@@ -21,7 +21,7 @@
   #define BuildDir "..\..\build-win"
 #endif
 #ifndef ProductVersion
-  #define ProductVersion "0.4.3"
+  #define ProductVersion "0.5.1"
 #endif
 
 [Setup]

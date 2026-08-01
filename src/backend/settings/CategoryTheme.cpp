@@ -340,7 +340,7 @@ void SettingsPanel::RenderCategoryTheme() {
 
         auto& homeSidebar = ProyecThor::Settings::SettingsManager::Get().GetSettings().homeSidebar;
         static const char* kHomeCatLabels[6] = {
-            "Home", "Reloj y Contadores", "Anuncios", "Notas Rápidas", "Captura", "Transmisión en Red"
+            "Home", "Contadores", "Anuncios", "Notas Rápidas", "Captura", "Transmisión en Red"
         };
         bool homeSidebarChanged = false;
         for (int i = 0; i < 6; i++) {

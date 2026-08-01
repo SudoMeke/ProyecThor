@@ -11,6 +11,7 @@
 #include "NetworkStreamServer.h"
 #include "ChatMessageStore.h"
 #include "frontend/windowing/SecondaryOutputWindow.h"
+#include "frontend/panels/overlay/OverlayTypes.h"
 
 struct GLFWwindow;
 
@@ -205,6 +206,16 @@ void SetGlobalMute(bool mute);
         void SetLiveQuickNote(const std::string& text, const float* colorOverride = nullptr);
         void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr);
         void ClearQuickNoteLAN();
+
+        // ── Reloj y Contadores: títulos/mensajes pedidos desde el celular ──
+        // Cola thread-safe (SyncServer corre en su propio hilo httplib, ver
+        // POST /remote/clock-message) de textos para agregar a la lista de
+        // títulos de OClock (m_Titles) -- OClock::Update() la drena una vez
+        // por frame y los agrega tal cual si el operador hubiese apretado
+        // "Agregar" a mano, activándolos de inmediato. Empty vector = nada
+        // pendiente (caso normal).
+        void PushRemoteClockTitle(const std::string& text);
+        std::vector<std::string> DrainRemoteClockTitles();
 
         void*          GetBackgroundTexture();
         void*          GetProcessedBackgroundTexture(int targetW, int targetH);
@@ -541,6 +552,27 @@ void SetGlobalMute(bool mute);
         std::string GetOverlayPath() const;
         void*       GetOverlayTexture(); // GLuint cacheado, cargado on-demand desde el PNG
 
+        // ── Cuadro de reloj del overlay activo ───────────────────────────────
+        // Se fija una vez al activar un overlay (ver OverlayLibraryTab::
+        // RenderCard/RenderRow), a partir de la capa Clock que tenga su
+        // receta (.overlay) -- si no tiene ninguna, hasClock=false y no se
+        // dibuja nada. El TEXTO en cambio se publica todos los frames desde
+        // OClock::Update()/SyncTransmission(), independiente de si hay o no
+        // overlay activo (publicar es inofensivo: el render solo lo usa si
+        // HasOverlayClockLayer() es true). Ver LiveContentRenderer.cpp/
+        // UIManager.cpp para donde se dibuja.
+        void        SetOverlayClockLayer(bool hasClock, const ProyecThor::UI::OverlayLayer& layer,
+                                          int canvasW, int canvasH);
+        bool        HasOverlayClockLayer() const;
+        ProyecThor::UI::OverlayLayer GetOverlayClockLayer() const;
+        int         GetOverlayClockCanvasW() const;
+        int         GetOverlayClockCanvasH() const;
+
+        void         SetLiveOverlayClockText(const std::string& text, const float* colorOverride = nullptr);
+        std::string  GetLiveOverlayClockText() const;
+        bool         HasLiveOverlayClockColorOverride() const;
+        void         GetLiveOverlayClockColorOverride(float outRGBA[4]) const;
+
         // ── Fondo "now playing" (disco + caratula + ondas) ──────────────────
         // Manda el bgType a Audio y para cualquier video/color previo (mismo
         // criterio que StopBackgroundMedia) — quien realmente dibuja el
@@ -636,7 +668,23 @@ bool m_GlobalMuted = false;
         // guarda la ruta/estado bajo m_Mutex, igual que m_State.bgPath.
         std::string m_OverlayPath;
         bool        m_HasOverlay = false;
+
+        // Ver SetOverlayClockLayer/SetLiveOverlayClockText -- posicion/estilo
+        // se fija al activar un overlay, el texto se actualiza cada frame
+        // desde OClock (ver comentario en el header publico de arriba).
+        ProyecThor::UI::OverlayLayer m_OverlayClockLayer;
+        bool        m_HasOverlayClockLayer  = false;
+        int         m_OverlayClockCanvasW   = 1920;
+        int         m_OverlayClockCanvasH   = 1080;
+        std::string m_LiveOverlayClockText;
+        bool        m_HasLiveOverlayClockColorOverride = false;
+        float       m_LiveOverlayClockColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
         mutable std::mutex m_Mutex;
+
+        // Ver PushRemoteClockTitle/DrainRemoteClockTitles -- guardado bajo
+        // el mismo m_Mutex de arriba, nada especial.
+        std::vector<std::string> m_PendingClockTitles;
 
         PresentationState m_State;
         LibrarySelection  m_CurrentSelection;

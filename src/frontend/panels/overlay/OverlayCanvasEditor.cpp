@@ -1,5 +1,6 @@
 #include "OverlayCanvasEditor.h"
 #include "OverlayExportService.h"
+#include "OverlayLayerRender.h"
 #include "styles/CanvaStyleEditor.h"
 #include "layers/LayersTheme.h"
 #include "frontend/ui/IconRail.h"
@@ -87,11 +88,20 @@ void OverlayCanvasEditor::Render(OnSaveCallback onSave, OnCancelCallback onClose
     ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, vp->WorkSize.y - railH));
     ImGui::SetNextWindowViewport(vp->ID);
 
+    // NoScrollbar/NoScrollWithMouse son clave aca: el header/footer se
+    // dibujan en coordenadas de PANTALLA (winPos + offset fijo) pero el
+    // resto del contenido (canvas/sidebar) usa SetCursorPos, que es relativo
+    // al scroll de la ventana -- si esta ventana llegaba a scrollear (ej.
+    // contenido mas alto que la pantalla), el footer/header quedaban fijos
+    // en pantalla mientras los widgets reales (input de nombre, botones)
+    // se desplazaban con el scroll, separandose del fondo que los acompaña.
     constexpr ImGuiWindowFlags kFlags =
         ImGuiWindowFlags_NoDecoration      |
         ImGuiWindowFlags_NoMove            |
         ImGuiWindowFlags_NoSavedSettings   |
         ImGuiWindowFlags_NoDocking         |
+        ImGuiWindowFlags_NoScrollbar       |
+        ImGuiWindowFlags_NoScrollWithMouse |
         ImGuiWindowFlags_NoBringToFrontOnFocus;
 
     ImGui::PushStyleColor(ImGuiCol_WindowBg, CanvaPalette::Surface0);
@@ -108,11 +118,11 @@ void OverlayCanvasEditor::Render(OnSaveCallback onSave, OnCancelCallback onClose
 
     RenderHeader(dl, winPos, winSize);
 
-    constexpr float kHeaderH  = 56.0f;
-    constexpr float kFooterH  = 64.0f;
-    constexpr float kPadH     = 22.0f;
-    constexpr float kSidebarW = 300.0f;
-    constexpr float kGap      = 20.0f;
+    constexpr float kHeaderH  = 40.0f;
+    constexpr float kFooterH  = 52.0f;
+    constexpr float kPadH     = 14.0f;
+    constexpr float kSidebarW = 260.0f;
+    constexpr float kGap      = 14.0f;
 
     float contentH = winSize.y - kHeaderH - kFooterH - kPadH * 2.0f;
     float canvasW  = std::max(200.0f, winSize.x - kSidebarW - kGap - kPadH * 2.0f);
@@ -136,25 +146,22 @@ void OverlayCanvasEditor::Render(OnSaveCallback onSave, OnCancelCallback onClose
 //  RenderHeader
 // ─────────────────────────────────────────────────────────────────────────────
 void OverlayCanvasEditor::RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize) {
-    constexpr float kHeaderH = 56.0f;
+    constexpr float kHeaderH = 40.0f;
 
-    dl->AddRectFilledMultiColor(
-        winPos, ImVec2(winPos.x + winSize.x, winPos.y + kHeaderH),
-        CanvaPalette::ToU32(ImVec4(0.20f, 0.16f, 0.36f, 1.0f)),
-        CanvaPalette::ToU32(ImVec4(0.15f, 0.13f, 0.28f, 1.0f)),
-        CanvaPalette::ToU32(ImVec4(0.09f, 0.09f, 0.12f, 1.0f)),
-        CanvaPalette::ToU32(ImVec4(0.09f, 0.09f, 0.12f, 1.0f)));
+    // Fill plano (sin degradado) — mas minimalista, y no compite visualmente
+    // con el canvas/preview del overlay que se edita.
+    dl->AddRectFilled(winPos, ImVec2(winPos.x + winSize.x, winPos.y + kHeaderH),
+                      CanvaPalette::ToU32(CanvaPalette::Surface1));
 
     float dotY = winPos.y + kHeaderH * 0.5f;
-    dl->AddCircleFilled(ImVec2(winPos.x + 28.0f, dotY), 7.0f, CanvaPalette::ToU32(CanvaPalette::Pink));
-    dl->AddCircleFilled(ImVec2(winPos.x + 28.0f, dotY), 3.5f, IM_COL32(255, 255, 255, 210));
+    dl->AddCircleFilled(ImVec2(winPos.x + 22.0f, dotY), 5.0f, CanvaPalette::ToU32(CanvaPalette::Pink));
 
     std::string title = m_IsEditingExisting
         ? (std::string("Editar overlay — ") + m_Name)
         : "Nuevo overlay";
 
-    dl->AddText(ImGui::GetFont(), 15.0f,
-        ImVec2(winPos.x + 46.0f, winPos.y + (kHeaderH - 15.0f) * 0.5f),
+    dl->AddText(ImGui::GetFont(), 14.0f,
+        ImVec2(winPos.x + 36.0f, winPos.y + (kHeaderH - 14.0f) * 0.5f),
         CanvaPalette::ToU32(CanvaPalette::Text), title.c_str());
 
     dl->AddLine(
@@ -175,7 +182,7 @@ void OverlayCanvasEditor::RenderFloatingToolbar(ImVec2 canvasPos, ImVec2 canvasS
     constexpr float kBtnSz = 34.0f;
     constexpr float kGap   = 6.0f;
     constexpr float kPad   = 8.0f;
-    const int       kCount = 4;
+    const int       kCount = 5;
 
     float barW = kPad * 2.0f + kBtnSz * kCount + kGap * (kCount - 1);
     ImVec2 barPos = ImVec2(canvasPos.x + (canvasSize.x - barW) * 0.5f, canvasPos.y - kBtnSz - 18.0f);
@@ -188,6 +195,7 @@ void OverlayCanvasEditor::RenderFloatingToolbar(ImVec2 canvasPos, ImVec2 canvasS
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     bool hasSelection = (m_SelectedLayer >= 0 && m_SelectedLayer < (int)m_Doc.layers.size());
+    bool hasClock     = (FindClockLayer(m_Doc) != nullptr);
 
     if (LPCornerIconBtn("##ovAddText", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
             dl->AddLine({c.x - r*0.6f, c.y - r*0.55f}, {c.x + r*0.6f, c.y - r*0.55f}, col, 2.0f);
@@ -213,6 +221,22 @@ void OverlayCanvasEditor::RenderFloatingToolbar(ImVec2 canvasPos, ImVec2 canvasS
             dl->AddTriangleFilled({c.x - r*0.55f, c.y + r*0.5f}, {c.x - r*0.05f, c.y}, {c.x + r*0.55f, c.y + r*0.5f}, col);
         }, "Anadir imagen", {kBtnSz, kBtnSz}))
         ImGui::OpenPopup("##ovAddImagePop");
+    ImGui::SameLine(0.0f, kGap);
+
+    if (hasClock) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.4f);
+    bool addClockClicked = LPCornerIconBtn("##ovAddClock", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            dl->AddCircle(c, r * 0.62f, col, 0, 1.6f);
+            dl->AddLine(c, {c.x, c.y - r * 0.4f}, col, 1.6f);
+            dl->AddLine(c, {c.x + r * 0.3f, c.y}, col, 1.6f);
+        }, hasClock ? "Ya hay un cuadro de reloj" : "Anadir cuadro de reloj", {kBtnSz, kBtnSz});
+    if (hasClock) ImGui::PopStyleVar();
+    if (addClockClicked && !hasClock) {
+        OverlayLayer nl;
+        nl.kind = OverlayLayerKind::Clock;
+        nl.text = "00:00:00";
+        m_Doc.layers.push_back(nl);
+        m_SelectedLayer = (int)m_Doc.layers.size() - 1;
+    }
     ImGui::SameLine(0.0f, kGap);
 
     if (!hasSelection) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.4f);
@@ -341,22 +365,26 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
     ImVec2 p0 = m_CanvasScreenPos;
     ImVec2 p1 = ImVec2(p0.x + m_CanvasScreenSize.x, p0.y + m_CanvasScreenSize.y);
 
-    // Fondo a cuadros (checkerboard) SOLO como guia visual de "sin fondo" --
-    // se dibuja en el foreground list para que NUNCA termine en el PNG
-    // exportado (un Overlay real no tiene fondo, ver OverlayTypes.h).
+    // Fondo a cuadros (checkerboard) SOLO como guia visual de "sin fondo",
+    // igual que Photoshop/Canva. Se dibuja en "dl" -- la EXPORTACION ya NO
+    // lee este draw list en absoluto (ver DrawLayersForExport/RenderFooter):
+    // arma su propio ImDrawList aparte con solo las capas reales, asi que el
+    // cuadriculado puede vivir aca (visible, con el z-order correcto: por
+    // debajo de las capas que se dibujan despues en esta misma lista) sin
+    // ningun riesgo de terminar horneado en el PNG.
     {
         const float cell = 14.0f;
         ImU32 c1 = IM_COL32(38, 38, 44, 255), c2 = IM_COL32(30, 30, 35, 255);
         int cols = (int)std::ceil(m_CanvasScreenSize.x / cell);
         int rows = (int)std::ceil(m_CanvasScreenSize.y / cell);
-        fgDl->PushClipRect(p0, p1, true);
+        dl->PushClipRect(p0, p1, true);
         for (int ry = 0; ry < rows; ry++)
             for (int rx = 0; rx < cols; rx++) {
                 ImVec2 a = { p0.x + rx * cell, p0.y + ry * cell };
                 ImVec2 b = { std::min(p1.x, a.x + cell), std::min(p1.y, a.y + cell) };
-                fgDl->AddRectFilled(a, b, ((rx + ry) % 2 == 0) ? c1 : c2);
+                dl->AddRectFilled(a, b, ((rx + ry) % 2 == 0) ? c1 : c2);
             }
-        fgDl->PopClipRect();
+        dl->PopClipRect();
     }
 
     if (m_Doc.bgColor[3] > 0.001f) {
@@ -385,12 +413,13 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         bool  isText  = (layer.kind == OverlayLayerKind::Text);
         bool  isImage = (layer.kind == OverlayLayerKind::Image);
         bool  isShape = (layer.kind == OverlayLayerKind::Shape);
+        bool  isClock = (layer.kind == OverlayLayerKind::Clock);
 
         ImFont* font = nullptr;
         float   displaySize = 0.0f;
         ImVec2  blockSz;
 
-        if (isText) {
+        if (isText || isClock) {
             font = core.GetImGuiFont(layer.fontName, layer.fontSize);
             if (!font) font = ImGui::GetFont();
             displaySize = std::max(4.0f, layer.fontSize * scale);
@@ -406,35 +435,31 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         ImVec2 br = ImVec2(tl.x + blockSz.x, tl.y + blockSz.y);
 
         if (isText) {
-            const char* txt = layer.text.c_str();
+            DrawOverlayLayerStyledText(dl, font, displaySize, tl, blockSz, layer, layer.text.c_str(), scale);
+        } else if (isClock) {
+            // Cuadro-flag: se previsualiza en el editor (placeholder + marco
+            // punteado) pero SOLO en el foreground draw list -- nunca en
+            // "dl", asi que nunca queda horneado en el PNG exportado. En
+            // vivo, el reloj real se dibuja en esta misma posicion/estilo
+            // sobre el overlay ya proyectado (ver LiveContentRenderer.cpp/
+            // UIManager.cpp), no sobre el PNG.
+            DrawOverlayLayerStyledText(fgDl, font, displaySize, tl, blockSz, layer, layer.text.c_str(), scale);
 
-            if (layer.bgEnabled) {
-                ImU32 bgc = ImGui::ColorConvertFloat4ToU32(
-                    ImVec4(layer.bgColor[0], layer.bgColor[1], layer.bgColor[2], layer.bgColor[3]));
-                float padX = layer.bgPaddingX * scale, padY = layer.bgPaddingY * scale;
-                dl->AddRectFilled(ImVec2(tl.x - padX, tl.y - padY), ImVec2(br.x + padX, br.y + padY),
-                                  bgc, layer.bgRounding * scale);
+            constexpr float kDash = 5.0f;
+            ImU32 dashCol = CanvaPalette::ToU32(CanvaPalette::Accent);
+            for (float x = tl.x; x < br.x; x += kDash * 2.0f) {
+                fgDl->AddLine({x, tl.y}, {std::min(x + kDash, br.x), tl.y}, dashCol, 1.5f);
+                fgDl->AddLine({x, br.y}, {std::min(x + kDash, br.x), br.y}, dashCol, 1.5f);
             }
-            if (layer.shadowEnabled) {
-                ImU32 shc = ImGui::ColorConvertFloat4ToU32(ImVec4(
-                    layer.shadowColor[0], layer.shadowColor[1], layer.shadowColor[2], layer.shadowColor[3]));
-                ImVec2 so = ImVec2(layer.shadowOffsetX * scale, layer.shadowOffsetY * scale);
-                dl->AddText(font, displaySize, ImVec2(tl.x + so.x, tl.y + so.y), shc, txt);
+            for (float y = tl.y; y < br.y; y += kDash * 2.0f) {
+                fgDl->AddLine({tl.x, y}, {tl.x, std::min(y + kDash, br.y)}, dashCol, 1.5f);
+                fgDl->AddLine({br.x, y}, {br.x, std::min(y + kDash, br.y)}, dashCol, 1.5f);
             }
-            if (layer.outlineEnabled) {
-                ImU32 oc = ImGui::ColorConvertFloat4ToU32(ImVec4(
-                    layer.outlineColor[0], layer.outlineColor[1], layer.outlineColor[2], layer.outlineColor[3]));
-                float ow = std::max(0.5f, layer.outlineWidth * scale);
-                static const ImVec2 kDirs[8] = {
-                    {-1,-1},{0,-1},{1,-1}, {-1,0},{1,0}, {-1,1},{0,1},{1,1}
-                };
-                for (const auto& d : kDirs)
-                    dl->AddText(font, displaySize, ImVec2(tl.x + d.x * ow, tl.y + d.y * ow), oc, txt);
-            }
-
-            ImU32 col = ImGui::ColorConvertFloat4ToU32(
-                ImVec4(layer.color[0], layer.color[1], layer.color[2], layer.color[3]));
-            dl->AddText(font, displaySize, tl, col, txt);
+            const char* tag = "RELOJ";
+            ImVec2 tagSz = ImGui::CalcTextSize(tag);
+            fgDl->AddRectFilled({tl.x, tl.y - tagSz.y - 4.0f}, {tl.x + tagSz.x + 8.0f, tl.y - 2.0f},
+                                dashCol, 3.0f);
+            fgDl->AddText({tl.x + 4.0f, tl.y - tagSz.y - 2.0f}, IM_COL32(20, 20, 24, 255), tag);
         } else if (isImage) {
             ImTextureID tex = GetImageTexture(layer.imagePath);
             ImVec2 center = ImVec2((tl.x + br.x) * 0.5f, (tl.y + br.y) * 0.5f);
@@ -521,7 +546,7 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         // si esta seleccionada (para no saturar el canvas de agarres). Los
         // handles en si se mantienen sin rotar (ejes del bounding box) para
         // no complicar el hit-testing; solo el contenido visual rota.
-        if (!isText && isSel) {
+        if (!isText && !isClock && isSel) {
             RenderResizeHandle(i, layer, 0, ImVec2(tl.x, tl.y), fgDl);
             RenderResizeHandle(i, layer, 1, ImVec2(br.x, tl.y), fgDl);
             RenderResizeHandle(i, layer, 2, ImVec2(tl.x, br.y), fgDl);
@@ -547,6 +572,91 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
     ImGui::Text("%d x %d — sin fondo (transparente). Arrastra una capa para posicionarla",
                m_Doc.canvasW, m_Doc.canvasH);
     ImGui::PopStyleColor();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DrawLayersForExport — misma geometria/estilo que el canvas en vivo (ver
+//  RenderCanvas) pero SOLO el contenido real: sin cuadriculado, sin chrome
+//  de edicion, sin capas Clock (esas nunca se hornean). Usado exclusivamente
+//  al exportar (ver RenderFooter), en un ImDrawList propio que no comparte
+//  nada con lo que se ve en pantalla ese mismo frame.
+// ─────────────────────────────────────────────────────────────────────────────
+void OverlayCanvasEditor::DrawLayersForExport(ImDrawList* dl, ImVec2 p0, ImVec2 canvasScreenSize) {
+    if (m_Doc.bgColor[3] > 0.001f) {
+        ImU32 bg = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(m_Doc.bgColor[0], m_Doc.bgColor[1], m_Doc.bgColor[2], m_Doc.bgColor[3]));
+        dl->AddRectFilled(p0, ImVec2(p0.x + canvasScreenSize.x, p0.y + canvasScreenSize.y), bg);
+    }
+
+    auto&  core  = Core::PresentationCore::Get();
+    float  scale = canvasScreenSize.x / (float)std::max(1, m_Doc.canvasW);
+
+    for (const auto& layer : m_Doc.layers) {
+        if (layer.kind == OverlayLayerKind::Clock) continue; // cuadro-flag, nunca se hornea
+
+        bool isText  = (layer.kind == OverlayLayerKind::Text);
+        bool isImage = (layer.kind == OverlayLayerKind::Image);
+
+        ImFont* font = nullptr;
+        float   displaySize = 0.0f;
+        ImVec2  blockSz;
+
+        if (isText) {
+            font = core.GetImGuiFont(layer.fontName, layer.fontSize);
+            if (!font) font = ImGui::GetFont();
+            displaySize = std::max(4.0f, layer.fontSize * scale);
+            blockSz = font->CalcTextSizeA(displaySize, FLT_MAX, FLT_MAX, layer.text.c_str());
+        } else {
+            blockSz = ImVec2(std::max(4.0f, layer.sizeW * canvasScreenSize.x),
+                              std::max(4.0f, layer.sizeH * canvasScreenSize.y));
+        }
+
+        ImVec2 lcenter = ImVec2(p0.x + layer.posX * canvasScreenSize.x,
+                                 p0.y + layer.posY * canvasScreenSize.y);
+        ImVec2 tl = ImVec2(lcenter.x - blockSz.x * 0.5f, lcenter.y - blockSz.y * 0.5f);
+        ImVec2 br = ImVec2(tl.x + blockSz.x, tl.y + blockSz.y);
+
+        if (isText) {
+            DrawOverlayLayerStyledText(dl, font, displaySize, tl, blockSz, layer, layer.text.c_str(), scale);
+        } else if (isImage) {
+            ImTextureID tex = GetImageTexture(layer.imagePath);
+            ImVec2 center = ImVec2((tl.x + br.x) * 0.5f, (tl.y + br.y) * 0.5f);
+            float rotRad  = layer.rotation * (float)M_PI / 180.0f;
+            float cs = cosf(rotRad), sn = sinf(rotRad);
+            float hw = blockSz.x * 0.5f, hh = blockSz.y * 0.5f;
+            auto Rot = [&](float lx, float ly) {
+                return ImVec2(center.x + lx * cs - ly * sn, center.y + lx * sn + ly * cs);
+            };
+            ImVec2 qTL = Rot(-hw, -hh), qTR = Rot(hw, -hh), qBR = Rot(hw, hh), qBL = Rot(-hw, hh);
+            if (tex) dl->AddImageQuad(tex, qTL, qTR, qBR, qBL);
+        } else { // Shape
+            ImVec2 center = ImVec2((tl.x + br.x) * 0.5f, (tl.y + br.y) * 0.5f);
+            float hw = blockSz.x * 0.5f, hh = blockSz.y * 0.5f;
+            float rotRad = layer.rotation * (float)M_PI / 180.0f;
+            ImU32 fillCol = ImGui::ColorConvertFloat4ToU32(
+                ImVec4(layer.color[0], layer.color[1], layer.color[2], layer.color[3]));
+            ImU32 strokeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(
+                layer.outlineColor[0], layer.outlineColor[1], layer.outlineColor[2], layer.outlineColor[3]));
+            float ow = std::max(0.5f, layer.outlineWidth * scale);
+
+            if (layer.shapeKind == OverlayShapeKind::Ellipse) {
+                if (layer.shapeFilled) dl->AddEllipseFilled(center, ImVec2(hw, hh), fillCol, rotRad, 0);
+                if (layer.outlineEnabled) dl->AddEllipse(center, ImVec2(hw, hh), strokeCol, rotRad, 0, ow);
+            } else if (std::fabs(layer.rotation) < 0.01f) {
+                float rounding = layer.shapeRounding * scale;
+                if (layer.shapeFilled) dl->AddRectFilled(tl, br, fillCol, rounding);
+                if (layer.outlineEnabled) dl->AddRect(tl, br, strokeCol, rounding, 0, ow);
+            } else {
+                float cs = cosf(rotRad), sn = sinf(rotRad);
+                auto Rot = [&](float lx, float ly) {
+                    return ImVec2(center.x + lx * cs - ly * sn, center.y + lx * sn + ly * cs);
+                };
+                ImVec2 qTL = Rot(-hw, -hh), qTR = Rot(hw, -hh), qBR = Rot(hw, hh), qBL = Rot(-hw, hh);
+                if (layer.shapeFilled) dl->AddQuadFilled(qTL, qTR, qBR, qBL, fillCol);
+                if (layer.outlineEnabled) dl->AddQuad(qTL, qTR, qBR, qBL, strokeCol, ow);
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -667,8 +777,6 @@ void OverlayCanvasEditor::RenderRotateHandle(int layerIdx, OverlayLayer& layer, 
 //  -- este panel solo lista/edita lo que ya existe.
 // ─────────────────────────────────────────────────────────────────────────────
 void OverlayCanvasEditor::RenderSidebar(float w, float h) {
-    (void)h;
-
     CanvaStyleEditor::SectionLabel("CAPAS");
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
@@ -676,7 +784,7 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
     ImGui::BeginChild("##ovLayerList", ImVec2(w, 150.0f), true, ImGuiWindowFlags_NoScrollWithMouse);
     if (m_Doc.layers.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-        ImGui::TextWrapped("Sin capas todavia. Usa la toolbar de arriba del canvas para anadir texto, formas o imagenes.");
+        ImGui::TextWrapped("Sin capas todavia. Usa la toolbar de arriba del canvas para anadir texto, formas, imagenes o un reloj.");
         ImGui::PopStyleColor();
     }
     for (int i = 0; i < (int)m_Doc.layers.size(); i++) {
@@ -696,6 +804,9 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
                 label = label.substr(pos + 1);
             if (label.empty()) label = "(imagen)";
             tag = "[I] ";
+        } else if (l.kind == OverlayLayerKind::Clock) {
+            label = "Reloj";
+            tag = "[R] ";
         } else {
             label = (l.shapeKind == OverlayShapeKind::Ellipse) ? "Elipse" : "Rectangulo";
             tag = "[F] ";
@@ -708,11 +819,31 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
             CanvaPalette::Accent.z * 0.55f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, CanvaPalette::Surface2);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive,  CanvaPalette::Surface2);
-        bool clicked = ImGui::Selectable(label.c_str(), isSel, 0, ImVec2(w - 40.0f, 0.0f));
+        bool clicked = ImGui::Selectable(label.c_str(), isSel, 0, ImVec2(w - 76.0f, 0.0f));
         ImGui::PopStyleColor(3);
         if (clicked) m_SelectedLayer = i;
 
-        ImGui::SameLine(w - 30.0f);
+        // Reordenar (subir/bajar en z-order) -- swap con el vecino, no
+        // cambia la cantidad de capas asi que es seguro seguir iterando.
+        ImGui::SameLine(w - 68.0f);
+        ImGui::BeginDisabled(i == 0);
+        if (ImGui::SmallButton("^")) {
+            std::swap(m_Doc.layers[i], m_Doc.layers[i - 1]);
+            if      (m_SelectedLayer == i)     m_SelectedLayer = i - 1;
+            else if (m_SelectedLayer == i - 1) m_SelectedLayer = i;
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(w - 48.0f);
+        ImGui::BeginDisabled(i == (int)m_Doc.layers.size() - 1);
+        if (ImGui::SmallButton("v")) {
+            std::swap(m_Doc.layers[i], m_Doc.layers[i + 1]);
+            if      (m_SelectedLayer == i)     m_SelectedLayer = i + 1;
+            else if (m_SelectedLayer == i + 1) m_SelectedLayer = i;
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(w - 24.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::Red);
         bool removeClicked = ImGui::SmallButton("x");
         ImGui::PopStyleColor();
@@ -732,9 +863,20 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
     CanvaStyleEditor::SectionLabel("PROPIEDADES");
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
+    // Scrolleable por separado del resto del sidebar (CAPAS queda fijo
+    // arriba) -- esta seccion antes no tenia altura acotada y quedaba
+    // cortada contra el borde inferior de la ventana (que ya no scrollea
+    // como conjunto, ver kFlags en Render()), sin forma de ver los
+    // controles que no entraban (sombra/contorno/fondo, etc).
+    float propsH = std::max(80.0f, h - 212.0f);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::BeginChild("##ovPropsScroll", ImVec2(w, propsH), false);
+
     if (m_SelectedLayer < 0 || m_SelectedLayer >= (int)m_Doc.layers.size()) {
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
         ImGui::TextWrapped("Selecciona o crea una capa para editar sus propiedades.");
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
         ImGui::PopStyleColor();
         return;
     }
@@ -757,71 +899,16 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
         ImGui::SetNextItemWidth(w);
         if (ImGui::InputTextMultiline("##ovLayerText", textBuf, sizeof(textBuf), ImVec2(w, 54.0f)))
             layer.text = textBuf;
-
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::SetNextItemWidth(w);
-        if (ImGui::BeginCombo("##ovLayerFont", layer.fontName.c_str())) {
-            if (m_FontList) {
-                for (const auto& f : *m_FontList) {
-                    bool sel = (layer.fontName == f);
-                    if (ImGui::Selectable(f.c_str(), sel)) layer.fontName = f;
-                    if (sel) ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
 
+        RenderTextStyleProperties(layer, w);
+    } else if (layer.kind == OverlayLayerKind::Clock) {
+        ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
+        ImGui::TextWrapped("Se reemplaza en vivo por el reloj/contador activo (ver panel Contadores).");
+        ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::SetNextItemWidth(w);
-        ImGui::DragFloat("##ovLayerSize", &layer.fontSize, 1.0f, 10.0f, 400.0f, "%.0f px");
 
-        // Swatch de color "a lo Estilos": sin sliders RGBA inline, solo el
-        // cuadradito que abre el picker completo en un popup al clickear.
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Color");
-        ImGui::SameLine(w - 26.0f);
-        ImGui::ColorEdit4("##ovLayerColor", layer.color, kSwatchFlags);
-
-        ImGui::Dummy(ImVec2(0.0f, 10.0f));
-        ImGui::Separator();
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-        ImGui::Checkbox("Sombra", &layer.shadowEnabled);
-        if (layer.shadowEnabled) {
-            ImGui::SameLine(w - 26.0f);
-            ImGui::ColorEdit4("##ovShadowColor", layer.shadowColor, kSwatchFlags);
-            ImGui::SetNextItemWidth(w);
-            float shOff[2] = { layer.shadowOffsetX, layer.shadowOffsetY };
-            if (ImGui::DragFloat2("##ovShadowOffset", shOff, 0.2f, -20.0f, 20.0f, "%.1f px")) {
-                layer.shadowOffsetX = shOff[0];
-                layer.shadowOffsetY = shOff[1];
-            }
-        }
-
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::Checkbox("Contorno", &layer.outlineEnabled);
-        if (layer.outlineEnabled) {
-            ImGui::SameLine(w - 26.0f);
-            ImGui::ColorEdit4("##ovOutlineColor", layer.outlineColor, kSwatchFlags);
-            ImGui::SetNextItemWidth(w);
-            ImGui::DragFloat("##ovOutlineWidth", &layer.outlineWidth, 0.2f, 0.5f, 20.0f, "%.1f px");
-        }
-
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::Checkbox("Fondo", &layer.bgEnabled);
-        if (layer.bgEnabled) {
-            ImGui::SameLine(w - 26.0f);
-            ImGui::ColorEdit4("##ovBgColor", layer.bgColor, kSwatchFlags);
-            ImGui::SetNextItemWidth(w);
-            float pad[2] = { layer.bgPaddingX, layer.bgPaddingY };
-            if (ImGui::DragFloat2("##ovBgPadding", pad, 0.2f, 0.0f, 60.0f, "%.0f px")) {
-                layer.bgPaddingX = pad[0];
-                layer.bgPaddingY = pad[1];
-            }
-            ImGui::SetNextItemWidth(w);
-            ImGui::DragFloat("##ovBgRounding", &layer.bgRounding, 0.2f, 0.0f, 40.0f, "%.0f redondeo");
-        }
+        RenderTextStyleProperties(layer, w);
     } else if (layer.kind == OverlayLayerKind::Image) {
         std::string fname = layer.imagePath;
         if (auto pos = fname.find_last_of("/\\"); pos != std::string::npos)
@@ -904,6 +991,83 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
 
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(2);
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderTextStyleProperties — font/tamano/color/sombra/contorno/fondo,
+//  compartido entre capas Text y Clock (ver RenderSidebar).
+// ─────────────────────────────────────────────────────────────────────────────
+void OverlayCanvasEditor::RenderTextStyleProperties(OverlayLayer& layer, float w) {
+    constexpr ImGuiColorEditFlags kSwatchFlags = ImGuiColorEditFlags_AlphaBar |
+        ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_PickerHueWheel |
+        ImGuiColorEditFlags_AlphaPreviewHalf;
+
+    ImGui::SetNextItemWidth(w);
+    if (ImGui::BeginCombo("##ovLayerFont", layer.fontName.c_str())) {
+        if (m_FontList) {
+            for (const auto& f : *m_FontList) {
+                bool sel = (layer.fontName == f);
+                if (ImGui::Selectable(f.c_str(), sel)) layer.fontName = f;
+                if (sel) ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::SetNextItemWidth(w);
+    ImGui::DragFloat("##ovLayerSize", &layer.fontSize, 1.0f, 10.0f, 400.0f, "%.0f px");
+
+    // Swatch de color "a lo Estilos": sin sliders RGBA inline, solo el
+    // cuadradito que abre el picker completo en un popup al clickear.
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Color");
+    ImGui::SameLine(w - 26.0f);
+    ImGui::ColorEdit4("##ovLayerColor", layer.color, kSwatchFlags);
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    ImGui::Checkbox("Sombra", &layer.shadowEnabled);
+    if (layer.shadowEnabled) {
+        ImGui::SameLine(w - 26.0f);
+        ImGui::ColorEdit4("##ovShadowColor", layer.shadowColor, kSwatchFlags);
+        ImGui::SetNextItemWidth(w);
+        float shOff[2] = { layer.shadowOffsetX, layer.shadowOffsetY };
+        if (ImGui::DragFloat2("##ovShadowOffset", shOff, 0.2f, -20.0f, 20.0f, "%.1f px")) {
+            layer.shadowOffsetX = shOff[0];
+            layer.shadowOffsetY = shOff[1];
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::Checkbox("Contorno", &layer.outlineEnabled);
+    if (layer.outlineEnabled) {
+        ImGui::SameLine(w - 26.0f);
+        ImGui::ColorEdit4("##ovOutlineColor", layer.outlineColor, kSwatchFlags);
+        ImGui::SetNextItemWidth(w);
+        ImGui::DragFloat("##ovOutlineWidth", &layer.outlineWidth, 0.2f, 0.5f, 20.0f, "%.1f px");
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::Checkbox("Fondo", &layer.bgEnabled);
+    if (layer.bgEnabled) {
+        ImGui::SameLine(w - 26.0f);
+        ImGui::ColorEdit4("##ovBgColor", layer.bgColor, kSwatchFlags);
+        ImGui::SetNextItemWidth(w);
+        float pad[2] = { layer.bgPaddingX, layer.bgPaddingY };
+        if (ImGui::DragFloat2("##ovBgPadding", pad, 0.2f, 0.0f, 60.0f, "%.0f px")) {
+            layer.bgPaddingX = pad[0];
+            layer.bgPaddingY = pad[1];
+        }
+        ImGui::SetNextItemWidth(w);
+        ImGui::DragFloat("##ovBgRounding", &layer.bgRounding, 0.2f, 0.0f, 40.0f, "%.0f redondeo");
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -911,7 +1075,7 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
 // ─────────────────────────────────────────────────────────────────────────────
 void OverlayCanvasEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
                                        OnSaveCallback& onSave, OnCancelCallback& onClose) {
-    constexpr float kFooterH = 64.0f;
+    constexpr float kFooterH = 52.0f;
     float footerY = winSize.y - kFooterH;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -922,7 +1086,7 @@ void OverlayCanvasEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
     dl->AddRectFilled(
         ImVec2(winPos.x, winPos.y + footerY),
         ImVec2(winPos.x + winSize.x, winPos.y + winSize.y),
-        CanvaPalette::ToU32(ImVec4(0.08f, 0.08f, 0.10f, 1.0f)));
+        CanvaPalette::ToU32(CanvaPalette::Surface1));
 
     ImGui::SetCursorPos(ImVec2(20.0f, footerY + (kFooterH - 36.0f) * 0.5f));
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
@@ -986,11 +1150,29 @@ void OverlayCanvasEditor::RenderFooter(ImVec2 winPos, ImVec2 winSize,
         int         expW    = m_Doc.canvasW;
         int         expH    = m_Doc.canvasH;
 
+        // Ventana invisible dedicada SOLO para conseguir un ImDrawList
+        // correctamente inicializado via la API publica de ImGui (Begin/
+        // GetWindowDrawList), en vez de armar uno a mano con internals
+        // (fragil entre versiones de ImGui) -- se posiciona en el MISMO
+        // lugar/tamano que el canvas real (necesario para que su clip rect
+        // no recorte nada), pero sin fondo/inputs y solo dura este frame
+        // (Guardar cierra el editor de inmediato despues).
+        ImGui::SetNextWindowPos(m_CanvasScreenPos);
+        ImGui::SetNextWindowSize(m_CanvasScreenSize);
+        ImGui::Begin("##ovExportCapture", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoBringToFrontOnFocus);
+        DrawLayersForExport(ImGui::GetWindowDrawList(), m_CanvasScreenPos, m_CanvasScreenSize);
+        auto exportDl = std::make_shared<ImDrawList>(*ImGui::GetWindowDrawList());
+        ImGui::End();
+
         // Captura por VALOR (no por referencia): onSave/onClose/name/docCopy
         // deben sobrevivir hasta ProcessPending() mas adelante en este mismo
         // frame, momento en el que este Render() ya retorno.
         OverlayExportService::Get().RequestCapture(
-            m_CanvasWindowThisFrame, m_CanvasScreenPos, m_CanvasScreenSize,
+            exportDl, m_CanvasScreenPos, m_CanvasScreenSize,
             pngPath, expW, expH,
             [this, name, docCopy, onSave, onClose](bool ok) {
                 if (ok) {

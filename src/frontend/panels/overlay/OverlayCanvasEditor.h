@@ -61,6 +61,18 @@ private:
     void AddImageLayerFromMenu();
     ImTextureID GetImageTexture(const std::string& path);
 
+    // Dibuja SOLO el contenido real de las capas (fondo del doc + Text/
+    // Image/Shape; Clock se saltea siempre, nunca se hornea) en un
+    // ImDrawList aparte, propio para exportar -- ver RenderFooter. Nunca
+    // incluye el cuadriculado "sin fondo" ni chrome de edicion (eso solo
+    // existe en el canvas en vivo, ver RenderCanvas).
+    void DrawLayersForExport(ImDrawList* dl, ImVec2 p0, ImVec2 canvasScreenSize);
+
+    // Controles de font/tamano/color/sombra/contorno/fondo -- compartidos
+    // entre capas Text y Clock (la capa Clock es un cuadro con el mismo
+    // estilo de texto, solo que sin contenido editable, ver RenderSidebar).
+    void RenderTextStyleProperties(OverlayLayer& layer, float w);
+
     std::vector<std::string>* m_FontList;
     ResolvePngPathFn           m_ResolvePngPath;
     ListBgImagesFn             m_ListBgImages;

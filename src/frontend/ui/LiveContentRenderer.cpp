@@ -5,6 +5,7 @@
 #include "backend/settings/StageLayoutTemplates.h"
 #include "frontend/panels/capture/CapturePanel.h"
 #include "frontend/panels/monitor/MonitorTheme.h"
+#include "frontend/panels/overlay/OverlayLayerRender.h"
 #include "frontend/ui/TextEffectsRenderer.h"
 #include <algorithm>
 #include <cfloat>
@@ -205,6 +206,33 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     // alpha real del PNG. Mismo orden que en la salida real (UIManager.cpp).
     if (void* overlayTex = core.GetOverlayTexture())
         dl->AddImage(overlayTex, p0, p1);
+
+    // ── Reloj/contador en vivo sobre el overlay ─────────────────────────────
+    // Cuadro-flag definido en el overlay activo (ver OverlayCanvasEditor,
+    // capa Clock) -- se dibuja en vivo aca, nunca esta horneado en el PNG
+    // del overlay (ver PresentationCore::SetOverlayClockLayer/
+    // SetLiveOverlayClockText, publicado desde OClock::SyncTransmission()).
+    if (core.HasOverlayClockLayer()) {
+        std::string clockTxt = core.GetLiveOverlayClockText();
+        if (!clockTxt.empty()) {
+            OverlayLayer cl = core.GetOverlayClockLayer();
+            ImFont* clockFont = core.GetImGuiFont(cl.fontName, cl.fontSize);
+            if (!clockFont) clockFont = ImGui::GetFont();
+
+            float clockScale = drawW / (float)std::max(1, core.GetOverlayClockCanvasW());
+            float clockDispSize = std::max(4.0f, cl.fontSize * clockScale);
+            ImVec2 clockBlockSz = clockFont->CalcTextSizeA(clockDispSize, FLT_MAX, FLT_MAX, clockTxt.c_str());
+            ImVec2 clockCenter = ImVec2(p0.x + cl.posX * drawW, p0.y + cl.posY * drawH);
+            ImVec2 clockTL = ImVec2(clockCenter.x - clockBlockSz.x * 0.5f, clockCenter.y - clockBlockSz.y * 0.5f);
+
+            float clockColorOverride[4];
+            bool hasOverride = core.HasLiveOverlayClockColorOverride();
+            if (hasOverride) core.GetLiveOverlayClockColorOverride(clockColorOverride);
+
+            DrawOverlayLayerStyledText(dl, clockFont, clockDispSize, clockTL, clockBlockSz, cl,
+                                       clockTxt.c_str(), clockScale, hasOverride ? clockColorOverride : nullptr);
+        }
+    }
 
     // ── Captura (cámara/pantalla/ventana) ──────────────────────────────────
     // Antes esto NUNCA se dibujaba en el preview -- en la salida real

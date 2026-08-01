@@ -15,10 +15,12 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <set>
 #include <cstring>
 #include <cstdio>
 #include <GL/gl.h>
 #include "stb_image.h"
+#include "frontend/panels/stb_image_write.h"
 
 namespace fs = std::filesystem;
 namespace ProyecThor::UI {
@@ -157,7 +159,77 @@ OverlayLibraryTab::OverlayLibraryTab(UIManager* uiManager)
         [this](const std::string& name) { return ResolvePngPath(name); },
         [this]() { return ListBgImages(); },
         [this]() { return ImportOverlayImage(); });
+    SeedDefaultOverlaysIfEmpty();
     ReloadList();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SeedDefaultOverlaysIfEmpty — deja unos overlays de reloj ya listos para
+//  probar, la primera vez que se ve cada uno. NO se evalua por "la carpeta
+//  esta vacia" (el usuario puede tener overlays propios de antes) ni por "ya
+//  existe el archivo" (si el usuario borra un predeterminado a mano, borrarlo
+//  debe ser definitivo, no reaparecer solo porque el archivo ya no esta).
+//  Se usa un marcador aparte (_defaults_seeded.txt, una linea por nombre ya
+//  sembrado alguna vez) para distinguir "nunca lo cree" de "lo cree y el
+//  usuario lo borro". Esto es lo que faltaba para que los predeterminados
+//  convivan con contenido nuevo del usuario sin desaparecer solos.
+//  Una capa Clock nunca se hornea al PNG (ver OverlayCanvasEditor::
+//  RenderCanvas), asi que el PNG resultante es 100% transparente y se puede
+//  escribir directo con stb_image_write, sin necesitar el editor ni un frame
+//  de ImGui.
+// ─────────────────────────────────────────────────────────────────────────────
+void OverlayLibraryTab::SeedDefaultOverlaysIfEmpty() {
+    struct Preset { const char* name; float posX, posY; float fontSize; bool bg; };
+    static const Preset kPresets[] = {
+        { "Reloj - Barra inferior",           0.5f,  0.92f, 88.0f,  true  },
+        { "Reloj - Esquina inferior derecha", 0.88f, 0.90f, 60.0f,  true  },
+        { "Reloj - Centrado",                 0.5f,  0.5f,  140.0f, false },
+    };
+
+    fs::path markerPath = OverlaysDir() / "_defaults_seeded.txt";
+    std::set<std::string> alreadySeeded;
+    {
+        std::ifstream in(markerPath);
+        std::string line;
+        while (std::getline(in, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+            if (!line.empty()) alreadySeeded.insert(line);
+        }
+    }
+
+    std::vector<const Preset*> toSeed;
+    for (const auto& p : kPresets)
+        if (!alreadySeeded.count(p.name)) toSeed.push_back(&p);
+    if (toSeed.empty()) return;
+
+    constexpr int kW = 1920, kH = 1080;
+    std::vector<unsigned char> transparentPixels((size_t)kW * kH * 4, 0);
+
+    std::ofstream markerOut(markerPath, std::ios::app);
+    for (const Preset* pp : toSeed) {
+        const Preset& p = *pp;
+        OverlayDoc doc;
+        doc.canvasW = kW;
+        doc.canvasH = kH;
+
+        OverlayLayer clock;
+        clock.kind          = OverlayLayerKind::Clock;
+        clock.text          = "00:00:00";
+        clock.fontSize      = p.fontSize;
+        clock.posX          = p.posX;
+        clock.posY          = p.posY;
+        clock.shadowEnabled = true;
+        clock.bgEnabled     = p.bg;
+        if (p.bg) {
+            clock.bgColor[0] = 0.0f; clock.bgColor[1] = 0.0f; clock.bgColor[2] = 0.0f; clock.bgColor[3] = 0.55f;
+            clock.bgPaddingX = 28.0f; clock.bgPaddingY = 14.0f; clock.bgRounding = 12.0f;
+        }
+        doc.layers.push_back(clock);
+
+        SaveOverlayRecipe(p.name, doc);
+        stbi_write_png(ResolvePngPath(p.name).c_str(), kW, kH, 4, transparentPixels.data(), kW * 4);
+        markerOut << p.name << "\n";
+    }
 }
 
 void OverlayLibraryTab::LoadFontsList() {
@@ -185,7 +257,21 @@ void OverlayLibraryTab::ReloadList() {
             std::string name = e.path().stem().string();
             fs::path png = OverlaysDir() / (name + ".png");
             if (!fs::exists(png)) continue;
-            m_Overlays.push_back({ name, png.string() });
+
+            OverlayEntry entry;
+            entry.name    = name;
+            entry.pngPath = png.string();
+
+            OverlayDoc doc;
+            if (LoadOverlayRecipe(name, doc)) {
+                entry.canvasW = doc.canvasW;
+                entry.canvasH = doc.canvasH;
+                if (const OverlayLayer* cl = FindClockLayer(doc)) {
+                    entry.hasClock   = true;
+                    entry.clockLayer = *cl;
+                }
+            }
+            m_Overlays.push_back(std::move(entry));
         }
     } catch (...) {}
     std::sort(m_Overlays.begin(), m_Overlays.end(),
@@ -256,7 +342,8 @@ bool OverlayLibraryTab::SaveOverlayRecipe(const std::string& name, const Overlay
     for (size_t i = 0; i < doc.layers.size(); i++) {
         const auto& l = doc.layers[i];
         const char* kindStr = l.kind == OverlayLayerKind::Image ? "image"
-                             : l.kind == OverlayLayerKind::Shape ? "shape" : "text";
+                             : l.kind == OverlayLayerKind::Shape ? "shape"
+                             : l.kind == OverlayLayerKind::Clock ? "clock" : "text";
         f << "layer" << i << ".kind="  << kindStr << "\n";
         f << "layer" << i << ".text="  << EscapeNewlines(l.text) << "\n";
         f << "layer" << i << ".font="  << l.fontName << "\n";
@@ -326,6 +413,7 @@ bool OverlayLibraryTab::LoadOverlayRecipe(const std::string& name, OverlayDoc& o
             if      (field == "kind") {
                 l.kind = (v == "image") ? OverlayLayerKind::Image
                        : (v == "shape") ? OverlayLayerKind::Shape
+                       : (v == "clock") ? OverlayLayerKind::Clock
                                         : OverlayLayerKind::Text;
             }
             else if (field == "text")  l.text     = UnescapeNewlines(v);
@@ -385,8 +473,25 @@ void OverlayLibraryTab::OpenEditorFullscreen(bool isNew, const std::string& name
             m_Editor->Render(
                 [this](const std::string& n, const OverlayDoc& d) {
                     if (SaveOverlayRecipe(n, d)) {
-                        m_ThumbnailCache.erase(ResolvePngPath(n));
+                        std::string pngPath = ResolvePngPath(n);
+                        m_ThumbnailCache.erase(pngPath);
                         ReloadList();
+
+                        // Si el overlay editado es el que ya esta en vivo,
+                        // se refresca la textura/cuadro de reloj proyectados
+                        // con la version recien guardada -- la transmision al
+                        // publico NUNCA se toca mientras se edita (abrir/
+                        // cerrar el editor no llama nada de PresentationCore),
+                        // solo se actualiza aca, una vez que el guardado ya
+                        // se confirmo.
+                        auto& core = Core::PresentationCore::Get();
+                        if (core.GetOverlayPath() == pngPath) {
+                            core.SetOverlayMedia(pngPath);
+                            if (const OverlayLayer* cl = FindClockLayer(d))
+                                core.SetOverlayClockLayer(true, *cl, d.canvasW, d.canvasH);
+                            else
+                                core.SetOverlayClockLayer(false, OverlayLayer{}, d.canvasW, d.canvasH);
+                        }
                     }
                 },
                 [this]() {
@@ -476,8 +581,10 @@ void OverlayLibraryTab::RenderCard(const OverlayEntry& e, float W, float H, int 
     dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, LPU32(LP::Text), dn.c_str());
 
     ImGui::InvisibleButton(("##ovc_"+e.name).c_str(), {W, H});
-    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         Core::PresentationCore::Get().SetOverlayMedia(e.pngPath);
+        Core::PresentationCore::Get().SetOverlayClockLayer(e.hasClock, e.clockLayer, e.canvasW, e.canvasH);
+    }
 
     if (ImGui::BeginPopupContextItem(("OvCtx_"+e.name).c_str())) {
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);
@@ -527,8 +634,10 @@ void OverlayLibraryTab::RenderRow(const OverlayEntry& e, float W, float rowH) {
     dl->AddText({tx+thumbSz+10.0f, pos.y+(rowH-ImGui::GetTextLineHeight())*0.5f}, LPU32(LP::Text), dn.c_str());
 
     ImGui::InvisibleButton(("##ovrow_"+e.name).c_str(), {W, rowH});
-    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         Core::PresentationCore::Get().SetOverlayMedia(e.pngPath);
+        Core::PresentationCore::Get().SetOverlayClockLayer(e.hasClock, e.clockLayer, e.canvasW, e.canvasH);
+    }
 
     if (ImGui::BeginPopupContextItem(("OvRowCtx_"+e.name).c_str())) {
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);

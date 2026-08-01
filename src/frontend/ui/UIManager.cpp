@@ -17,6 +17,7 @@
 #include "UIStrings.h"
 #include "frontend/views/Announcements.h"
 #include "frontend/views/OClock.h"
+#include "frontend/panels/overlay/OverlayLayerRender.h"
 #include "frontend/views/Audio.h"
 #include "Hub.h"
 #include "frontend/panels/StreamingPanel.h"
@@ -155,96 +156,20 @@ void UIManager::RequestSettings()
     m_ShowConfig = true;
 }
 
-void UIManager::RenderAll()
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderLiveOutputWindows — ventanas nativas "ProjectorLive"/"StageLive",
+//  la salida real al publico. Se llama UNA VEZ POR FRAME desde el principio
+//  de RenderAll(), ANTES de cualquier return anticipado (editor a pantalla
+//  completa, modo Hub) -- estas ventanas nativas (ImGuiWindowClass con
+//  ViewportFlagsOverrideSet = NoAutoMerge|TopMost, o sea su propia ventana
+//  de SO) se destruyen solas si ImGui no vuelve a someter su Begin() por un
+//  par de frames, asi que antes, cuando este bloque vivia mas abajo (adentro
+//  del branch exclusivo de WorkspaceMode::Projector), abrir el editor de
+//  Overlays/Estilos o volver al Hub mientras se proyectaba cortaba la
+//  transmision real al publico sin que el operador lo pidiera.
+// ─────────────────────────────────────────────────────────────────────────────
+void UIManager::RenderLiveOutputWindows()
 {
-    // Re-sincroniza el tema TODOS los frames, no solo cuando se clickea un
-    // preset en Ajustes > Apariencia -- pedido explicito: varios paneles
-    // (Biblioteca, Monitor de Control) se quedaban con colores de un tema
-    // anterior sin importar cual estuviera realmente elegido. ApplyTheme()
-    // es barato (unas pocas asignaciones de ImVec4/ImU32, sin IO), asi que
-    // hacerlo incondicional cada frame es mas robusto que confiar en que
-    // CADA lugar que cambia el tema se acuerde de llamarlo -- si algo queda
-    // "atrasado" un frame, se autocorrige en el siguiente en vez de
-    // quedarse mal para siempre.
-    ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
-
-     {
-        ImGuiIO& io = ImGui::GetIO();
-
-        if (ImGui::IsKeyPressed(ImGuiKey_F1, false))
-            ProyecThor::External::OpenURL("https://proyecthor.web.app/");
-
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false))
-            m_ShowConfig = true;
-
-        if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_F4, false))
-            glfwSetWindowShouldClose(m_Window, true);
-
-        if (ImGui::IsKeyPressed(ImGuiKey_F11, false))
-            ToggleFullscreen();
-    }
-
-    m_Red.Update();
-    m_Chat.Update();
-    m_Broadcast.Update();
-    m_Sync.Update();
-    m_OSC.Update();
-
-    RenderModeToolbar();
-
-    // Editor a pantalla completa (Overlay/Estilos) activo -- ver
-    // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
-    // Ajustes/etc) por el contenido del editor, sin tocar la toolbar de
-    // arriba (esa nunca se oculta, ver comentario en el header).
-    if (m_FullscreenEditorActive && m_FullscreenEditorRenderFn)
-    {
-        m_FullscreenEditorRenderFn();
-        return;
-    }
-
-if (m_Mode == WorkspaceMode::Hub)
-    {
-        if (m_Hub.Render())
-        {
-            if (!m_Hub.SettingsRequested())
-            {
-                m_Mode        = WorkspaceMode::Projector;
-                m_ResetLayout = true;
-            }
-        }
-
-        if (m_Hub.SettingsRequested())
-        {
-            m_ShowConfig = true;
-            m_SettingsPanel.SetInitialCategory(m_Hub.GetActiveTab());
-            m_Hub.ClearSettingsRequest();
-        }
-
-        if (m_ShowConfig)
-            m_SettingsPanel.Render(&m_ShowConfig);
-
-        {
-            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-            if (general.showPerfPanel)
-            {
-                bool wasOpen = general.showPerfPanel;
-                m_PerformancePanel.Render(&general.showPerfPanel);
-                if (wasOpen && !general.showPerfPanel)
-                    ProyecThor::Settings::SettingsManager::Get().Save();
-            }
-        }
-
-        m_DatabasePanel.Render();
-        m_WikiPanel.Render();
-
-        RenderMainMenuBar();
-        return;
-    }
-
-    BeginDockspace();
-
-    const auto& str = ProyecThor::UI::GetUIStrings();
-
     float transNow = (float)glfwGetTime();
     float transDt  = transNow - m_TransitionLastTime;
     m_TransitionLastTime = transNow;
@@ -253,14 +178,8 @@ if (m_Mode == WorkspaceMode::Hub)
     if (m_TransitionPanel)
         m_TransitionPanel->Update(transDt);
 
-    for (auto& panel : m_Panels)
-        panel->Render();
-if (m_FocusViewNextFrame) {
-        ImGui::SetWindowFocus("Vista en Vivo");
-        m_FocusViewNextFrame = false;
-    }
-
     auto state = Core::PresentationCore::Get().GetState();
+
     if (state.isProjecting)
     {
         int monitorCount = 0;
@@ -613,6 +532,38 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                         ImVec2(0, 0), ImVec2(1, 1));
                 }
+
+                // ── Reloj/contador en vivo sobre el overlay ──────────────────
+                // Ver mismo bloque en LiveContentRenderer.cpp (preview) -- debe
+                // dibujarse identico aca para que la salida real al proyector
+                // coincida con lo que ve el operador en "Vista en Vivo".
+                {
+                    auto& core = Core::PresentationCore::Get();
+                    if (core.HasOverlayClockLayer())
+                    {
+                        std::string clockTxt = core.GetLiveOverlayClockText();
+                        if (!clockTxt.empty())
+                        {
+                            ProyecThor::UI::OverlayLayer cl = core.GetOverlayClockLayer();
+                            ImFont* clockFont = core.GetImGuiFont(cl.fontName, cl.fontSize);
+                            if (!clockFont) clockFont = ImGui::GetFont();
+
+                            float drawW = (float)mode->width, drawH = (float)mode->height;
+                            float clockScale = drawW / (float)std::max(1, core.GetOverlayClockCanvasW());
+                            float clockDispSize = std::max(4.0f, cl.fontSize * clockScale);
+                            ImVec2 clockBlockSz = clockFont->CalcTextSizeA(clockDispSize, FLT_MAX, FLT_MAX, clockTxt.c_str());
+                            ImVec2 clockCenter = ImVec2((float)mx + cl.posX * drawW, (float)my + cl.posY * drawH);
+                            ImVec2 clockTL = ImVec2(clockCenter.x - clockBlockSz.x * 0.5f, clockCenter.y - clockBlockSz.y * 0.5f);
+
+                            float clockColorOverride[4];
+                            bool hasOverride = core.HasLiveOverlayClockColorOverride();
+                            if (hasOverride) core.GetLiveOverlayClockColorOverride(clockColorOverride);
+
+                            ProyecThor::UI::DrawOverlayLayerStyledText(drawList, clockFont, clockDispSize, clockTL,
+                                clockBlockSz, cl, clockTxt.c_str(), clockScale, hasOverride ? clockColorOverride : nullptr);
+                        }
+                    }
+                }
 }
 
                 if (!showingLoadingScreen)
@@ -694,6 +645,111 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
             }
         }
     }
+}
+
+void UIManager::RenderAll()
+{
+    // Re-sincroniza el tema TODOS los frames, no solo cuando se clickea un
+    // preset en Ajustes > Apariencia -- pedido explicito: varios paneles
+    // (Biblioteca, Monitor de Control) se quedaban con colores de un tema
+    // anterior sin importar cual estuviera realmente elegido. ApplyTheme()
+    // es barato (unas pocas asignaciones de ImVec4/ImU32, sin IO), asi que
+    // hacerlo incondicional cada frame es mas robusto que confiar en que
+    // CADA lugar que cambia el tema se acuerde de llamarlo -- si algo queda
+    // "atrasado" un frame, se autocorrige en el siguiente en vez de
+    // quedarse mal para siempre.
+    ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
+
+     {
+        ImGuiIO& io = ImGui::GetIO();
+
+        if (ImGui::IsKeyPressed(ImGuiKey_F1, false))
+            ProyecThor::External::OpenURL("https://proyecthor.web.app/");
+
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false))
+            m_ShowConfig = true;
+
+        if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_F4, false))
+            glfwSetWindowShouldClose(m_Window, true);
+
+        if (ImGui::IsKeyPressed(ImGuiKey_F11, false))
+            ToggleFullscreen();
+    }
+
+    m_Red.Update();
+    m_Chat.Update();
+    m_Broadcast.Update();
+    m_Sync.Update();
+    m_OSC.Update();
+
+    RenderModeToolbar();
+
+    // Salida real ("ProjectorLive"/"StageLive") -- SIEMPRE se renderiza aca,
+    // antes de cualquier return anticipado de abajo (editor a pantalla
+    // completa o Hub), para que la transmision al publico nunca se
+    // interrumpa solo porque el operador esta mirando otra cosa en su
+    // propia pantalla. Ver comentario en UIManager.h.
+    RenderLiveOutputWindows();
+
+    // Editor a pantalla completa (Overlay/Estilos) activo -- ver
+    // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
+    // Ajustes/etc) por el contenido del editor, sin tocar la toolbar de
+    // arriba (esa nunca se oculta, ver comentario en el header) ni la
+    // salida real de arriba.
+    if (m_FullscreenEditorActive && m_FullscreenEditorRenderFn)
+    {
+        m_FullscreenEditorRenderFn();
+        return;
+    }
+
+if (m_Mode == WorkspaceMode::Hub)
+    {
+        if (m_Hub.Render())
+        {
+            if (!m_Hub.SettingsRequested())
+            {
+                m_Mode        = WorkspaceMode::Projector;
+                m_ResetLayout = true;
+            }
+        }
+
+        if (m_Hub.SettingsRequested())
+        {
+            m_ShowConfig = true;
+            m_SettingsPanel.SetInitialCategory(m_Hub.GetActiveTab());
+            m_Hub.ClearSettingsRequest();
+        }
+
+        if (m_ShowConfig)
+            m_SettingsPanel.Render(&m_ShowConfig);
+
+        {
+            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+            if (general.showPerfPanel)
+            {
+                bool wasOpen = general.showPerfPanel;
+                m_PerformancePanel.Render(&general.showPerfPanel);
+                if (wasOpen && !general.showPerfPanel)
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+        }
+
+        RenderMainMenuBar();
+        return;
+    }
+
+    BeginDockspace();
+
+    const auto& str = ProyecThor::UI::GetUIStrings();
+
+    for (auto& panel : m_Panels)
+        panel->Render();
+if (m_FocusViewNextFrame) {
+        ImGui::SetWindowFocus("Vista en Vivo");
+        m_FocusViewNextFrame = false;
+    }
+    // (Salida real movida a RenderLiveOutputWindows(), llamada al principio
+    // de RenderAll() -- ver comentario ahi y en UIManager.h.)
 
     if (m_ShowConfig)
         m_SettingsPanel.Render(&m_ShowConfig);
@@ -788,9 +844,6 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
     ImGui::PopStyleColor(2);
 
    EndDockspace();
-
-    m_DatabasePanel.Render();
-    m_WikiPanel.Render();
 
     RenderMainMenuBar();
 }
@@ -1426,16 +1479,6 @@ void UIManager::RenderMainMenuBar()
         {
             ImGui::Spacing();
 
-            if (ImGui::MenuItem("Base de datos"))
-                m_DatabasePanel.Open();
-
-            if (ImGui::MenuItem("Wiki"))
-                ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/wiki");
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
             if (ImGui::MenuItem(str.menuDocs, "F1"))
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
 
@@ -1443,16 +1486,6 @@ void UIManager::RenderMainMenuBar()
             if (ImGui::MenuItem("Reporte de bugs"))
                 ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/issues");
             ImGui::PopStyleColor();
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.345f, 0.396f, 0.949f, 1.0f));
-            bool discordOpen = ImGui::BeginMenu("Canal de Discord");
-            ImGui::PopStyleColor();
-            if (discordOpen)
-            {
-                const char* discordUrl = "https://discord.gg/RMk8AGC5pn";
-                RenderSocialQrMenu(discordUrl);
-                ImGui::EndMenu();
-            }
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.145f, 0.827f, 0.400f, 1.0f));
             bool whatsappOpen = ImGui::BeginMenu("Canal de WhatsApp");
@@ -1464,9 +1497,28 @@ void UIManager::RenderMainMenuBar()
                 ImGui::EndMenu();
             }
 
-            ImGui::BeginDisabled(true);
-            ImGui::MenuItem("Canal de YouTube");
-            ImGui::EndDisabled();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.898f, 0.224f, 0.208f, 1.0f));
+            bool youtubeOpen = ImGui::BeginMenu("Canal de YouTube");
+            ImGui::PopStyleColor();
+            if (youtubeOpen)
+            {
+                const char* youtubeUrl = "https://www.youtube.com/@thevixcho";
+                RenderSocialQrMenu(youtubeUrl);
+                ImGui::EndMenu();
+            }
+
+            // App movil de control remoto (Android, ver SyncPanel/SyncServer)
+            // -- mismo criterio que los canales de arriba: submenu con QR
+            // para escanear con el celular en vez de tipear la URL a mano.
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.290f, 0.780f, 0.490f, 1.0f));
+            bool mobileAppOpen = ImGui::BeginMenu("App movil (control remoto)");
+            ImGui::PopStyleColor();
+            if (mobileAppOpen)
+            {
+                const char* mobileAppUrl = "https://play.google.com/store/apps/details?id=the.proyecthor.mobile";
+                RenderSocialQrMenu(mobileAppUrl);
+                ImGui::EndMenu();
+            }
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
             if (ImGui::MenuItem(str.menuDonations))

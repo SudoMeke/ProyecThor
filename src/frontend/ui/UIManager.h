@@ -11,8 +11,6 @@
 #include "panels/TransitionPanel.h"
 #include "Hub.h"
 #include "GlassRenderer.h"
-#include "panels/DatabasePanel.h"
-#include "panels/WikiPanel.h"
 #include "panels/PerformancePanel.h"
 #include "panels/StreamingPanel.h"
 #include "panels/TeamChatPanel.h"
@@ -105,6 +103,16 @@ uint64_t m_LastTransitionTrigger = 0;
 private:
     void BeginDockspace();
     void EndDockspace();
+
+    // Ventanas nativas de salida real ("ProjectorLive"/"StageLive") -- se
+    // llama SIEMPRE, una vez por frame, sin importar si el operador esta
+    // viendo el Hub, el workspace normal, o un editor a pantalla completa
+    // (Overlays/Estilos). Antes este render vivia inline dentro del bloque
+    // exclusivo del modo Workspace::Projector, asi que dejaba de dibujarse
+    // (y ImGui llegaba a destruir esas ventanas nativas por no volver a
+    // someterlas) apenas se abria un editor a pantalla completa o se volvia
+    // al Hub mientras se estaba proyectando/haciendo Stage — ver RenderAll().
+    void RenderLiveOutputWindows();
     void ApplyProfessionalTheme();
     void RenderMainMenuBar();
     void RenderModeToolbar();
@@ -130,9 +138,6 @@ private:
     // Core::PresentationCore::GetSavedStyleNames/ApplyStyleByName) para
     // aplicar uno sin salir de donde este el operador.
     void RenderStylesPopup();
-
- DatabasePanel m_DatabasePanel;
-    WikiPanel     m_WikiPanel;
 
     // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel/GetOSCPanel).
     StreamingPanel m_Red;

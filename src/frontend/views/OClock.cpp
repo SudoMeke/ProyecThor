@@ -40,10 +40,10 @@ static constexpr int kPresetMinutes[] = { 5, 10, 15, 20, 30, 45 };
 // era buena parte de por que la UI se sentia "en el aire": cada seccion
 // usaba su propio gap arbitrario, sin relacion con las demas).
 namespace {
-    constexpr float kGapTight  = 6.0f;   // separacion entre elementos muy relacionados (ej. checkboxes)
-    constexpr float kGapNormal = 8.0f;   // separacion estandar entre campos de un mismo grupo
-    constexpr float kGapWide   = 16.0f;  // separacion entre grupos distintos dentro de la misma seccion
-    constexpr float kCardH     = 52.0f;  // alto estandar de las tarjetas seleccionables (modo/direccion)
+    constexpr float kGapTight  = 5.0f;   // separacion entre elementos muy relacionados (ej. checkboxes)
+    constexpr float kGapNormal = 7.0f;   // separacion estandar entre campos de un mismo grupo
+    constexpr float kGapWide   = 12.0f;  // separacion entre grupos distintos dentro de la misma seccion
+    constexpr float kCardH     = 48.0f;  // alto estandar de las tarjetas seleccionables (modo/direccion)
 }
 
 // ── Ciclo de vida / lógica de tiempo ────────────────────────────────────────
@@ -162,12 +162,8 @@ void OClock::AdvanceTitle() {
 void OClock::SyncTransmission(const std::string& timeStr) {
     auto& core = Core::PresentationCore::Get();
 
-    bool wasMain = (m_PrevTransmitMode == OClockTransmitMode::MainOnly || m_PrevTransmitMode == OClockTransmitMode::Both);
-    bool wasLAN  = (m_PrevTransmitMode == OClockTransmitMode::LANOnly  || m_PrevTransmitMode == OClockTransmitMode::Both);
-    bool isMain  = (m_TransmitMode     == OClockTransmitMode::MainOnly || m_TransmitMode     == OClockTransmitMode::Both);
-    bool isLAN   = (m_TransmitMode     == OClockTransmitMode::LANOnly  || m_TransmitMode     == OClockTransmitMode::Both);
-
-    bool transmitting = isMain || isLAN;
+    bool wasLAN = (m_PrevTransmitMode == OClockTransmitMode::LAN);
+    bool isLAN  = (m_TransmitMode     == OClockTransmitMode::LAN);
 
     // Estilo: si el usuario definio un "estilo final" explicito, se usa
     // completo (color/tamano/alineacion propios) al llegar al final. Si no
@@ -177,7 +173,7 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     // activa fuera del modo Timer.
     bool usingFinalStyle = m_IsOvertime && !m_FinalStyleName.empty();
 
-    if (transmitting) {
+    if (isLAN) {
         const std::string& styleToApply = usingFinalStyle ? m_FinalStyleName : m_StyleName;
         if (!styleToApply.empty())
             core.ApplyStyleByName(styleToApply);
@@ -191,17 +187,19 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     std::string title    = GetCurrentTitle();
     std::string fullText = title.empty() ? timeStr : (title + "\n" + timeStr);
 
-    if (isMain) {
-        core.SetLiveQuickNote(fullText, colorOverride);
-    } else if (wasMain) {
-        core.ClearQuickNote();
-    }
-
     if (isLAN) {
         core.SetLiveQuickNoteLAN(fullText, colorOverride);
     } else if (wasLAN) {
         core.ClearQuickNoteLAN();
     }
+
+    // Reloj en overlay: se publica SIEMPRE (no depende de m_TransmitMode) --
+    // la pantalla principal ya no tiene un modo on/off propio, la visibilidad
+    // la decide exclusivamente si el overlay activo tiene o no un cuadro de
+    // reloj (ver PresentationCore::HasOverlayClockLayer, consumido en
+    // LiveContentRenderer.cpp/UIManager.cpp). Publicar sin esa capa es
+    // inofensivo: simplemente no se dibuja en ningun lado.
+    core.SetLiveOverlayClockText(fullText, colorOverride);
 
     m_PrevTransmitMode = m_TransmitMode;
 }
@@ -209,6 +207,19 @@ void OClock::SyncTransmission(const std::string& timeStr) {
 // ── Update: logica pura, sin ImGui, corre todos los frames ─────────────────
 
 void OClock::Update() {
+    // Mensajes pedidos desde el celular (ver PresentationCore::
+    // PushRemoteClockTitle / SyncServer POST /remote/clock-message) -- se
+    // agregan a la lista igual que "Agregar" a mano, pero se activan de
+    // inmediato (a diferencia del boton de escritorio, que no cambia la
+    // seleccion activa): el sentido de "enviar" desde el celular es verlo
+    // en el momento. Si llegara mas de uno en el mismo frame, gana el
+    // ultimo (queda como m_TitleIndex final).
+    for (auto& text : Core::PresentationCore::Get().DrainRemoteClockTitles()) {
+        if (text.empty()) continue;
+        m_Titles.push_back(text);
+        m_TitleIndex = (int)m_Titles.size() - 1;
+    }
+
     if (m_Mode == OClockMode::Timer) {
         // m_ElapsedTime/m_IsOvertime son independientes del sentido de
         // visualizacion: siempre representan "cuanto paso desde Start()" y
@@ -279,15 +290,18 @@ void OClock::RenderStyleSelector() {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(2);
 
-        if (target.empty())
-            ImGui::TextColored(ToVec4(DS::TextHint), "%s", emptyHint);
+        if (target.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
+            ImGui::TextWrapped("%s", emptyHint);
+            ImGui::PopStyleColor();
+        }
     };
 
-    renderCombo("Estilo para el público", "##oclockStyle", m_StyleName,
-        "Sin estilo fijo: heredara el ultimo estilo activo (Biblia/Cancion).");
+    renderCombo("Estilo (LAN)", "##oclockStyle", m_StyleName,
+        "Hereda el ultimo estilo activo.");
 
-    renderCombo("Estilo al llegar al final", "##oclockFinalStyle", m_FinalStyleName,
-        "Sin estilo final: se usara el estilo normal + color de peligro (comportamiento clasico).");
+    renderCombo("Estilo al finalizar (LAN)", "##oclockFinalStyle", m_FinalStyleName,
+        "Usa el estilo normal + color de peligro.");
 }
 
 // ── Selector de modo: Cronómetro vs Hora actual ─────────────────────────
@@ -412,8 +426,6 @@ void OClock::RenderWallClockOptions() {
 void OClock::RenderTitleSection() {
     ImGui::Spacing();
     DS::GlassSectionHeader("TÍTULO / MENSAJE");
-    ImGui::TextColored(ToVec4(DS::TextHint),
-        "Se muestra arriba del reloj. Usa \"Avanzar\" para ir pasando mensajes.");
     ImGui::Spacing();
 
     float w       = ImGui::GetContentRegionAvail().x;
@@ -482,7 +494,7 @@ void OClock::RenderTitleSection() {
     float btnW = (w - kGapNormal) * 0.5f;
 
     ImGui::BeginDisabled(m_Titles.empty());
-    if (DS::GlassButton("Avanzar ▶", ImVec2(btnW, 34.0f), DS::AccentColor))
+    if (DS::GlassButton("Avanzar >", ImVec2(btnW, 34.0f), DS::AccentColor))
         AdvanceTitle();
     ImGui::SameLine(0, kGapNormal);
     if (DS::GlassButton("Quitar título", ImVec2(btnW, 34.0f), DS::AccentColorDim))
@@ -712,26 +724,51 @@ void OClock::Render(GlassRenderer& glass) {
 
     DS::GlassSeparator();
 
-    // ── Transmisión ──────────────────────────────────────────────────────
-    DS::GlassSectionHeader("TRANSMITIR");
+    // ── En pantalla (overlay) ────────────────────────────────────────────
+    // Ya no es un modo a elegir aca: aparece solo si el overlay activo
+    // (Biblioteca > Overlays) tiene un cuadro de reloj configurado.
+    {
+        std::string overlayPath = core.GetOverlayPath();
+        bool hasOverlay = !overlayPath.empty();
+        bool hasClockBox = core.HasOverlayClockLayer();
+
+        if (hasOverlay && hasClockBox) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::SuccessColor));
+            ImGui::TextUnformatted("●");
+            ImGui::PopStyleColor();
+            ImGui::SameLine(0, 6);
+            ImGui::TextColored(ToVec4(DS::AccentLight), "Mostrando en overlay activo");
+        } else {
+            const char* msg = !hasOverlay
+                ? "● Sin overlay activo — activa uno con un cuadro de reloj para mostrarlo en pantalla."
+                : "● El overlay activo no tiene un cuadro de reloj — agregalo desde el editor de Overlays.";
+            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
+            ImGui::TextWrapped("%s", msg);
+            ImGui::PopStyleColor();
+        }
+    }
+
+    ImGui::Spacing();
+    DS::GlassSeparator();
+
+    // ── Transmitir a LAN ─────────────────────────────────────────────────
+    DS::GlassSectionHeader("TRANSMITIR A RED (LAN)");
 
     bool netAvailable = core.IsStreamingNet();
 
-    struct ModeOpt { const char* label; const char* sub; OClockTransmitMode mode; bool needsNet; };
-    ModeOpt opts[4] = {
-        { "Apagado",   "No se transmite",              OClockTransmitMode::Off,      false },
-        { "Pantalla",  "Solo proyector principal",      OClockTransmitMode::MainOnly, false },
-        { "Solo LAN",  "Solo dispositivos en red",      OClockTransmitMode::LANOnly,  true  },
-        { "Ambos",     "Pantalla + red",                OClockTransmitMode::Both,     true  },
+    struct ModeOpt { const char* label; OClockTransmitMode mode; bool needsNet; };
+    ModeOpt opts[2] = {
+        { "Apagado", OClockTransmitMode::Off, false },
+        { "Solo LAN", OClockTransmitMode::LAN, true  },
     };
 
     float cardGap = kGapNormal;
-    float cardW   = (w - cardGap * 3.0f) / 4.0f;
-    float cardH   = 62.0f;
+    float cardW   = (w - cardGap) * 0.5f;
+    float cardH   = 40.0f;
 
     ImVec2 rowStart = ImGui::GetCursorScreenPos();
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 2; ++i) {
         auto& opt = opts[i];
         bool  disabled = opt.needsNet && !netAvailable;
         bool  active   = (m_TransmitMode == opt.mode) && !disabled;
@@ -756,39 +793,20 @@ void OClock::Render(GlassRenderer& glass) {
 
         ImU32 labelCol = disabled ? ColA(DS::TextHint, 130) : (active ? DS::AccentLight : DS::TextSecondary);
         ImVec2 labelSz = ImGui::CalcTextSize(opt.label);
-        dl->AddText(ImVec2(p0.x + (cardW - labelSz.x) * 0.5f, p0.y + 12.0f), labelCol, opt.label);
-
-        ImU32 subCol = disabled ? ColA(DS::TextHint, 100) : ColA(DS::TextHint, 220);
-        float subScale = 0.82f;
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * subScale,
-                    ImVec2(p0.x + 6.0f, p0.y + 34.0f), subCol, opt.sub, nullptr, cardW - 12.0f);
+        dl->AddText(ImVec2(p0.x + (cardW - labelSz.x) * 0.5f, p0.y + (cardH - labelSz.y) * 0.5f), labelCol, opt.label);
     }
 
     ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + cardH));
     ImGui::Dummy(ImVec2(w, cardH));
 
     if (!netAvailable) {
-        ImGui::Spacing();
-        ImGui::TextColored(ToVec4(DS::TextHint), "Inicia el servidor en el panel de Transmisión para habilitar \"Solo LAN\" / \"Ambos\".");
-        if (m_TransmitMode == OClockTransmitMode::LANOnly) m_TransmitMode = OClockTransmitMode::Off;
-        if (m_TransmitMode == OClockTransmitMode::Both)    m_TransmitMode = OClockTransmitMode::MainOnly;
-    }
-
-    if (m_TransmitMode == OClockTransmitMode::LANOnly || m_TransmitMode == OClockTransmitMode::Both) {
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::DangerColor));
-        ImGui::TextUnformatted("●");
-        ImGui::SameLine(0, 4);
-        ImGui::TextUnformatted(m_TransmitMode == OClockTransmitMode::LANOnly
-            ? "Transmitiendo solo a la red local"
-            : "Transmitiendo a pantalla + red local");
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
+        ImGui::TextWrapped("Inicia el servidor en Transmisión para habilitar \"Solo LAN\".");
         ImGui::PopStyleColor();
-    } else if (m_TransmitMode == OClockTransmitMode::MainOnly) {
-        ImGui::Spacing();
+        if (m_TransmitMode == OClockTransmitMode::LAN) m_TransmitMode = OClockTransmitMode::Off;
+    } else if (m_TransmitMode == OClockTransmitMode::LAN) {
         ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::DangerColor));
-        ImGui::TextUnformatted("●");
-        ImGui::SameLine(0, 4);
-        ImGui::TextUnformatted(str.liveIndicator);
+        ImGui::TextUnformatted("● Transmitiendo a la red local");
         ImGui::PopStyleColor();
     }
 }

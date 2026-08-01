@@ -3,37 +3,40 @@
 #include <string>
 #include <functional>
 #include <vector>
-
-struct ImGuiWindow; // ver imgui_internal.h
+#include <memory>
 
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  OverlayExportService — rasteriza el contenido ya dibujado por ImGui de una
-//  child window (el canvas del editor de Overlays) a un PNG CON transparencia
+//  OverlayExportService — rasteriza un ImDrawList a un PNG CON transparencia
 //  (a diferencia de un fondo/tema, un Overlay se proyecta ENCIMA de lo que
 //  ya este en pantalla, por eso el canal alpha se preserva tal cual en vez de
-//  forzarse a opaco), reutilizando el ImDrawList que ImGui ya construyo este
-//  mismo frame (no se dibuja nada a mano: se re-renderiza ese mismo draw
-//  list contra un FBO propio, escalado a la resolucion de exportacion via
+//  forzarse a opaco), escalado a la resolucion de exportacion via
 //  ImDrawData::FramebufferScale — el mismo mecanismo que usa ImGui para
-//  pantallas HiDPI/Retina).
+//  pantallas HiDPI/Retina.
+//
+//  El draw list a exportar lo arma el LLAMADOR (ver OverlayCanvasEditor::
+//  DrawLayersForExport) dibujando SOLO el contenido real de las capas, en un
+//  ImDrawList propio e independiente del que se usa para el canvas en vivo
+//  (que ademas tiene el cuadriculado "sin fondo" y el chrome de edicion) --
+//  asi no hace falta ningun recorte/skip de comandos: lo que se pide
+//  exportar es exactamente lo que se exporta, sin ambiguedad.
 //
 //  Uso: RequestCapture(...) se llama mientras se construye la UI (ej. al
 //  apretar "Guardar"); ProcessPending() debe llamarse una vez por frame desde
 //  main.cpp, justo despues de ImGui::Render() y antes de
-//  ImGui_ImplOpenGL3_RenderDrawData(), para que el ImDrawList del frame
-//  todavia sea valido.
+//  ImGui_ImplOpenGL3_RenderDrawData(), para que el ImDrawList siga siendo
+//  valido (comparte ImDrawListSharedData con el frame actual).
 // ─────────────────────────────────────────────────────────────────────────────
 class OverlayExportService {
 public:
     static OverlayExportService& Get();
 
-    // canvasWindow: puntero devuelto por ImGui::GetCurrentWindow() justo
-    // despues del BeginChild() del canvas, en ESTE mismo frame.
-    // canvasScreenPos/Size: ImGui::GetWindowPos()/GetWindowSize() de esa
-    // misma child, capturados en el mismo instante.
-    void RequestCapture(ImGuiWindow* canvasWindow,
+    // exportDrawList: ImDrawList armado por el llamador este mismo frame
+    // (ver DrawLayersForExport), en coordenadas de PANTALLA dentro del
+    // rectangulo [canvasScreenPos, canvasScreenPos+canvasScreenSize]. Se
+    // mantiene vivo (shared_ptr) hasta que ProcessPending() lo consuma.
+    void RequestCapture(std::shared_ptr<ImDrawList> exportDrawList,
                         ImVec2 canvasScreenPos, ImVec2 canvasScreenSize,
                         const std::string& outPngPath,
                         int exportW, int exportH,
@@ -45,7 +48,7 @@ private:
     OverlayExportService() = default;
 
     struct PendingCapture {
-        ImGuiWindow*              canvasWindow;
+        std::shared_ptr<ImDrawList> exportDrawList;
         ImVec2                    screenPos;
         ImVec2                    screenSize;
         std::string               outPngPath;

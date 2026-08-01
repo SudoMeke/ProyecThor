@@ -7,7 +7,11 @@ namespace ProyecThor::UI {
 // ─────────────────────────────────────────────────────────────────────────────
 //  OverlayLayerKind — de que tipo es una capa dentro del canvas.
 // ─────────────────────────────────────────────────────────────────────────────
-enum class OverlayLayerKind { Text, Image, Shape };
+// Clock: cuadro-flag para el reloj/contador en vivo (ver OClock). No lleva
+// contenido propio horneado -- solo posicion/estilo (reusa los mismos campos
+// de texto de abajo); el texto real se dibuja en vivo sobre el overlay
+// activo, nunca en el PNG exportado (ver OverlayCanvasEditor::RenderCanvas).
+enum class OverlayLayerKind { Text, Image, Shape, Clock };
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  OverlayShapeKind — variante de forma para capas Shape.
@@ -74,5 +78,13 @@ struct OverlayDoc {
     float bgColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // overlay = sin fondo por defecto (PNG transparente)
     std::vector<OverlayLayer> layers;
 };
+
+// Primer layer de tipo Clock dentro del doc, o nullptr si no tiene ninguno.
+// Solo se permite uno por overlay (ver OverlayCanvasEditor::RenderFloatingToolbar).
+inline const OverlayLayer* FindClockLayer(const OverlayDoc& doc) {
+    for (const auto& l : doc.layers)
+        if (l.kind == OverlayLayerKind::Clock) return &l;
+    return nullptr;
+}
 
 } // namespace ProyecThor::UI
