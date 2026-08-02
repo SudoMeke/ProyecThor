@@ -82,6 +82,91 @@ std::string PickImageFile() {
     dlg->Release();
     return result;
 }
+
+static std::wstring Utf8ToWide(const std::string& s) {
+    if (s.empty()) return {};
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+    if (wlen <= 0) return {};
+    std::wstring w(wlen - 1, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), wlen);
+    return w;
+}
+
+std::string PickFolder(const std::string& title) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    IFileOpenDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))))
+        return {};
+
+    FILEOPENDIALOGOPTIONS opts = 0;
+    dlg->GetOptions(&opts);
+    dlg->SetOptions(opts | FOS_PICKFOLDERS);
+    dlg->SetTitle(Utf8ToWide(title).c_str());
+
+    std::string result;
+    if (SUCCEEDED(dlg->Show(nullptr))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item))) {
+            PWSTR pp = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pp))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pp, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    result.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, pp, -1, result.data(), len, nullptr, nullptr);
+                }
+                CoTaskMemFree(pp);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
+
+std::string PickSaveVideoPath(const std::string& defaultPath) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    IFileSaveDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))))
+        return {};
+
+    COMDLG_FILTERSPEC filters[] = {
+        {L"Video", L"*.mp4;*.mkv;*.webm;*.avi;*.mov"},
+    };
+    dlg->SetFileTypes(1, filters);
+    dlg->SetFileTypeIndex(1);
+    dlg->SetTitle(L"Guardar video como");
+
+    fs::path def(defaultPath);
+    std::wstring wFolder = Utf8ToWide(def.parent_path().string());
+    std::wstring wName   = Utf8ToWide(def.filename().string());
+    if (!wName.empty()) dlg->SetFileName(wName.c_str());
+    if (!wFolder.empty()) {
+        IShellItem* folderItem = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(wFolder.c_str(), nullptr, IID_PPV_ARGS(&folderItem)))) {
+            dlg->SetFolder(folderItem);
+            folderItem->Release();
+        }
+    }
+
+    std::string result;
+    if (SUCCEEDED(dlg->Show(nullptr))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item))) {
+            PWSTR pp = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pp))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pp, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    result.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, pp, -1, result.data(), len, nullptr, nullptr);
+                }
+                CoTaskMemFree(pp);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
 #else
 static std::string RunFilePickerCommands(const char* const commands[], size_t count) {
     for (size_t i = 0; i < count; ++i) {
@@ -117,6 +202,25 @@ std::string PickImageFile() {
         "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
         "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
     };
+    return RunFilePickerCommands(commands, 2);
+}
+
+// zenity/kdialog son apps GTK/Qt independientes del compositor -- corren
+// igual bajo X11 o Wayland (no dependen de ningun protocolo de portal
+// especifico), asi que este mismo camino ya cubre Wayland sin nada extra.
+std::string PickFolder(const std::string& title) {
+    std::string cmd1 = "zenity --file-selection --directory --title=\"" + title + "\" 2>/dev/null";
+    std::string cmd2 = "kdialog --getexistingdirectory . 2>/dev/null";
+    const char* commands[] = { cmd1.c_str(), cmd2.c_str() };
+    return RunFilePickerCommands(commands, 2);
+}
+
+std::string PickSaveVideoPath(const std::string& defaultPath) {
+    std::string cmd1 = "zenity --file-selection --save --confirm-overwrite "
+                        "--filename=\"" + defaultPath + "\" --title=\"Guardar video como\" 2>/dev/null";
+    std::string cmd2 = "kdialog --getsavefilename \"" + defaultPath +
+                        "\" \"*.mp4 *.mkv *.webm *.avi *.mov|Video\" 2>/dev/null";
+    const char* commands[] = { cmd1.c_str(), cmd2.c_str() };
     return RunFilePickerCommands(commands, 2);
 }
 #endif

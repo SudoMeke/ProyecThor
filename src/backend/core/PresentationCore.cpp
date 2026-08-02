@@ -1,6 +1,5 @@
 #include "PresentationCore.h"
 #include "BackgroundLayer.h"
-#include "OverlayLayer.h"
 #include "backend/shaders/CompositePostChain.h"
 #include "frontend/panels/stb_image.h"
 #include <GL/glew.h>
@@ -35,7 +34,6 @@ namespace ProyecThor::Core {
         // VLCBasePlayer (ver m_ForceSilent), no una convencion que
         // dependa de que el resto del codigo se comporte bien.
         BackgroundLayer background{ false };
-        OverlayLayer    overlay;
 
         // preview: instancia separada usada por los paneles de biblioteca
         // para scrubbing/preview. Se construye forceSilentAudio=true, asi
@@ -50,9 +48,17 @@ namespace ProyecThor::Core {
 
         // Post-proceso del composite completo de "ProjectorLive" (CRT/
         // Grano/FXAA) — ver CompositePostChain.h. Vive aca (no dentro de
-        // background/overlay) porque corre en un punto distinto del pipeline
-        // (sobre el ImDrawData ya compuesto, no sobre una textura de fondo).
+        // background) porque corre en un punto distinto del pipeline (sobre
+        // el ImDrawData ya compuesto, no sobre una textura de fondo).
         Shaders::CompositePostChain compositeFX;
+
+        // Overlay (ver SetOverlayMedia/ClearOverlay) -- un PNG estatico con
+        // transparencia, no necesita nada del aparato de BackgroundLayer
+        // (VLC/crossfade/audio): se carga una vez con stb_image, se sube a
+        // una sola textura GL y listo.
+        GLuint overlayTex  = 0;
+        int    overlayTexW = 0;
+        int    overlayTexH = 0;
     };
 
     PresentationCore::PresentationCore()
@@ -116,6 +122,18 @@ void PresentationCore::ClearQuickNote() {
         ++m_StreamVersion;
     }
 
+    void PresentationCore::PushRemoteClockTitle(const std::string& text) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_PendingClockTitles.push_back(text);
+    }
+
+    std::vector<std::string> PresentationCore::DrainRemoteClockTitles() {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::vector<std::string> out;
+        out.swap(m_PendingClockTitles);
+        return out;
+    }
+
     PresentationState PresentationCore::GetState() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_State;
@@ -123,9 +141,6 @@ void PresentationCore::ClearQuickNote() {
 void PresentationCore::SetGlobalMute(bool mute) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_GlobalMuted = mute;
-    
-    // Si manejas el volumen global en VLC o en tu OverlayLayer, aplícalo aquí.
-    // Ejemplo: m_Impl->overlay.SetMute(mute);
 }
 
 bool PresentationCore::GetGlobalMute() const {
@@ -187,12 +202,12 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->background.GetFillBlurBrightness() : 0.6f;
     }
 
-    void* PresentationCore::GetOverlayTexture() {
-        return m_Impl ? m_Impl->overlay.GetTextureID() : nullptr;
+    void PresentationCore::SetBackgroundPingPongLoop(bool enabled) {
+        if (m_Impl) m_Impl->background.SetPingPongLoop(enabled);
     }
 
-    bool PresentationCore::IsOverlayActive() const {
-        return m_Impl && m_Impl->overlay.IsActive();
+    bool PresentationCore::GetBackgroundPingPongLoop() const {
+        return m_Impl ? m_Impl->background.GetPingPongLoop() : false;
     }
 
     void PresentationCore::SetFSREnabled(bool enabled) {
@@ -448,10 +463,8 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::Update() {
         if (m_Impl) {
             m_Impl->background.Update();
-            m_Impl->overlay.Update();
             m_Impl->preview.Update();
         }
-        m_MacroPlayer.Update();
     }
 
     void PresentationCore::RenderBackground(int outputW, int outputH) {
@@ -462,16 +475,14 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderProjectorWindow() {
     if (m_Impl) {
         if (ShouldShowLoadingScreen()) {
-            // Pantalla de carga: se muestra el logo en vez del fondo/overlay
-            // mientras algo esta cargando, para que el publico nunca vea un
-            // frame entrecortado o desactualizado (ver Ajustes > Proyeccion
-            // > Logo).
+            // Pantalla de carga: se muestra el logo en vez del fondo mientras
+            // algo esta cargando, para que el publico nunca vea un frame
+            // entrecortado o desactualizado (ver Ajustes > Proyeccion > Logo).
             m_Impl->background.RenderLogo(
                 static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
                 m_LoadingLogoW, m_LoadingLogoH, m_ProjectorWidth, m_ProjectorHeight);
         } else {
             m_Impl->background.Render(m_ProjectorWidth, m_ProjectorHeight);
-            m_Impl->overlay.Render();
         }
     }
 }
@@ -626,6 +637,119 @@ void PresentationCore::SetBackgroundAudio() {
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
 
+    void PresentationCore::SetOverlayMedia(const std::string& pngPath) {
+        if (!m_Impl) return;
+
+        int w = 0, h = 0, n = 0;
+        unsigned char* data = stbi_load(pngPath.c_str(), &w, &h, &n, 4);
+        if (!data) return;
+
+        if (m_Impl->overlayTex) {
+            GLuint old = m_Impl->overlayTex;
+            glDeleteTextures(1, &old);
+            m_Impl->overlayTex = 0;
+        }
+
+        GLuint tex = 0;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+
+        m_Impl->overlayTex  = tex;
+        m_Impl->overlayTexW = w;
+        m_Impl->overlayTexH = h;
+
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_OverlayPath = pngPath;
+        m_HasOverlay  = true;
+    }
+
+    void PresentationCore::ClearOverlay() {
+        if (m_Impl && m_Impl->overlayTex) {
+            GLuint old = m_Impl->overlayTex;
+            glDeleteTextures(1, &old);
+            m_Impl->overlayTex  = 0;
+            m_Impl->overlayTexW = 0;
+            m_Impl->overlayTexH = 0;
+        }
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_OverlayPath.clear();
+        m_HasOverlay = false;
+    }
+
+    bool PresentationCore::HasOverlay() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_HasOverlay;
+    }
+
+    std::string PresentationCore::GetOverlayPath() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayPath;
+    }
+
+    void* PresentationCore::GetOverlayTexture() {
+        if (!m_Impl || !m_Impl->overlayTex) return nullptr;
+        return (void*)(intptr_t)m_Impl->overlayTex;
+    }
+
+    void PresentationCore::SetOverlayClockLayer(bool hasClock, const ProyecThor::UI::OverlayLayer& layer,
+                                                 int canvasW, int canvasH) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_HasOverlayClockLayer = hasClock;
+        m_OverlayClockLayer    = layer;
+        m_OverlayClockCanvasW  = canvasW;
+        m_OverlayClockCanvasH  = canvasH;
+    }
+
+    bool PresentationCore::HasOverlayClockLayer() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_HasOverlayClockLayer;
+    }
+
+    ProyecThor::UI::OverlayLayer PresentationCore::GetOverlayClockLayer() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayClockLayer;
+    }
+
+    int PresentationCore::GetOverlayClockCanvasW() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayClockCanvasW;
+    }
+
+    int PresentationCore::GetOverlayClockCanvasH() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_OverlayClockCanvasH;
+    }
+
+    void PresentationCore::SetLiveOverlayClockText(const std::string& text, const float* colorOverride) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_LiveOverlayClockText = text;
+        m_HasLiveOverlayClockColorOverride = (colorOverride != nullptr);
+        if (colorOverride) {
+            for (int i = 0; i < 4; i++) m_LiveOverlayClockColorOverride[i] = colorOverride[i];
+        }
+    }
+
+    std::string PresentationCore::GetLiveOverlayClockText() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_LiveOverlayClockText;
+    }
+
+    bool PresentationCore::HasLiveOverlayClockColorOverride() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return m_HasLiveOverlayClockColorOverride;
+    }
+
+    void PresentationCore::GetLiveOverlayClockColorOverride(float outRGBA[4]) const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        for (int i = 0; i < 4; i++) outRGBA[i] = m_LiveOverlayClockColorOverride[i];
+    }
+
     void PresentationCore::PreloadNextBackgroundMedia(const std::string& path, bool allowAudio) {
         // A proposito NO toca m_State/transitionTrigger: este preload debe
         // ser invisible para el operador y para TransitionPanel — solo
@@ -733,23 +857,8 @@ void PresentationCore::SetLayer0_Color(float r, float g, float b) {
     }
     if (m_Impl) m_Impl->background.SetSolidColor(r, g, b);
 }
-void PresentationCore::SetOverlayMedia(const std::string& path) {
-    {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.overlayPath = path;
-    }
-    if (m_Impl) m_Impl->overlay.PlayOverlay(path);
-}
-
 void PresentationCore::SetBackgroundTransitionProgress(float progress) {
     if (m_Impl) m_Impl->background.SetTransitionProgress(progress);
-}
-void PresentationCore::StopOverlayMedia() {
-    {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.overlayPath = "";
-    }
-    if (m_Impl) m_Impl->overlay.StopOverlay();
 }
 
     void PresentationCore::UpdateTextStyle(float size, const float color[4], int align,
@@ -855,28 +964,6 @@ bool PresentationCore::ConsumeSongEditorOpenRequest(std::string& outFilename) {
     return true;
 }
 
-// ── Macros ───────────────────────────────────────────────────────────────
-void PresentationCore::PlayMacro(const std::string& name, bool autoAdvance) {
-    Macro m;
-    if (!LoadMacro(name, m)) {
-        std::cerr << "[PresentationCore] No se pudo cargar el macro \"" << name << "\".\n";
-        return;
-    }
-    m_MacroPlayer.Play(m, autoAdvance);
-}
-
-void PresentationCore::StopMacro()               { m_MacroPlayer.Stop(); }
-void PresentationCore::NextMacroCue()            { m_MacroPlayer.Next(); }
-void PresentationCore::PrevMacroCue()            { m_MacroPlayer.Previous(); }
-void PresentationCore::SetMacroCueIndex(int index) { m_MacroPlayer.GoToCue(index); }
-void PresentationCore::SetMacroAutoAdvance(bool a) { m_MacroPlayer.SetAutoAdvance(a); }
-bool PresentationCore::GetMacroAutoAdvance() const { return m_MacroPlayer.IsAutoAdvance(); }
-bool PresentationCore::IsMacroPlaying() const      { return m_MacroPlayer.IsPlaying(); }
-std::string PresentationCore::GetActiveMacroName() const { return m_MacroPlayer.GetMacro().name; }
-int   PresentationCore::GetMacroCueIndex() const   { return m_MacroPlayer.GetCurrentCueIndex(); }
-int   PresentationCore::GetMacroCueCount() const   { return m_MacroPlayer.GetCueCount(); }
-float PresentationCore::GetMacroElapsed() const    { return m_MacroPlayer.GetElapsed(); }
-
 void PresentationCore::SetNextText(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.nextText = text;
@@ -934,10 +1021,6 @@ void PresentationCore::SetNextText(const std::string& text) {
         return m_Impl ? m_Impl->background.GetPlayer() : nullptr;
     }
 
-    VLCBasePlayer* PresentationCore::GetOverlayPlayer() {
-        return m_Impl ? m_Impl->overlay.GetPlayer() : nullptr;
-    }
-
     float PresentationCore::GetLivePosition() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_State.livePosition;
@@ -980,6 +1063,21 @@ void PresentationCore::SetNextText(const std::string& text) {
         }
         if (m_Impl)
             m_Impl->background.SetLiveMute(mute);
+    }
+
+    void PresentationCore::SetLiveEqualizerEnabled(bool enabled) {
+        if (m_Impl)
+            m_Impl->background.SetLiveEqualizerEnabled(enabled);
+    }
+
+    void PresentationCore::SetLiveEqualizerPreamp(float preampDb) {
+        if (m_Impl)
+            m_Impl->background.SetLiveEqualizerPreamp(preampDb);
+    }
+
+    void PresentationCore::SetLiveEqualizerBand(int index, float ampDb) {
+        if (m_Impl)
+            m_Impl->background.SetLiveEqualizerBand(index, ampDb);
     }
 
     bool PresentationCore::GetLiveLoop() {
@@ -1716,7 +1814,6 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
                 m_LoadingLogoW, m_LoadingLogoH, w, h);
         } else {
             m_Impl->background.Render(w, h);
-            m_Impl->overlay.Render();
         }
 
         outRGB.resize(static_cast<size_t>(w) * h * 3);

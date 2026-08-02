@@ -116,13 +116,11 @@ void HomePanel::Render()
                       ImGuiChildFlags_AlwaysUseWindowPadding);
     ImGui::PopStyleVar();
 
-    // Si el editor de estilos esta abierto (ver LayersStyleTab ->
-    // PresentationCore::SetStyleEditorHook), se dibuja "acoplado" ocupando
-    // todo este espacio en vez del contenido normal de biblioteca -- mismo
-    // espiritu que SongEditView reemplazando el grid de estrofas de
-    // SongView, pero cruzando de "Diseño" a "Home" via el hook.
-    if (!Core::PresentationCore::Get().RenderStyleEditorIfOpen())
-        RenderHomeContent();
+    // El editor de estilos (Diseño > Estilos) ya no se "acopla" aca -- ahora
+    // se abre a pantalla completa ocultando TODOS los paneles (ver
+    // UIManager::EnterFullscreenEditor, usado desde LayersStyleTab), asi que
+    // Home vuelve a dibujar siempre su contenido normal.
+    RenderHomeContent();
 
     ImGui::EndChild();
 

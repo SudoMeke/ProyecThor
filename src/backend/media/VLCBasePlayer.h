@@ -85,6 +85,18 @@ namespace ProyecThor::Core {
         void EnforceSilenceIfNeeded();
         bool IsForceSilent() const { return m_ForceSilent.load(std::memory_order_relaxed); }
 
+        // Ecualizador de 10 bandas (libvlc_audio_equalizer_*, ver
+        // VLCBasePlayer.cpp). enabled=false quita el filtro por completo
+        // (libvlc_media_player_set_equalizer(nullptr)) en vez de dejarlo
+        // aplicado con valores en 0. Los cambios de banda/preamp reconstruyen
+        // y reaplican el ecualizador completo, mismo criterio que ya usa
+        // AudioPanel::RenderEqualizerSection (Audio.cpp).
+        static constexpr int kEqualizerBands = 10;
+        void SetEqualizerEnabled(bool enabled);
+        void SetEqualizerPreamp(float preampDb);
+        void SetEqualizerBand(int index, float ampDb);
+        bool IsEqualizerEnabled() const { return m_EqEnabled; }
+
         void SetPosition(float pos);
 
         int64_t GetTime() const;
@@ -183,6 +195,12 @@ namespace ProyecThor::Core {
         std::atomic<bool>  m_Paused{false};
         std::atomic<bool>  m_AudioActive{true};
         std::atomic<bool>  m_ForceSilent{false};
+
+        // Ecualizador — ver SetEqualizerEnabled/Preamp/Band.
+        bool  m_EqEnabled = false;
+        float m_EqPreamp  = 0.0f;
+        float m_EqBands[kEqualizerBands] = { 0.0f };
+        void  ApplyEqualizer();
 
         // Backing de LoadState/IsLoading (ver GetLoadState() en el .cpp):
         // m_VlcIsPlaying refleja el evento libvlc_MediaPlayerPlaying del

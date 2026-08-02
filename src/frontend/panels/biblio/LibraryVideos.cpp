@@ -284,8 +284,8 @@ static void RenderVideoRow(LibraryContext& ctx, const std::string& filename, int
 
 // =============================================================================
 //  RenderVideoCard — tarjeta de grid con miniatura grande (mismo lenguaje
-//  visual que LayersBgTab::RenderBgCard / LayersOverlayTab::RenderCard,
-//  adaptado a los tokens DS:: que usa el resto de Biblioteca).
+//  visual que LayersBgTab::RenderBgCard, adaptado a los tokens DS:: que usa
+//  el resto de Biblioteca).
 // =============================================================================
 static void RenderVideoCard(LibraryContext& ctx, const std::string& filename, int origIdx,
                             float W, float H, int col, int cols, bool& deletedInLoop, int cardIdx)

@@ -73,6 +73,14 @@ public:
     bool IsLiveBackground()      const { return m_IsLiveBackground; }
     void SetLiveBackground(bool v)     { m_IsLiveBackground = v;    }
 
+    // Busca <filename> en la biblioteca de audio (releyendo la carpeta si
+    // hace falta), lo reproduce y lo manda en vivo al proyector -- mismo
+    // resultado que elegir la pista en RenderLibraryList y despues apretar
+    // "En vivo", pero en un solo llamado. Usado por el control remoto del
+    // celular (ver SyncServer.cpp POST /remote/multimedia/select). false si
+    // el archivo no existe en la carpeta de audio.
+    bool PlayFileLive(const std::string& filename);
+
     // Dibuja el fondo "now playing" (disco + caratula + ondas) en el
     // drawlist de la ventana ACTUAL — pensado para llamarse desde dentro
     // del Begin("ProjectorLive") de UIManager (ver ese archivo), asi el

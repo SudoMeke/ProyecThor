@@ -13,4 +13,8 @@ void CanvasStylesPanel::RenderContent() {
     m_StyleTab->Render();
 }
 
+void CanvasStylesPanel::SetUIManager(UIManager* uiManager) {
+    m_StyleTab->SetUIManager(uiManager);
+}
+
 } // namespace ProyecThor::UI

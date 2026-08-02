@@ -1,5 +1,6 @@
 #include "IconRail.h"
 #include "backend/settings/SettingsManager.h"
+#include "DesignSystem.h"
 #include <imgui_internal.h>
 #include <cmath>
 #include <string>
@@ -48,7 +49,7 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
     const float  lt       = RailLabelProgress();
 
     dl->AddRectFilled(winPos, { winPos.x + railW, winPos.y + winH },
-                      IM_COL32(11, 11, 20, 255));
+                      DS::GlassFillTop);
 
     ImGui::Dummy({ railW, 4.0f });
 
@@ -101,8 +102,21 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
         bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
 
         {
-            float iconBright = active ? 1.0f : Lerp(0.32f, 0.72f, t);
-            ImVec4 icF = { iconBright, iconBright, iconBright, 1.0f };
+            // Base del icono/label = TextSecondary..TextPrimary del TEMA, no
+            // un gris fijo que asumia fondo oscuro -- pedido explicito: al
+            // seleccionar (active=true) esto quedaba en blanco puro (1.0f),
+            // invisible contra un rail con fondo claro (ver DS::GlassFillTop
+            // arriba, ya theme-aware). Se sigue mezclando 35%/25% hacia el
+            // color de categoria cuando esta activo, igual que antes.
+            ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+            ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+            float  brightT  = active ? 1.0f : t;
+            ImVec4 icF = {
+                Lerp(textDimV.x, textPriV.x, brightT),
+                Lerp(textDimV.y, textPriV.y, brightT),
+                Lerp(textDimV.z, textPriV.z, brightT),
+                1.0f
+            };
             if (active) {
                 ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
                 icF.x = Lerp(icF.x, ac.x, 0.35f);
@@ -119,8 +133,12 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
             item.drawIcon(dl, { iconX, startY }, iconSz, ImGui::ColorConvertFloat4ToU32(icF));
 
             if (lt > 0.01f) {
-                float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-                ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+                ImVec4 lblF = {
+                    Lerp(textDimV.x, textPriV.x, brightT),
+                    Lerp(textDimV.y, textPriV.y, brightT),
+                    Lerp(textDimV.z, textPriV.z, brightT),
+                    lt
+                };
                 if (active) {
                     ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
                     lblF.x = Lerp(lblF.x, ac.x, 0.25f);
@@ -153,7 +171,7 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
     const float  lt     = RailLabelProgress();
 
     dl->AddRectFilled(winPos, { winPos.x + winW, winPos.y + railH },
-                      IM_COL32(11, 11, 20, 255));
+                      DS::GlassFillTop);
 
     ImGui::Dummy({ 4.0f, railH });
     ImGui::SameLine(0.0f, 0.0f);
@@ -209,8 +227,17 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
         bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, railH });
 
         {
-            float iconBright = active ? 1.0f : Lerp(0.32f, 0.72f, t);
-            ImVec4 icF = { iconBright, iconBright, iconBright, 1.0f };
+            // Ver comentario equivalente en RenderVertical: base theme-aware
+            // en vez de gris/blanco fijo (invisible en rail con fondo claro).
+            ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+            ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+            float  brightT  = active ? 1.0f : t;
+            ImVec4 icF = {
+                Lerp(textDimV.x, textPriV.x, brightT),
+                Lerp(textDimV.y, textPriV.y, brightT),
+                Lerp(textDimV.z, textPriV.z, brightT),
+                1.0f
+            };
             if (active) {
                 ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
                 icF.x = Lerp(icF.x, ac.x, 0.35f);
@@ -227,8 +254,12 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
             item.drawIcon(dl, { iconX, startY }, iconSz, ImGui::ColorConvertFloat4ToU32(icF));
 
             if (lt > 0.01f) {
-                float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-                ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+                ImVec4 lblF = {
+                    Lerp(textDimV.x, textPriV.x, brightT),
+                    Lerp(textDimV.y, textPriV.y, brightT),
+                    Lerp(textDimV.z, textPriV.z, brightT),
+                    lt
+                };
                 if (active) {
                     ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
                     lblF.x = Lerp(lblF.x, ac.x, 0.25f);

@@ -88,6 +88,26 @@ private:
     double m_JustSavedAt   = 0.0;
 
     float m_PreviewZoom = 1.0f;
+
+    // ── Duracion por diapositiva (icono de reloj, ver RenderRightPane) ──────
+    // Fuera de EditSnapshot/undo-redo a proposito: no son "texto" que el
+    // operador este redactando, son un ajuste aparte (mismo criterio que el
+    // color de estrofa en SongView, que tampoco pasa por undo). Se
+    // persisten igual que el resto de LibrarySongMeta via MarkDirty() +
+    // FlushIfDirty() -- por eso FlushIfDirty() SIEMPRE debe volcar estos dos
+    // campos junto con el resto, o un autoguardado disparado por otra
+    // edicion (letra/titulo) los pisaria con el valor por defecto.
+    int              m_TempoBpm = 0; // solo lectura aca -- se edita en SongView
+    std::vector<int> m_VerseDurationOverrideMs;
+
+    // Popup del reloj: se abre una sola vez en el frame del click (mismo
+    // idioma que el color-picker de SongView), no en cada frame mientras
+    // esta abierto.
+    int    m_DurationPopupForSlide  = -1;
+    bool   m_OpenDurationPopupRequest = false;
+    int    m_DurationPopupValueMs     = 0; // buffer editable del popup
+
+    void RenderVerseDurationPopup(const std::vector<std::string>& slides);
 };
 
 } // namespace ProyecThor::UI

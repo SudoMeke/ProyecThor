@@ -26,8 +26,8 @@ enum class TransitionType
 };
 
 // Nombre estable (no traducido, no cambia si se retocan las etiquetas de
-// RenderContent) para persistir la eleccion de transicion de un MacroCue
-// (ver MacroTypes.h) sin que backend/core dependa de este enum.
+// RenderContent) para persistir la eleccion de transicion pendiente sin
+// que backend/core dependa de este enum.
 const char*    TransitionTypeToName(TransitionType t);
 TransitionType TransitionTypeFromName(const std::string& name);
 
@@ -108,7 +108,7 @@ private:
     bool           m_Active       = false;
     float          m_Progress     = 0.0f;   // 0..1, eased
 
-    // Override puntual de un MacroCue (ver PresentationCore::
+    // Override puntual (ver PresentationCore::
     // ConsumePendingTransitionOverride): pisa m_SelectedType/m_Duration
     // SOLO para la proxima transicion, y los restaura al terminar, para no
     // alterar la eleccion persistente del operador en este panel.

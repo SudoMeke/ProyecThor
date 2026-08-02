@@ -2,7 +2,8 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
-#include "frontend/panels/home/HomeIcons.h"
+#include "frontend/ui/AppIcons.h"
+#include "frontend/ui/DesignSystem.h"
 #include "backend/settings/SettingsManager.h"
 
 #include <imgui.h>
@@ -11,20 +12,22 @@
 #include <cmath>
 #include <algorithm>
 
+namespace DS = ProyecThor::UI::DS;
+
 // El enum vive en LibraryPanel.h; aqui lo reproducimos como constantes locales
 // para no crear una dependencia circular con el header del panel.
 // El orden debe coincidir con LibraryCategory.
-static constexpr int kCat_Songs     = 0;
-static constexpr int kCat_Videos    = 1;
-static constexpr int kCat_Images    = 2;
-static constexpr int kCat_Bibles    = 3;
-static constexpr int kCat_Documents = 4;
-static constexpr int kCat_Audio     = 5;
+static constexpr int kCat_Songs      = 0;
+static constexpr int kCat_Bibles     = 3;
+static constexpr int kCat_Documents  = 4;
+static constexpr int kCat_Multimedia = 6;
 
-// Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h).
+// Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h). Red/Mobile se
+// mudaron a Ajustes > Conexiones y Reloj al toolbar inline de ViewPanel, por
+// eso los indices 1/2/4 no aparecen aca.
 static constexpr int kSideMode_Categories = 0;
-static constexpr int kSideMode_Streaming  = 1;
-static constexpr int kSideMode_Clock      = 2;
+static constexpr int kSideMode_Render     = 3;
+static constexpr int kSideMode_Overlay    = 4;
 
 namespace ProyecThor::Library {
 
@@ -96,9 +99,15 @@ static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
     bool clicked = ImGui::InvisibleButton(btnId.c_str(), { sidebarW, btnH });
 
     // ── Icono + label ──────────────────────────────────────────────────
+    // Base theme-aware (DS::TextSecondary..TextPrimary) en vez de gris/
+    // blanco fijo -- pedido explicito: al seleccionar (active=true) esto
+    // quedaba en blanco puro, invisible contra un rail con fondo claro (ver
+    // DS::GlassFillTop arriba, ya theme-aware).
     {
-        float iconBright = active ? 1.0f : Lerp(0.32f, 0.72f, t);
-        ImVec4 icF = { iconBright, iconBright, iconBright, 1.0f };
+        ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+        ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+        float  brightT  = active ? 1.0f : t;
+        ImVec4 icF = LerpColor(textDimV, textPriV, brightT);
         if (active) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
             icF = LerpColor(icF, ac, 0.35f);
@@ -114,8 +123,8 @@ static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
                 ImGui::ColorConvertFloat4ToU32(icF));
 
         if (lt > 0.01f) {
-            float lblBright = active ? 1.0f : Lerp(0.30f, 0.72f, t);
-            ImVec4 lblF = { lblBright, lblBright, lblBright, lt };
+            ImVec4 lblF = LerpColor(textDimV, textPriV, brightT);
+            lblF.w = lt;
             if (active) {
                 ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accentBar);
                 lblF = LerpColor(lblF, ac, 0.25f);
@@ -150,12 +159,10 @@ void RenderCategoryButtons(LibraryContext& ctx)
     };
 
     static const CatDef k_Cats[] = {
-        { kCat_Songs,     DrawIcon_Music,    "Letra"  },
-        { kCat_Videos,    DrawIcon_Play,     "Video"  },
-        { kCat_Images,    DrawIcon_Image,    "Imagen" },
-        { kCat_Bibles,    DrawIcon_Cross,    "Biblia" },
-        { kCat_Documents, DrawIcon_Document, "Doc"    },
-        { kCat_Audio,     DrawIcon_Audio,    "Audio"  },
+        { kCat_Songs,      DrawIcon_Music,      "Letra"      },
+        { kCat_Multimedia, DrawIcon_Multimedia, "Multimedia" },
+        { kCat_Bibles,     DrawIcon_Cross,      "Biblia"     },
+        { kCat_Documents,  DrawIcon_Document,   "Doc"        },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
@@ -165,8 +172,11 @@ void RenderCategoryButtons(LibraryContext& ctx)
     const float  winH     = ImGui::GetWindowHeight();
     const ImVec2 winPos   = ImGui::GetWindowPos();
 
+    // FIX: antes un negro-azulado fijo (IM_COL32(11,11,20,255)) sin relacion
+    // con el tema elegido en Ajustes > Apariencia -- desentonaba contra el
+    // resto del panel (glass, sincronizado con el tema via DS::SyncFromTheme).
     dl->AddRectFilled(winPos, { winPos.x + sidebarW, winPos.y + winH },
-                      IM_COL32(11, 11, 20, 255));
+                      DS::GlassFillTop);
 
     ImGui::Dummy({ sidebarW, 4.0f });
 
@@ -196,35 +206,34 @@ void RenderCategoryButtons(LibraryContext& ctx)
         }
     }
 
-    // ── Divisor + grupo aparte "Red"/"Reloj" ────────────────────────────────
-    // Mudados desde ViewToolsPanel (hub debajo de "Vista en Vivo") — el
-    // operador los pedia junto a la biblioteca de contenido, no mezclados
-    // con las categorias de arriba, de ahi la linea separadora. No tocan
+    // ── Divisor + grupo aparte "Render"/"Overlay" ───────────────────────────
+    // Mudados desde ViewToolsPanel/LibraryManagerPanel — el operador los
+    // pedia junto a la biblioteca de contenido, no mezclados con las
+    // categorias de arriba, de ahi la linea separadora. No tocan
     // ctx.currentCategoryInt/LibraryCategory: usan su propio modo
-    // (ctx.sideModeInt, ver UI::LibrarySideMode en LibraryPanel.h).
+    // (ctx.sideModeInt, ver UI::LibrarySideMode en LibraryPanel.h). Red y
+    // Mobile vivian aca tambien; se mudaron a Ajustes > Conexiones (ver
+    // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC. Reloj
+    // tambien vivia aca; se saco por quedar duplicado con el toolbar inline
+    // de ViewPanel (ver InlineTool::Clock).
     {
         ImVec2 p = ImGui::GetCursorScreenPos();
         dl->AddRectFilled(p, { p.x + sidebarW, p.y + 1.0f }, IM_COL32(255, 255, 255, 28));
         ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
     }
 
-    // "Red" se mudo a Yggdrasil (rail OSC/Red/Chat, ver YggdrasilPanel.cpp)
-    // -- solo queda "Reloj" en este grupo aparte.
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
-    // "Red" tambien esta disponible en Yggdrasil (misma StreamingPanel,
-    // ver LibraryPanel::SetStreamingPanelRef) -- por pedido, no es
-    // exclusivo de uno de los dos lugares.
     static const SideDef k_SideItems[] = {
-        { "Red",   ProyecThor::UI::HomeIcons::DrawIcon_Broadcast, kSideMode_Streaming },
-        { "Reloj", ProyecThor::UI::HomeIcons::DrawIcon_Clock,     kSideMode_Clock     },
+        { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
+        { "Overlay",  ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
     };
 
     for (const auto& sd : k_SideItems)
     {
         const bool active = (ctx.sideModeInt == sd.mode);
-        // Colores en los indices 6/7 de librarySidebar.categoryColor — ver
-        // SettingsManager.h.
-        int colorIdx = (sd.mode == kSideMode_Streaming) ? 6 : 7;
+        // Colores en los indices 8/9 de librarySidebar.categoryColor — ver
+        // SettingsManager.h (7, Reloj, quedo sin uso aca).
+        int colorIdx = (sd.mode == kSideMode_Render) ? 8 : 9;
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            sd.label, sd.drawIcon, active,

@@ -1,6 +1,8 @@
 #include "LayersStyleTab.h"
 #include "LayersTheme.h"
 #include "../../backend/core/PresentationCore.h"
+#include "frontend/ui/UIManager.h"
+#include "frontend/ui/IconRail.h"
 #include <imgui.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -70,24 +72,53 @@ LayersStyleTab::LayersStyleTab() {
         LoadFontsList();
     };
     m_StyleEditor = std::make_unique<CanvaStyleEditor>(&m_AvailableFonts, onFontImported);
+}
 
-    // Puente para que HomePanel muestre el editor "acoplado" dentro de su
-    // propia ventana (ver CanvaStyleEditor::Render(embedded=true) y
-    // PresentationCore::SetStyleEditorHook) en vez de una ventana flotante
-    // nueva -- LayersStyleTab sigue siendo el dueño real del editor
-    // (OpenNew/OpenEdit se llaman desde aca, ver RenderThemeGrid), solo que
-    // ahora quien lo DIBUJA es HomePanel a traves de este hook.
-    Core::PresentationCore::Get().SetStyleEditorHook([this]() -> bool {
-        if (!m_StyleEditor || !m_StyleEditor->IsOpen()) return false;
-        m_StyleEditor->Render([this](const std::string& name, const StyleData& data) {
-            if (SaveTheme(name, data)) {
+// ─────────────────────────────────────────────────────────────────────────────
+//  Abre el editor a pantalla completa -- pide a UIManager que oculte el
+//  resto de los paneles (Biblioteca/Home/Diseño/etc), mismo mecanismo que
+//  usa el editor de Overlays (ver OverlayLibraryTab::OpenEditorFullscreen).
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersStyleTab::OpenStyleEditorFullscreen(bool isNew, const std::string& name, const StyleData& data) {
+    if (isNew) m_StyleEditor->OpenNew(data);
+    else       m_StyleEditor->OpenEdit(name, data);
+
+    if (!m_UIManager) return;
+
+    m_UIManager->EnterFullscreenEditor([this]() {
+        ImGuiViewport* vp    = ImGui::GetMainViewport();
+        float          railH = IconRailThickness(false);
+
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y + railH));
+        ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, vp->WorkSize.y - railH));
+        ImGui::SetNextWindowViewport(vp->ID);
+
+        constexpr ImGuiWindowFlags kFlags =
+            ImGuiWindowFlags_NoDecoration      |
+            ImGuiWindowFlags_NoMove            |
+            ImGuiWindowFlags_NoSavedSettings   |
+            ImGuiWindowFlags_NoDocking         |
+            ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, CanvaPalette::Surface0);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::Begin("##styleEditorFullscreen", nullptr, kFlags);
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        bool saved = m_StyleEditor->Render([this](const std::string& n, const StyleData& d) {
+            if (SaveTheme(n, d)) {
                 LoadThemeList();
-                m_CurrentStyle  = data;
-                m_SelectedTheme = name;
+                m_CurrentStyle  = d;
+                m_SelectedTheme = n;
                 ApplyCurrentStyleToCore();
             }
         }, /*embedded=*/true);
-        return true;
+
+        ImGui::End();
+
+        if (saved || !m_StyleEditor->IsOpen())
+            m_UIManager->ExitFullscreenEditor();
     });
 }
 
@@ -292,7 +323,7 @@ void LayersStyleTab::RenderTopBar() {
         LoadFontsList();
     ImGui::SameLine(0, gap);
     if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", {btnSz,btnSz}, true))
-        m_StyleEditor->OpenNew(m_CurrentStyle);
+        OpenStyleEditorFullscreen(true, "", m_CurrentStyle);
     ImGui::SameLine(0, gap);
     if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
             // Tres sliders verticales — mismo lenguaje visual que
@@ -359,7 +390,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
         if (ImGui::Selectable("  Editar")) {
-            StyleData ed; if (LoadThemeData(name,ed)) m_StyleEditor->OpenEdit(name,ed);
+            StyleData ed; if (LoadThemeData(name,ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
         if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
@@ -410,7 +441,7 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
         if (ImGui::Selectable("  Editar")) {
-            StyleData ed; if (LoadThemeData(name,ed)) m_StyleEditor->OpenEdit(name,ed);
+            StyleData ed; if (LoadThemeData(name,ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
         if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
@@ -625,10 +656,9 @@ void LayersStyleTab::Render() {
 
     RenderQuickAdjustPopup();
 
-    // El editor de estilos ya no se dibuja aca: ahora se muestra "acoplado"
-    // dentro de HomePanel (ver PresentationCore::SetStyleEditorHook,
-    // registrado en el constructor de esta clase) en vez de una ventana
-    // flotante nueva encima de todo.
+    // El editor de estilos ya no se dibuja aca: se abre a pantalla completa
+    // via UIManager::EnterFullscreenEditor (ver OpenStyleEditorFullscreen),
+    // disparado desde "Nuevo estilo" / "Editar" arriba.
 }
 
 } // namespace ProyecThor::UI

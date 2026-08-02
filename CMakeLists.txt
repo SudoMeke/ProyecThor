@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.5.0
+    VERSION 0.5.1
     LANGUAGES C CXX
 )
 
@@ -20,6 +20,25 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# ── CONTADOR DE BUILDS ────────────────────────────────────────────────────────
+# Aumenta SOLO al reconfigurar con CMake (compilar de verdad: "cmake -B" a
+# mano, o un build limpio de CI), nunca al abrir la app -- antes se
+# incrementaba en cada arranque (ver splash screen / GetAndIncrementBuildCount
+# en main.cpp, retirado), lo que en la practica contaba "veces que se probo
+# el build" en vez de "veces que se compilo". CI sigue pudiendo fijar su
+# propio numero pasando -DPROYECTHOR_BUILD_NUMBER=N (ver
+# .github/workflows/build.yml), en cuyo caso este contador local no se toca.
+if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
+    set(_build_count_file "${CMAKE_CURRENT_SOURCE_DIR}/build_count.txt")
+    set(PROYECTHOR_BUILD_NUMBER 0)
+    if(EXISTS "${_build_count_file}")
+        file(READ "${_build_count_file}" PROYECTHOR_BUILD_NUMBER)
+        string(STRIP "${PROYECTHOR_BUILD_NUMBER}" PROYECTHOR_BUILD_NUMBER)
+    endif()
+    math(EXPR PROYECTHOR_BUILD_NUMBER "${PROYECTHOR_BUILD_NUMBER} + 1")
+    file(WRITE "${_build_count_file}" "${PROYECTHOR_BUILD_NUMBER}")
+endif()
 
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
 configure_file(
@@ -305,15 +324,34 @@ if(WIN32)
 else()
     # ── Rutas y librerias exclusivas de Linux ────────────────────────────────
 
-    find_package(glfw3 QUIET)
-    if(NOT glfw3_FOUND)
-        message(FATAL_ERROR
-            "No se encontro GLFW3 en el sistema.\n"
-            "Instala el paquete de desarrollo de GLFW3 para tu distribucion.\n"
-            "En CachyOS/Arch: sudo pacman -S glfw\n"
-            "En Debian/Ubuntu: sudo apt install libglfw3-dev"
-        )
-    endif()
+    # GLFW se compila desde fuente (FetchContent) en vez de usar el paquete
+    # del sistema. Motivo: el backend de ImGui vendorizado (ver
+    # src/external/imgui-docking/backends/imgui_impl_glfw.cpp) llama a
+    # glfwGetPlatform() -- la API que permite elegir/detectar X11 vs Wayland
+    # en tiempo de ejecucion -- que recien existe desde GLFW 3.4. Debian/
+    # Ubuntu todavia empaquetan GLFW 3.3.x ("libglfw3-dev"), asi que linkear
+    # contra esa version tira "undefined reference a glfwGetPlatform" al
+    # linkear (confirmado en CI, ver build-linux). Se compilan ambos
+    # backends (X11 + Wayland) para que el mismo binario funcione en
+    # cualquiera de los dos sin recompilar -- necesita los paquetes de
+    # desarrollo de Wayland instalados ademas de los de X11 (ver
+    # .github/workflows/build.yml).
+    include(FetchContent)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_X11      ON  CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_WAYLAND  ON  CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        glfw3_src
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG        3.4
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(glfw3_src)
+    # De aca en mas "glfw" es el target que provee FetchContent -- mismo
+    # nombre que exportaba find_package(glfw3), el resto del archivo
+    # (target_link_libraries mas abajo) no necesita cambios.
 
     find_package(OpenGL REQUIRED)
 
@@ -559,6 +597,18 @@ endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+        )
+    endif()
+
+    # Entrada de menu (.desktop) -- el icono de arriba solo lo hace
+    # encontrable POR NOMBRE ("Icon=proyecthor" en el .desktop, ver
+    # packaging/proyecthor.desktop), pero sin instalar el .desktop en si el
+    # entorno de escritorio nunca se entera de que la app existe (no
+    # aparece en el menu de aplicaciones aunque el binario+icono esten bien
+    # instalados). Esto faltaba.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
         )
     endif()
 endif()

@@ -40,13 +40,32 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
         ImGui::TextUnformatted("PREVIEW");
         ImGui::PopStyleColor();
 
-        const char* badge = "MONITOR ONLY";
-        float badgeX = MT::k_PadLg + innerW - ImGui::CalcTextSize(badge).x;
+        const char* badge   = "MONITOR ONLY";
+        ImVec2      badgeSz = ImGui::CalcTextSize(badge);
+        const float eqBtnW  = 26.0f, eqBtnH = 16.0f;
+        float       rightX  = MT::k_PadLg + innerW - eqBtnW - 6.0f - badgeSz.x;
+
         ImGui::SameLine();
-        ImGui::SetCursorPosX(badgeX);
+        ImGui::SetCursorPosX(rightX);
+        ImGui::PushStyleColor(ImGuiCol_Button,        m_EqEnabled ? MT::k_AmberBtn    : MT::k_NeutBtn);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  m_EqEnabled ? MT::k_AmberBtnHov : MT::k_NeutBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   m_EqEnabled ? MT::k_AmberBtnAct : MT::k_NeutBtnAct);
+        ImGui::PushStyleColor(ImGuiCol_Text,           m_EqEnabled ? MT::k_AmberAccent : MT::k_TextDim);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(4.0f, 1.0f));
+        if (ImGui::Button("EQ##mon_eq", { eqBtnW, eqBtnH }))
+            ImGui::OpenPopup("##mon_eq_popup");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Ecualizador del audio en vivo");
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+
+        ImGui::SameLine(0, 6);
         ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextDim);
         ImGui::TextUnformatted(badge);
         ImGui::PopStyleColor();
+
+        RenderEqualizerPopup();
     }
 
     DrawAccentLine(innerW, MT::k_PrevAccentDim, 1.0f);
@@ -146,6 +165,56 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
     ImGui::EndChild();
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
+}
+
+void MonitorView::RenderEqualizerPopup()
+{
+    if (!ImGui::BeginPopup("##mon_eq_popup"))
+        return;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, MT::k_PrevAccent);
+    ImGui::TextUnformatted("ECUALIZADOR — AUDIO EN VIVO");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+
+    if (ImGui::Checkbox("Activar", &m_EqEnabled))
+        Core::PresentationCore::Get().SetLiveEqualizerEnabled(m_EqEnabled);
+
+    ImGui::SameLine(0.0f, 20.0f);
+    if (ImGui::Button("Reset")) {
+        m_EqPreamp = 0.0f;
+        for (int b = 0; b < kEqBands; b++) m_EqBandAmps[b] = 0.0f;
+        Core::PresentationCore::Get().SetLiveEqualizerPreamp(m_EqPreamp);
+        for (int b = 0; b < kEqBands; b++)
+            Core::PresentationCore::Get().SetLiveEqualizerBand(b, m_EqBandAmps[b]);
+    }
+
+    ImGui::SetNextItemWidth(224.0f);
+    if (ImGui::SliderFloat("Preamp", &m_EqPreamp, -20.0f, 20.0f, "%.1f dB"))
+        Core::PresentationCore::Get().SetLiveEqualizerPreamp(m_EqPreamp);
+
+    ImGui::Spacing();
+
+    static const char* kBandLabels[kEqBands] = {
+        "31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"
+    };
+
+    for (int b = 0; b < kEqBands; b++) {
+        ImGui::PushID(b);
+        ImGui::BeginGroup();
+        if (ImGui::VSliderFloat("##band", ImVec2(20.0f, 90.0f), &m_EqBandAmps[b], -20.0f, 20.0f, ""))
+            Core::PresentationCore::Get().SetLiveEqualizerBand(b, m_EqBandAmps[b]);
+        ImVec2 lblSz = ImGui::CalcTextSize(kBandLabels[b]);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (20.0f - lblSz.x) * 0.5f);
+        ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextDim);
+        ImGui::TextUnformatted(kBandLabels[b]);
+        ImGui::PopStyleColor();
+        ImGui::EndGroup();
+        ImGui::PopID();
+        if (b < kEqBands - 1) ImGui::SameLine();
+    }
+
+    ImGui::EndPopup();
 }
 
 } // namespace ProyecThor::UI

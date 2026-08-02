@@ -74,7 +74,7 @@ public:
 
     // Version parametrizada de la logica de "Escenas rápidas" (ver
     // SaveCurrentAsScene/RecallScene mas abajo), para que paneles externos
-    // (ViewToolsPanel > Pads) puedan guardar/aplicar una disposicion de
+    // (ViewPanel > Pads) puedan guardar/aplicar una disposicion de
     // captura sin pasar por los 8 slots fijos de este panel.
     // Calificado con "::" porque, en headers incluidos junto con
     // SettingsPanel.h (backend/settings), "Settings::" sin calificar dentro
@@ -86,7 +86,7 @@ public:
 
     // Dibuja la grilla de "Escenas rápidas" (los mismos 8 slots de
     // Settings::CaptureSettings::scenes que usa este panel). Publico para
-    // que ViewToolsPanel > Pads pueda mostrarla tal cual debajo de sus
+    // que ViewPanel > Pads pueda mostrarla tal cual debajo de sus
     // propios pads "General" -- son las mismas escenas, sincronizadas
     // (un solo dato de fondo), no una copia aparte.
     void        RenderSceneButtons();

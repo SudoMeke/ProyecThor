@@ -109,6 +109,12 @@ int WaitHiddenProcess(void* processHandle) {
     return (int)exitCode;
 }
 
+void TerminateHiddenProcess(void* processHandle) {
+    HANDLE h = (HANDLE)processHandle;
+    if (!h) return;
+    TerminateProcess(h, 1);
+}
+
 } // namespace ProyecThor::Core
 
 #endif // _WIN32

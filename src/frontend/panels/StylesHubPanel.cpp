@@ -20,41 +20,55 @@ StylesHubPanel::StylesHubPanel(UIManager* uiManager)
     // SetAnnouncementsRef/SetCapturePanelRef.
     Core::PresentationCore::Get().SetAnnouncementsRef(&m_Announcements);
     Core::PresentationCore::Get().SetCapturePanelRef(&m_Capture);
+
+    m_Styles.SetUIManager(uiManager);
 }
 
 void StylesHubPanel::RenderTransitionQuickBar()
 {
     if (!m_TransitionsRef) return;
 
-    const ImU32 kAccent = IM_COL32(94, 107, 255, 255);
-    const float w        = ImGui::GetContentRegionAvail().x;
-    const float gap      = 8.0f;
-    const float btnW     = (w - gap * 2.0f) / 3.0f;
+    const ImU32  kAccent  = IM_COL32(94, 107, 255, 255);
+    const ImVec4 kAccentV = ImGui::ColorConvertU32ToFloat4(kAccent);
+    const ImVec4 kMutedV  = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+    constexpr float kBtnSz    = 26.0f;
+    constexpr float kGap      = 4.0f;
+    constexpr float kSliderW  = 90.0f;
 
-    float duration = m_TransitionsRef->GetDuration();
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.68f, 0.78f, 1.0f));
-    ImGui::Text("Duracion de la transicion de texto   %.2f s", duration);
-    ImGui::PopStyleColor();
-    if (DS::ModernSlider("##quickTransDur", &duration, 0.1f, 3.0f, -1.0f, kAccent))
-        m_TransitionsRef->SetDuration(duration);
+    TransitionType current  = m_TransitionsRef->GetCurrentType();
+    float          duration = m_TransitionsRef->GetDuration();
+    bool           isAdvanced = current != TransitionType::None && current != TransitionType::Fade;
 
-    ImGui::Spacing();
+    float rowY = ImGui::GetCursorPosY();
 
-    TransitionType current = m_TransitionsRef->GetCurrentType();
-
-    if (DS::GlassButton("Sin transicion", ImVec2(btnW, 0.0f),
-                        current == TransitionType::None ? kAccent : DS::AccentColor))
+    if (DS::GlassIconButton("##transNone", "", "—", "Sin transicion", { kBtnSz, kBtnSz },
+                            current == TransitionType::None ? kAccentV : kMutedV))
         m_TransitionsRef->SetType(TransitionType::None);
+    ImGui::SameLine(0.0f, kGap);
 
-    ImGui::SameLine(0.0f, gap);
-    if (DS::GlassButton("Disolver", ImVec2(btnW, 0.0f),
-                        current == TransitionType::Fade ? kAccent : DS::AccentColor))
+    if (DS::GlassIconButton("##transFade", "", "~", "Disolver", { kBtnSz, kBtnSz },
+                            current == TransitionType::Fade ? kAccentV : kMutedV))
         m_TransitionsRef->SetType(TransitionType::Fade);
+    ImGui::SameLine(0.0f, kGap);
 
-    ImGui::SameLine(0.0f, gap);
-    bool isAdvanced = current != TransitionType::None && current != TransitionType::Fade;
-    if (DS::GlassButton("Avanzado...", ImVec2(btnW, 0.0f), isAdvanced ? kAccent : DS::AccentColor))
+    if (DS::GlassIconButton("##transAdv", "", "…", "Avanzado (Zoom, Slide, Cover...)", { kBtnSz, kBtnSz },
+                            isAdvanced ? kAccentV : kMutedV))
         ImGui::OpenPopup("##transAdvancedPopup");
+    ImGui::SameLine(0.0f, kGap * 2.0f);
+
+    // Slider chico centrado verticalmente contra los botones de icono (su
+    // alto propio, thumbR*2+6, es menor que kBtnSz).
+    ImGui::SetCursorPosY(rowY + (kBtnSz - 20.0f) * 0.5f);
+    if (DS::ModernSlider("##quickTransDur", &duration, 0.1f, 3.0f, kSliderW, kAccent))
+        m_TransitionsRef->SetDuration(duration);
+    ImGui::SameLine(0.0f, 6.0f);
+
+    ImGui::SetCursorPosY(rowY + (kBtnSz - ImGui::GetTextLineHeight()) * 0.5f);
+    ImGui::PushStyleColor(ImGuiCol_Text, kMutedV);
+    ImGui::Text("%.2fs", duration);
+    ImGui::PopStyleColor();
+
+    ImGui::SetCursorPosY(rowY + kBtnSz);
 
     if (ImGui::BeginPopup("##transAdvancedPopup"))
     {
@@ -102,14 +116,13 @@ void StylesHubPanel::Render()
         static const IconRailItem kItems[] = {
             { (int)StylesSection::Backgrounds,   AppIcons::DrawIcon_Layers,    "Fondos"   },
             { (int)StylesSection::Styles,        AppIcons::DrawIcon_TextAa,    "Estilos"  },
-            { (int)StylesSection::Overlays,      AppIcons::DrawIcon_Overlay,   "Overlays" },
             { (int)StylesSection::Shaders,       AppIcons::DrawIcon_Shader,    "Shaders"  },
             { (int)StylesSection::Announcements, HomeIcons::DrawIcon_Megaphone,"Anuncios" },
             { (int)StylesSection::Capture,       HomeIcons::DrawIcon_Camera,   "Captura"  },
         };
         const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
         int currentIndex = (int)m_CurrentSection;
-        RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
+        RenderIconRail(kItems, 5, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (StylesSection)currentIndex;
     }
 
@@ -144,7 +157,6 @@ void StylesHubPanel::Render()
             RenderTransitionQuickBar();
             m_Styles.RenderContent();
             break;
-        case StylesSection::Overlays:    m_Overlays.RenderContent();   break;
         case StylesSection::Shaders:     m_Shaders.RenderContent();    break;
         case StylesSection::Transitions:
             if (m_TransitionsRef) m_TransitionsRef->RenderContent();

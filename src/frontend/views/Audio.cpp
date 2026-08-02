@@ -6,6 +6,9 @@
 #include "audio/AudioHelpers.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "backend/core/PresentationCore.h"
+#include "frontend/panels/monitor/MonitorTheme.h"
+
+namespace { namespace MT = ProyecThor::UI::MonitorTheme; }
 
 #include <vlc/vlc.h>
 
@@ -585,6 +588,29 @@ void AudioPanel::PlayCurrent() {
     Play(m_CurrentTrack);
 }
 
+bool AudioPanel::PlayFileLive(const std::string& filename) {
+    auto findIndex = [this, &filename]() -> int {
+        for (int i = 0; i < static_cast<int>(m_Tracks.size()); i++)
+            if (m_Tracks[i].filename == filename) return i;
+        return -1;
+    };
+
+    int idx = findIndex();
+    if (idx < 0) {
+        RefreshLibrary();
+        idx = findIndex();
+    }
+    if (idx < 0) return false;
+
+    Play(idx);
+
+    auto& core = Core::PresentationCore::Get();
+    core.SetBackgroundAudio();
+    core.SetProjecting(true);
+    m_IsLiveBackground = true;
+    return true;
+}
+
 void AudioPanel::Stop() {
     if (!m_Player) return;
     libvlc_media_player_stop(m_Player);
@@ -866,7 +892,7 @@ void AudioPanel::Update() {
 
 void AudioPanel::RenderHeader() {
     const float barH = 44.0f;
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.04f, 0.04f, 0.06f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
     ImGui::BeginChild("##AudioHeader", ImVec2(0.0f, barH), false,
                       ImGuiWindowFlags_NoScrollbar);
 
@@ -1011,7 +1037,7 @@ void AudioPanel::RenderNowPlayingCard() {
     const float discR   = 62.0f;
     const float padding = 14.0f;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.06f, 0.07f, 0.10f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
     ImGui::BeginChild("##NowPlaying", ImVec2(0.0f, cardH), false,
                       ImGuiWindowFlags_NoScrollbar);
 
@@ -1656,7 +1682,7 @@ void AudioPanel::RenderPlaylist() {
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.04f, 0.05f, 0.07f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg3);
     ImGui::BeginChild("##AudioPlaylist", ImVec2(0.0f, 0.0f), false,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 

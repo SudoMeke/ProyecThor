@@ -28,4 +28,10 @@ void AddSongToPlaylist(const std::string& playlistName, const std::string& songF
 void RemoveSongFromPlaylist(const std::string& playlistName, int index);
 void MovePlaylistSong(const std::string& playlistName, int index, int delta); // delta: -1 sube, +1 baja
 
+// Reemplaza <oldFilename> por <newFilename> en TODAS las playlists que lo
+// referencien (usado al renombrar una cancion) — sin esto, renombrar un
+// archivo de cancion deja la referencia vieja en cada playlist apuntando a
+// un archivo que ya no existe, y la cancion "desaparece" de esa playlist.
+void RenameSongInAllPlaylists(const std::string& oldFilename, const std::string& newFilename);
+
 } // namespace ProyecThor::Library

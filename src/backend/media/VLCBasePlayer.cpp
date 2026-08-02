@@ -831,6 +831,43 @@ void VLCBasePlayer::EnforceSilenceIfNeeded()
 #endif
 }
 
+void VLCBasePlayer::ApplyEqualizer()
+{
+    if (!m_MediaPlayer) return;
+
+    if (!m_EqEnabled) {
+        libvlc_media_player_set_equalizer(m_MediaPlayer, nullptr);
+        return;
+    }
+
+    libvlc_equalizer_t* eq = libvlc_audio_equalizer_new();
+    if (!eq) return;
+    libvlc_audio_equalizer_set_preamp(eq, m_EqPreamp);
+    for (int b = 0; b < kEqualizerBands; b++)
+        libvlc_audio_equalizer_set_amp_at_index(eq, m_EqBands[b], static_cast<unsigned>(b));
+    libvlc_media_player_set_equalizer(m_MediaPlayer, eq);
+    libvlc_audio_equalizer_release(eq);
+}
+
+void VLCBasePlayer::SetEqualizerEnabled(bool enabled)
+{
+    m_EqEnabled = enabled;
+    ApplyEqualizer();
+}
+
+void VLCBasePlayer::SetEqualizerPreamp(float preampDb)
+{
+    m_EqPreamp = preampDb;
+    if (m_EqEnabled) ApplyEqualizer();
+}
+
+void VLCBasePlayer::SetEqualizerBand(int index, float ampDb)
+{
+    if (index < 0 || index >= kEqualizerBands) return;
+    m_EqBands[index] = ampDb;
+    if (m_EqEnabled) ApplyEqualizer();
+}
+
 void VLCBasePlayer::SetPause(bool paused)
 {
     m_Paused.store(paused, std::memory_order_relaxed);

@@ -1,11 +1,7 @@
-#include <GL/glew.h>
-#include "YggdrasilPanel.h"
+#include "OSCPanel.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/core/OSCSender.h"
 #include "backend/settings/SettingsManager.h"
-#include "AppIcons.h"
-#include "IconRail.h"
-#include "home/HomeIcons.h"
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -38,7 +34,7 @@ bool InputTextStd(const char* label, std::string* str, ImGuiInputTextFlags flags
 }
 } // namespace
 
-YggdrasilPanel::YggdrasilPanel() {
+OSCPanel::OSCPanel() {
     BuildParamRegistry();
 
     auto& y = ProyecThor::Settings::SettingsManager::Get().GetSettings().yggdrasil;
@@ -51,7 +47,7 @@ YggdrasilPanel::YggdrasilPanel() {
     }
 }
 
-YggdrasilPanel::~YggdrasilPanel() {
+OSCPanel::~OSCPanel() {
     m_Receiver.Stop();
 }
 
@@ -62,7 +58,7 @@ YggdrasilPanel::~YggdrasilPanel() {
 // todavia parametros de opacidad/escala en vivo expuestos a nivel de
 // PresentationCore -- sumarlos es un paso aparte (requiere tocar el
 // compositor de overlays), no algo que se pueda enganchar aca sin riesgo.
-void YggdrasilPanel::BuildParamRegistry() {
+void OSCPanel::BuildParamRegistry() {
     using Core::PresentationCore;
 
     m_Params = {
@@ -126,7 +122,7 @@ void YggdrasilPanel::BuildParamRegistry() {
 // direccion coincida con un binding existente actualiza el parametro en
 // vivo (primer argumento numerico, clamp 0..1 -- mismo rango que usan los
 // sliders manuales de Shaders).
-void YggdrasilPanel::ApplyReceivedMessages() {
+void OSCPanel::ApplyReceivedMessages() {
     if (!m_Receiver.IsListening()) return;
 
     m_DrainBuffer.clear();
@@ -168,7 +164,11 @@ void YggdrasilPanel::ApplyReceivedMessages() {
     }
 }
 
-void YggdrasilPanel::RenderConnectionSection() {
+void OSCPanel::Update() {
+    ApplyReceivedMessages();
+}
+
+void OSCPanel::RenderConnectionSection() {
     auto& y = ProyecThor::Settings::SettingsManager::Get().GetSettings().yggdrasil;
 
     ImGui::SeparatorText("Conexion");
@@ -211,7 +211,7 @@ void YggdrasilPanel::RenderConnectionSection() {
     ImGui::Spacing();
 }
 
-void YggdrasilPanel::RenderControlListSection() {
+void OSCPanel::RenderControlListSection() {
     auto& bindings = ProyecThor::Settings::SettingsManager::Get().GetSettings().yggdrasil.bindings;
 
     ImGui::SeparatorText("Control List (recibir + OSC Learn)");
@@ -219,7 +219,7 @@ void YggdrasilPanel::RenderControlListSection() {
                         "apreta \"Aprender\", mové el fader/control externo, y queda vinculado.");
     ImGui::Spacing();
 
-    if (!ImGui::BeginTable("##yggControlList", 4,
+    if (!ImGui::BeginTable("##oscControlList", 4,
                             ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
         return;
 
@@ -275,7 +275,7 @@ void YggdrasilPanel::RenderControlListSection() {
     ImGui::Spacing();
 }
 
-void YggdrasilPanel::RenderSendSection() {
+void OSCPanel::RenderSendSection() {
     auto& messages = ProyecThor::Settings::SettingsManager::Get().GetSettings().yggdrasil.messages;
 
     ImGui::SeparatorText("Luces (enviar)");
@@ -346,94 +346,10 @@ void YggdrasilPanel::RenderSendSection() {
     }
 }
 
-void YggdrasilPanel::RenderRail() {
-    static const IconRailItem kItems[] = {
-        { (int)Section::OSC,  AppIcons::DrawIcon_Yggdrasil,  "OSC"  },
-        { (int)Section::Red,     HomeIcons::DrawIcon_Broadcast, "Red"     },
-        { (int)Section::Chat,    HomeIcons::DrawIcon_Chat,      "Chat"    },
-        { (int)Section::Capture, HomeIcons::DrawIcon_Camera,    "Capture" },
-        { (int)Section::Layer,   AppIcons::DrawIcon_Layers,     "Layer"   },
-        { (int)Section::Start,   AppIcons::DrawIcon_Monitor,    "Iniciar" },
-    };
-    static const float kColors[6][4] = {
-        { 0.65f, 0.31f, 0.94f, 1.0f }, // OSC
-        { 0.30f, 0.80f, 0.85f, 1.0f }, // Red
-        { 0.75f, 0.40f, 0.90f, 1.0f }, // Chat
-        { 0.90f, 0.35f, 0.45f, 1.0f }, // Capture
-        { 0.35f, 0.80f, 0.55f, 1.0f }, // Layer
-        { 0.90f, 0.28f, 0.28f, 1.0f }, // Iniciar
-    };
-
-    float railW = IconRailThickness(true);
-    ImGui::BeginChild("##yggdrasilRail", ImVec2(railW, 0.0f), false,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-    int currentIndex = (int)m_Section;
-    RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Vertical, kColors);
-    m_Section = (Section)currentIndex;
-
-    ImGui::EndChild();
-}
-
-void YggdrasilPanel::RenderOSCSection() {
+void OSCPanel::RenderContent() {
     RenderConnectionSection();
     RenderControlListSection();
     RenderSendSection();
-}
-
-void YggdrasilPanel::Render() {
-    ApplyReceivedMessages();
-    // Red/Chat/Streaming ya no se actualizan aca: UIManager les llama
-    // Update() de forma incondicional en cada frame (ver UIManager.h,
-    // GetRedPanel/GetChatPanel/GetBroadcastPanel), sin importar el
-    // WorkspaceMode activo.
-
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->WorkPos);
-    ImGui::SetNextWindowSize(vp->WorkSize);
-    ImGui::SetNextWindowViewport(vp->ID);
-
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove       |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
-
-    ImGui::Begin("##YggdrasilRoot", nullptr, flags);
-
-    ImGui::BeginChild("##yggdrasilContent", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AlwaysUseWindowPadding);
-
-    {
-        float iconSz = 30.0f;
-        ImVec2 iconOrigin = ImGui::GetCursorScreenPos();
-        AppIcons::DrawIcon_Yggdrasil(ImGui::GetWindowDrawList(), iconOrigin, iconSz,
-                                      ImGui::GetColorU32(ImGuiCol_Text));
-        ImGui::Dummy(ImVec2(iconSz + 8.0f, iconSz));
-        ImGui::SameLine();
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (iconSz - ImGui::GetTextLineHeight()) * 0.5f);
-        ImGui::TextUnformatted("Yggdrasil");
-        ImGui::SameLine();
-        ImGui::TextDisabled("(OSC, Red, Chat y Streaming)");
-    }
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    RenderRail();
-    ImGui::SameLine();
-    ImGui::BeginChild("##yggdrasilSection", ImVec2(0.0f, 0.0f));
-
-    switch (m_Section) {
-        case Section::OSC:     RenderOSCSection();                                          break;
-        case Section::Red:     if (m_Red)       m_Red->RenderContent();                     break;
-        case Section::Chat:    if (m_Chat)      m_Chat->RenderContent();                    break;
-        case Section::Capture: if (m_Broadcast) m_Broadcast->RenderCaptureSection();        break;
-        case Section::Layer:   if (m_Broadcast) m_Broadcast->RenderLayerSection();          break;
-        case Section::Start:   if (m_Broadcast) m_Broadcast->RenderStartSection();          break;
-    }
-
-    ImGui::EndChild();
-    ImGui::EndChild();
-    ImGui::End();
 }
 
 } // namespace ProyecThor::UI

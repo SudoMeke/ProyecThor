@@ -2,6 +2,7 @@
 #include "backend/core/PresentationCore.h"
 #include "UIStrings.h"
 #include "LibrarySongs.h"
+#include "LibrarySongMeta.h"
 #include "SongBackgroundPicker.h"
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -31,6 +32,37 @@ SongView::SongView()
     , m_ActiveStanzaIndex(-1)
     , m_HasRecordedCurrentSongProjection(false)
 {
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ReloadTempoMeta — releido cada vez que cambia la cancion activa o se
+//  vuelve del editor unificado (donde se edita el override de duracion por
+//  estrofa, ver icono de reloj en SongEditView) para que el cache local no
+//  quede desactualizado despues de guardar ahi.
+// ─────────────────────────────────────────────────────────────────────────────
+void SongView::ReloadTempoMeta(const std::string& songFilename)
+{
+    ProyecThor::Library::SongMeta meta = ProyecThor::Library::GetSongMeta(songFilename);
+    m_TempoBpm = meta.tempoBpm;
+    m_VerseDurationOverrideMs = meta.verseDurationOverrideMs;
+    m_AutoAdvancePlaying = false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ComputeVerseDurationSeconds — override manual (ver icono de reloj en
+//  SongEditView) si existe, si no el calculo automatico por tempo (ver
+//  Library::CalcVerseDurationMs). Minimo 0.3s como piso de seguridad para
+//  que un override en 0/negativo (o un tempo absurdamente alto) nunca
+//  produzca un avance instantaneo en bucle.
+// ─────────────────────────────────────────────────────────────────────────────
+float SongView::ComputeVerseDurationSeconds(const std::string& stanzaText, int stanzaIndex) const
+{
+    if (stanzaIndex >= 0 && stanzaIndex < (int)m_VerseDurationOverrideMs.size() &&
+        m_VerseDurationOverrideMs[stanzaIndex] > 0)
+        return std::max(0.3f, m_VerseDurationOverrideMs[stanzaIndex] / 1000.0f);
+
+    int ms = ProyecThor::Library::CalcVerseDurationMs(stanzaText, m_TempoBpm);
+    return std::max(0.3f, ms / 1000.0f);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,6 +261,7 @@ void SongView::Render()
         m_CurrentSongTitle  = selection.title;
         m_ActiveStanzaIndex = -1;
         m_HasRecordedCurrentSongProjection = false;
+        ReloadTempoMeta(selection.title);
     }
 
     // Cue "consumir una vez" de PresentationCore: una cancion recien creada
@@ -246,7 +279,13 @@ void SongView::Render()
     if (m_ShowEditor)
     {
         if (!m_EditView.Render())
+        {
             m_ShowEditor = false;
+            // El editor pudo haber cambiado el override de duracion por
+            // estrofa (icono de reloj) — releer para que el cache local no
+            // quede desactualizado.
+            ReloadTempoMeta(selection.title);
+        }
         return;
     }
 
@@ -288,36 +327,42 @@ void SongView::RenderBrowseGrid()
                           ? selection.contentData[nextIdx] : "");
     };
 
+    // Punto unico de avance (click, flechas o tick de auto-avance) — evita
+    // triplicar la misma secuencia de 4 pasos y, de paso, asegura que
+    // CUALQUIER navegacion (no solo el tick automatico) reinicie el reloj
+    // del auto-avance si esta activo, para que no dispare un avance
+    // duplicado apenas despues de un cambio manual.
+    auto GoToStanza = [&](int idx) {
+        m_ActiveStanzaIndex = idx;
+        core.SetLayer2_Text(selection.contentData[idx]);
+        PushNextStanzaText(idx);
+        if (core.IsProjecting())
+            core.SetProjecting(true);
+        TryRecordProjection(true);
+        if (m_AutoAdvancePlaying)
+            m_AutoAdvanceDeadline = ImGui::GetTime() + ComputeVerseDurationSeconds(selection.contentData[idx], idx);
+    };
+
     // ── Navegacion con teclado ────────────────────────────────────────────────
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
         !selection.contentData.empty())
     {
-       if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
-{
-    if (m_ActiveStanzaIndex < (int)selection.contentData.size() - 1)
-    {
-        m_ActiveStanzaIndex++;
-        core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
-        PushNextStanzaText(m_ActiveStanzaIndex);
-        if (core.IsProjecting())
-            core.SetProjecting(true);
-
-        TryRecordProjection(true);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) && m_ActiveStanzaIndex < (int)selection.contentData.size() - 1)
+            GoToStanza(m_ActiveStanzaIndex + 1);
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) && m_ActiveStanzaIndex > 0)
+            GoToStanza(m_ActiveStanzaIndex - 1);
     }
-}
-if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
-{
-    if (m_ActiveStanzaIndex > 0)
-    {
-        m_ActiveStanzaIndex--;
-        core.SetLayer2_Text(selection.contentData[m_ActiveStanzaIndex]);
-        PushNextStanzaText(m_ActiveStanzaIndex);
-        if (core.IsProjecting())
-            core.SetProjecting(true);
 
-        TryRecordProjection(true);
-    }
-}
+    // ── Auto-avance por tempo ("Reproducir", ver barra superior) ────────────
+    if (m_AutoAdvancePlaying && !selection.contentData.empty())
+    {
+        if (ImGui::GetTime() >= m_AutoAdvanceDeadline)
+        {
+            if (m_ActiveStanzaIndex < (int)selection.contentData.size() - 1)
+                GoToStanza(m_ActiveStanzaIndex + 1);
+            else
+                m_AutoAdvancePlaying = false; // llego a la ultima estrofa
+        }
     }
 
     // ── Barra superior: solo el slider de tamano + el nombre del archivo ────
@@ -340,9 +385,59 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
     ImGui::SameLine();
     if (DS::GlassButton("Editar", { 90.f, DS::ButtonHeight }, DS::TextSecondary))
     {
+        m_AutoAdvancePlaying = false;
         m_EditView.Open(selection.title);
         m_ShowEditor = true;
     }
+
+    // ── Tempo / auto-avance ──────────────────────────────────────────────────
+    // BPM de la cancion: con eso calculamos cuanto dura en pantalla cada
+    // estrofa (ver Library::CalcVerseDurationMs) y "Reproducir" las va
+    // pasando solo. 0 = auto-avance desactivado (comportamiento de siempre,
+    // solo navegacion manual). Si el calculo no cuadra para alguna estrofa
+    // en particular, el operador la ajusta a mano desde el icono de reloj
+    // en Editar (SongEditView) — eso pisa el calculo automatico solo para
+    // esa estrofa.
+    ImGui::SameLine(0.0f, 16.0f);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Tempo");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(56.0f);
+    if (ImGui::InputInt("##tempoBpm", &m_TempoBpm, 0, 0))
+    {
+        m_TempoBpm = std::clamp(m_TempoBpm, 0, 400);
+        ProyecThor::Library::SongMeta meta = ProyecThor::Library::GetSongMeta(selection.title);
+        meta.tempoBpm = m_TempoBpm;
+        ProyecThor::Library::SetSongMeta(selection.title, meta);
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Tempo (BPM) de la cancion. 0 = auto-avance desactivado.");
+
+    ImGui::SameLine();
+    bool canAutoAdvance = m_TempoBpm > 0 && !selection.contentData.empty();
+    ImGui::BeginDisabled(!canAutoAdvance);
+    const char* playLabel = m_AutoAdvancePlaying ? "Pausar" : "Reproducir";
+    if (DS::GlassButton(playLabel, { 100.f, DS::ButtonHeight },
+                        m_AutoAdvancePlaying ? DS::DangerColor : DS::SuccessColor))
+    {
+        if (m_AutoAdvancePlaying)
+        {
+            m_AutoAdvancePlaying = false;
+        }
+        else
+        {
+            // Arranca desde la estrofa activa; si ninguna lo esta todavia,
+            // desde la primera (mismo efecto que hacerle click).
+            if (m_ActiveStanzaIndex < 0)
+                GoToStanza(0);
+            m_AutoAdvancePlaying = true;
+            m_AutoAdvanceDeadline = ImGui::GetTime() +
+                ComputeVerseDurationSeconds(selection.contentData[m_ActiveStanzaIndex], m_ActiveStanzaIndex);
+        }
+    }
+    if (!canAutoAdvance && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Configura un tempo (BPM) para poder reproducir automaticamente.");
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
     float titleMaxW = std::max(20.0f, ImGui::GetContentRegionAvail().x - 8.0f);
@@ -457,14 +552,7 @@ if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
             ImVec2 p_max    = ImVec2(p_min.x + cardSize.x, p_min.y + cardSize.y);
 
             if (ImGui::InvisibleButton("##select_btn", cardSize))
-            {
-                m_ActiveStanzaIndex = (int)i;
-                core.SetLayer2_Text(stanza);
-                PushNextStanzaText(m_ActiveStanzaIndex);
-                if (core.IsProjecting())
-                    core.SetProjecting(true);
-                TryRecordProjection(true);
-            }
+                GoToStanza((int)i);
 
             bool isHovered = ImGui::IsItemHovered();
 

@@ -1,11 +1,8 @@
 name: Build
 
-# build-linux / build-windows corren en cada push/PR (feedback rapido, mismos
-# comandos que scripts/build.sh linux|windows ya usan en local). package-msi
-# solo corre en tags "v*" o disparado a mano (workflow_dispatch) -- arma el
-# instalador de verdad, y los runners windows-latest son mas limitados que
-# los de Linux en el plan gratis de GitHub, no vale la pena gastarlos en
-# cada commit suelto.
+# Solo build-linux: el build de Windows lo compila el autor a mano en su
+# propia PC (no usa el instalador .msi), asi que no tiene sentido gastar
+# minutos de CI en eso -- ver commit que retiro build-windows/package-msi.
 on:
   push:
     branches: [main, beta]
@@ -20,11 +17,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Instalar dependencias
+        # libglfw3-dev NO se instala a proposito: GLFW se compila desde
+        # fuente en CMakeLists.txt (FetchContent, tag 3.4) porque Ubuntu
+        # todavia empaqueta la 3.3.x, que le falta glfwGetPlatform() (usada
+        # por el backend de ImGui, ver comentario en CMakeLists.txt) -- en
+        # cambio se instalan los paquetes de desarrollo que GLFW necesita
+        # para compilar sus backends X11 y Wayland el mismo.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build libglfw3-dev libgl1-mesa-dev libx11-dev \
-            libxcomposite-dev libopencv-dev libpipewire-0.3-dev libdbus-1-dev
+            ninja-build libgl1-mesa-dev libx11-dev \
+            libxcomposite-dev libopencv-dev libpipewire-0.3-dev libdbus-1-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
 
       - name: Configurar
         run: cmake -B build-linux -G Ninja -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
@@ -49,98 +54,31 @@ jobs:
             !build-linux/cmake_install.cmake
           if-no-files-found: error
 
-  build-windows:
+  # Valida que packaging/arch/PKGBUILD compila y empaqueta de verdad -- sin
+  # esto, un PKGBUILD roto solo se descubriria cuando alguien intentara
+  # instalarlo en su propia maquina (CachyOS/Arch). makepkg se niega a
+  # correr como root, asi que hace falta crear un usuario de build aparte.
+  package-arch:
+    needs: build-linux
     runs-on: ubuntu-latest
+    container: archlinux:base-devel
     steps:
+      - name: Preparar usuario de build
+        run: |
+          pacman -Syu --noconfirm --needed sudo git
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+
       - uses: actions/checkout@v4
 
-      - name: Instalar mingw-w64 (cross-compile, igual que scripts/build.sh windows)
+      - name: Compilar PKGBUILD (makepkg -s instala las dependencias declaradas solo)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64 ninja-build
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && makepkg -s --noconfirm"
 
-      # ffmpeg.exe NO esta trackeado en git (100+MB, ver .gitignore) -- se
-      # baja aca en vez de comitearlo, y extrabuild/ (ya presente en el
-      # repo) lo copia solo al build junto con el resto (ver CMakeLists.txt,
-      # seccion "COPIA DE extrabuild/"). Sin este paso, el instalador que
-      # sale de CI le faltaria ffmpeg y Streaming quedaria roto para
-      # cualquiera que lo instale.
-      - name: Descargar ffmpeg (para Streaming/BroadcastPanel)
-        run: |
-          curl -L -f -o /tmp/ffmpeg.zip "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-          unzip -j /tmp/ffmpeg.zip "*/bin/ffmpeg.exe" -d extrabuild
-          test -f extrabuild/ffmpeg.exe
-
-      - name: Configurar
-        run: |
-          cmake -B build-win -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchain-mingw.cmake" \
-            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
-
-      - name: Compilar
-        run: cmake --build build-win
-
-      - name: Subir artifact
+      - name: Subir paquete
         uses: actions/upload-artifact@v4
         with:
-          name: ProyecThor-windows-${{ github.run_number }}
-          path: |
-            build-win/**
-            !build-win/CMakeFiles/**
-            !build-win/_deps/**
-            !build-win/generated/**
-            !build-win/**/*.o
-            !build-win/**/*.ninja
-            !build-win/.ninja_log
-            !build-win/.ninja_deps
-            !build-win/CMakeCache.txt
-            !build-win/cmake_install.cmake
+          name: proyecthor-arch-${{ github.run_number }}
+          path: packaging/arch/*.pkg.tar.zst
           if-no-files-found: error
-
-  # Arma el instalador MSI con WiX Toolset (reemplaza el .iss/Inno Setup
-  # manual). Ver packaging/windows/ProyecThor.wxs para el detalle de que
-  # hace (instala sin admin, se auto-actualiza via MajorUpgrade, y borra
-  # una instalacion vieja de Inno Setup si la encuentra).
-  package-msi:
-    needs: build-windows
-    runs-on: windows-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    env:
-      # Version del MSI (formato Major.Minor.Build.Revision) -- mantener
-      # sincronizada a mano con el "project(VERSION ...)" de CMakeLists.txt
-      # cuando se bump-ea la version del proyecto.
-      PRODUCT_VERSION: 0.5.0.0
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Descargar build de Windows
-        uses: actions/download-artifact@v4
-        with:
-          name: ProyecThor-windows-${{ github.run_number }}
-          path: build-win
-
-      - name: Instalar WiX Toolset
-        run: dotnet tool install --global wix --version 5.*
-
-      - name: Agregar extension de UI de WiX
-        run: wix extension add -g WixToolset.UI.wixext
-
-      - name: Compilar instalador (.msi)
-        # BuildDir absoluto: WiX resuelve el harvesting de <Files Include=...>
-        # relativo a la carpeta del .wxs, no al cwd -- con una ruta relativa
-        # ("build-win") busca en packaging/windows/build-win y no encuentra
-        # nada, generando un .msi "vacio" (solo el .exe, sin DLLs) sin avisar
-        # con un error, solo un warning WIX8601 facil de pasar por alto.
-        run: >
-          wix build packaging/windows/ProyecThor.wxs
-          -arch x64
-          -ext WixToolset.UI.wixext
-          -d BuildDir="${{ github.workspace }}\build-win"
-          -d ProductVersion="${{ env.PRODUCT_VERSION }}"
-          -out packaging/windows/dist/ProyecThor_Setup.msi
-
-      - name: Subir instalador
-        uses: actions/upload-artifact@v4
-        with:
-          name: ProyecThor_Setup-${{ github.run_number }}
-          path: packaging/windows/dist/ProyecThor_Setup.msi

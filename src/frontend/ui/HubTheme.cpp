@@ -19,8 +19,8 @@ void Sync(const ProyecThor::Settings::ThemeSettings& t) {
     SurfaceHover  = U32(t.surface3);
     SurfaceActive = U32(t.surface1);
 
-    Card    = U32(t.surface1, 0.9f);
-    CardAlt = U32(t.surface2, 0.9f);
+    Card    = U32(t.surface1); // opaco -- antes 0.9 dejaba ver lo de atras
+    CardAlt = U32(t.surface2);
 
     AccentSoft  = U32(t.accentLight);
     {

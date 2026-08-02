@@ -11,7 +11,7 @@
 #include "NetworkStreamServer.h"
 #include "ChatMessageStore.h"
 #include "frontend/windowing/SecondaryOutputWindow.h"
-#include "MacroTypes.h"
+#include "frontend/panels/overlay/OverlayTypes.h"
 
 struct GLFWwindow;
 
@@ -99,7 +99,6 @@ namespace ProyecThor::Core {
         std::string bgPath;
         float bgColor[3] = { 0.0f, 0.0f, 0.0f };
 
-        std::string overlayPath;
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
 
@@ -184,12 +183,20 @@ void SetGlobalMute(bool mute);
         void Update();
 
         void RenderBackground(int outputW, int outputH);
-        void RenderProjectorWindow(); // dibuja background+overlay (contenido, no la ventana en si)
+        void RenderProjectorWindow(); // dibuja el contenido en vivo (background, no la ventana en si)
         PresentationState GetState();
         void ApplyStyleByName(const std::string& styleName);
-        void ApplyStyleSnapshot(const SavedStyle& style); // aplica un snapshot directo (ver ViewToolsPanel::ApplyPad), sin pasar por el catalogo de estilos guardados
+        void ApplyStyleSnapshot(const SavedStyle& style); // aplica un snapshot directo (ver ViewPanel::ApplyPad), sin pasar por el catalogo de estilos guardados
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
+
+        // "Bucle falso" de Fondos (ver Ajustes > Proyeccion > Fondos y el
+        // comentario largo en BackgroundLayer.h): reproduce hacia adelante
+        // y despues "hacia atras" en vez de siempre cortar al mismo frame
+        // 0, para disimular el salto de un loop real. Solo afecta a Fondos
+        // (nunca a Videos/cola).
+        void  SetBackgroundPingPongLoop(bool enabled);
+        bool  GetBackgroundPingPongLoop() const;
 
         void ClearQuickNote();
 
@@ -199,6 +206,16 @@ void SetGlobalMute(bool mute);
         void SetLiveQuickNote(const std::string& text, const float* colorOverride = nullptr);
         void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr);
         void ClearQuickNoteLAN();
+
+        // ── Reloj y Contadores: títulos/mensajes pedidos desde el celular ──
+        // Cola thread-safe (SyncServer corre en su propio hilo httplib, ver
+        // POST /remote/clock-message) de textos para agregar a la lista de
+        // títulos de OClock (m_Titles) -- OClock::Update() la drena una vez
+        // por frame y los agrega tal cual si el operador hubiese apretado
+        // "Agregar" a mano, activándolos de inmediato. Empty vector = nada
+        // pendiente (caso normal).
+        void PushRemoteClockTitle(const std::string& text);
+        std::vector<std::string> DrainRemoteClockTitles();
 
         void*          GetBackgroundTexture();
         void*          GetProcessedBackgroundTexture(int targetW, int targetH);
@@ -221,10 +238,7 @@ void SetGlobalMute(bool mute);
         void           SetFillBlurBrightness(float v);
         float          GetFillBlurBrightness() const;
 
-        void*          GetOverlayTexture();
-        bool           IsOverlayActive() const;
         VLCBasePlayer* GetBackgroundPlayer();
-        VLCBasePlayer* GetOverlayPlayer();
 
         void  SetFSREnabled(bool enabled);
         bool  GetFSREnabled() const;
@@ -356,21 +370,21 @@ void SetGlobalMute(bool mute);
 
         void SetLayer0_Color(float r, float g, float b);
 
-        void SetOverlayMedia(const std::string& path);
-        void StopOverlayMedia();
         void SetLayer2_Text(const std::string& text);
         void ClearLayer2();
         void SetNextText(const std::string& text); // vista previa para el Stage Display, nunca al publico
 
-        // Cue de cambio de estilo para OClock, disparada por un MacroPlayer.
-        // ConsumeClockStyleCue() devuelve "" si no hay ninguna pendiente.
+        // Cue de cambio de estilo pendiente para OClock. ConsumeClockStyleCue()
+        // devuelve "" si no hay ninguna pendiente. Patron "consumir una vez",
+        // pensado originalmente para que un disparador externo (ej. un
+        // secuenciador de cues) empuje un cambio de estilo sin acoplarse
+        // directo a OClock.
         void        SetClockStyleCue(const std::string& styleName);
         std::string ConsumeClockStyleCue();
 
         // Transicion pendiente para la proxima vez que se dispare una (ver
-        // TransitionPanel::Trigger(), que la consume) — disparada por un
-        // MacroCue con transitionName no vacio. Se guarda como string, no
-        // como UI::TransitionType, para que backend/core no dependa de
+        // TransitionPanel::Trigger(), que la consume). Se guarda como string,
+        // no como UI::TransitionType, para que backend/core no dependa de
         // frontend/panels; el mapeo nombre<->enum vive en TransitionPanel.cpp.
         void SetPendingTransitionOverride(const std::string& name, float duration);
         bool ConsumePendingTransitionOverride(std::string& outName, float& outDuration);
@@ -383,23 +397,6 @@ void SetGlobalMute(bool mute);
         // SetClockStyleCue/ConsumeClockStyleCue arriba.
         void        RequestSongEditorOpen(const std::string& filename);
         bool        ConsumeSongEditorOpenRequest(std::string& outFilename);
-
-        // ── Macros (ver MacroTypes.h) ─────────────────────────────────────
-        // El MacroPlayer vive aca (no en un panel) para que tanto el editor
-        // (LayersOverlayTab) como el transporte "Control Overlays"
-        // (ViewPanel) controlen la MISMA reproduccion.
-        void        PlayMacro(const std::string& name, bool autoAdvance);
-        void        StopMacro();
-        void        NextMacroCue();
-        void        PrevMacroCue();
-        void        SetMacroCueIndex(int index); // salta directo a una cue (ej. recall de un Pad)
-        void        SetMacroAutoAdvance(bool autoAdvance);
-        bool        GetMacroAutoAdvance() const;
-        bool        IsMacroPlaying() const;
-        std::string GetActiveMacroName() const;
-        int         GetMacroCueIndex() const; // -1 = ninguna cue disparada aun
-        int         GetMacroCueCount() const;
-        float       GetMacroElapsed() const;
 
         void*          GetPreviewTexture();
         VLCBasePlayer* GetPreviewPlayer();
@@ -473,6 +470,15 @@ void SetGlobalMute(bool mute);
         bool  GetLiveMute();
         void  SetLiveVolume(int volume);
         void  SetLiveMute(bool mute);
+
+        // Ecualizador de 10 bandas sobre el audio en vivo (ver
+        // BackgroundLayer::SetLiveEqualizer*/VLCBasePlayer::SetEqualizer*).
+        // Sin getters: el estado "de verdad" (para dibujar los sliders) vive
+        // en la UI que los llama (ver MonitorView), igual criterio que ya
+        // usa AudioPanel con su propio ecualizador.
+        void SetLiveEqualizerEnabled(bool enabled);
+        void SetLiveEqualizerPreamp(float preampDb);
+        void SetLiveEqualizerBand(int index, float ampDb);
         // Loop del player "general" (bg/PROGRAM). Antes era un bool local de
         // MonitorView; se subio al estado compartido porque el toggle (en
         // Monitor, ver MonitorCenterColumn) y el enforcement del auto-restart
@@ -533,6 +539,40 @@ void SetGlobalMute(bool mute);
         // MonitorQueueEngine, LibraryVideos "Enviar al monitor").
         void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio = false);
 
+        // ── Overlay (PNG transparente) ───────────────────────────────────────
+        // Capa APARTE de Layer0 (fondo) y Layer2 (texto): se dibuja ENCIMA de
+        // los dos, dejando ver lo que haya debajo gracias al canal alpha real
+        // del PNG (a diferencia de SetBackgroundMedia, que REEMPLAZA el
+        // fondo). Se compone tanto en la salida real ("ProjectorLive", ver
+        // UIManager.cpp) como en el preview (LiveContentRenderer::
+        // DrawPublicContent, usado por Vista en Vivo y el mirror de Stage).
+        void        SetOverlayMedia(const std::string& pngPath);
+        void        ClearOverlay();
+        bool        HasOverlay() const;
+        std::string GetOverlayPath() const;
+        void*       GetOverlayTexture(); // GLuint cacheado, cargado on-demand desde el PNG
+
+        // ── Cuadro de reloj del overlay activo ───────────────────────────────
+        // Se fija una vez al activar un overlay (ver OverlayLibraryTab::
+        // RenderCard/RenderRow), a partir de la capa Clock que tenga su
+        // receta (.overlay) -- si no tiene ninguna, hasClock=false y no se
+        // dibuja nada. El TEXTO en cambio se publica todos los frames desde
+        // OClock::Update()/SyncTransmission(), independiente de si hay o no
+        // overlay activo (publicar es inofensivo: el render solo lo usa si
+        // HasOverlayClockLayer() es true). Ver LiveContentRenderer.cpp/
+        // UIManager.cpp para donde se dibuja.
+        void        SetOverlayClockLayer(bool hasClock, const ProyecThor::UI::OverlayLayer& layer,
+                                          int canvasW, int canvasH);
+        bool        HasOverlayClockLayer() const;
+        ProyecThor::UI::OverlayLayer GetOverlayClockLayer() const;
+        int         GetOverlayClockCanvasW() const;
+        int         GetOverlayClockCanvasH() const;
+
+        void         SetLiveOverlayClockText(const std::string& text, const float* colorOverride = nullptr);
+        std::string  GetLiveOverlayClockText() const;
+        bool         HasLiveOverlayClockColorOverride() const;
+        void         GetLiveOverlayClockColorOverride(float outRGBA[4]) const;
+
         // ── Fondo "now playing" (disco + caratula + ondas) ──────────────────
         // Manda el bgType a Audio y para cualquier video/color previo (mismo
         // criterio que StopBackgroundMedia) — quien realmente dibuja el
@@ -566,16 +606,6 @@ void SetGlobalMute(bool mute);
 
         void                       SetCapturePanelRef(ProyecThor::UI::CapturePanel* c) { m_CapturePanelRef = c; }
         ProyecThor::UI::CapturePanel* GetCapturePanelRef() const { return m_CapturePanelRef; }
-
-        // Puente para que HomePanel pueda dibujar el editor de estilos
-        // "acoplado" dentro de su propia ventana (ver CanvaStyleEditor::Render
-        // con embedded=true) sin que HomePanel necesite conocer LayersStyleTab
-        // (quien realmente es dueño del CanvaStyleEditor). LayersStyleTab
-        // registra el hook una vez en su constructor; HomePanel lo llama todos
-        // los frames y, si devuelve true (el editor estaba abierto y se
-        // dibujo), muestra eso en vez de su contenido normal de biblioteca.
-        void SetStyleEditorHook(std::function<bool()> hook) { m_StyleEditorHook = std::move(hook); }
-        bool RenderStyleEditorIfOpen() const { return m_StyleEditorHook ? m_StyleEditorHook() : false; }
 
         // ── Preload adelantado (ver BackgroundLayer::Prefetch/CommitPrefetch) ──
         // Usado por la cola del Monitor para cargar el SIGUIENTE clip en
@@ -632,22 +662,43 @@ bool m_GlobalMuted = false;
         bool m_stretchToFill = false;
         ImGuiID m_ProjectorPostFXViewportID = 0;
         std::unique_ptr<PresentationCoreImpl> m_Impl;
+
+        // Ver SetOverlayMedia/ClearOverlay/HasOverlay/GetOverlayPath -- la
+        // textura GL en si vive en PresentationCoreImpl (m_Impl), esto solo
+        // guarda la ruta/estado bajo m_Mutex, igual que m_State.bgPath.
+        std::string m_OverlayPath;
+        bool        m_HasOverlay = false;
+
+        // Ver SetOverlayClockLayer/SetLiveOverlayClockText -- posicion/estilo
+        // se fija al activar un overlay, el texto se actualiza cada frame
+        // desde OClock (ver comentario en el header publico de arriba).
+        ProyecThor::UI::OverlayLayer m_OverlayClockLayer;
+        bool        m_HasOverlayClockLayer  = false;
+        int         m_OverlayClockCanvasW   = 1920;
+        int         m_OverlayClockCanvasH   = 1080;
+        std::string m_LiveOverlayClockText;
+        bool        m_HasLiveOverlayClockColorOverride = false;
+        float       m_LiveOverlayClockColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
         mutable std::mutex m_Mutex;
+
+        // Ver PushRemoteClockTitle/DrainRemoteClockTitles -- guardado bajo
+        // el mismo m_Mutex de arriba, nada especial.
+        std::vector<std::string> m_PendingClockTitles;
 
         PresentationState m_State;
         LibrarySelection  m_CurrentSelection;
         bool              m_SelectionFromQueue = false;
 
-        // Cue de "cambiar estilo del reloj" pendiente de un MacroPlayer (ver
-        // MacroTypes.h/LayersOverlayTab). Patron "consumir una vez", igual
-        // que ConsumeEndReached() en VLCBasePlayer: OClock::Update() la lee
-        // y limpia cada frame, asi no compite con que el operador cambie el
-        // estilo a mano desde el combo de OClock.
+        // Cue de "cambiar estilo del reloj" pendiente. Patron "consumir una
+        // vez", igual que ConsumeEndReached() en VLCBasePlayer:
+        // OClock::Update() la lee y limpia cada frame, asi no compite con
+        // que el operador cambie el estilo a mano desde el combo de OClock.
         std::string m_PendingClockStyleCue;
         bool        m_HasClockStyleCue = false;
 
         // Mismo patron "consumir una vez" que m_PendingClockStyleCue, para
-        // la transicion pendiente de un MacroCue (ver SetPendingTransitionOverride).
+        // una transicion pendiente (ver SetPendingTransitionOverride).
         std::string m_PendingTransitionName;
         float       m_PendingTransitionDuration = -1.0f;
         bool        m_HasTransitionOverride = false;
@@ -655,8 +706,6 @@ bool m_GlobalMuted = false;
         // Ver RequestSongEditorOpen/ConsumeSongEditorOpenRequest arriba.
         std::string m_PendingSongEditorOpenFile;
         bool        m_HasSongEditorOpenRequest = false;
-
-        MacroPlayer m_MacroPlayer;
 
         // ── Logo (pantalla de carga, ver Ajustes > Proyeccion) ────────────
         // Textura GL cargada una sola vez (recargada si el path cambia),
@@ -700,7 +749,6 @@ bool m_GlobalMuted = false;
         ProyecThor::UI::Announcements* m_AnnouncementsRef = nullptr;
         ProyecThor::UI::OClock*        m_OClockRef        = nullptr;
         ProyecThor::UI::CapturePanel*  m_CapturePanelRef  = nullptr;
-        std::function<bool()>         m_StyleEditorHook;
 
         // Unico lugar que escribe m_State.bgType: si se esta dejando Audio
         // por otra cosa, apaga el boton "En vivo" del panel de audio. Debe

@@ -3,10 +3,10 @@
 
 namespace ProyecThor::UI {
 
-// Vive como seccion del sidebar del hub de Diseño (ver StylesHubPanel.h),
-// igual patron que OverlaysPanel: toggles + sliders para el post-proceso de
-// la salida en vivo — FSR (BackgroundLayer, solo fondo) + CRT/Grano/FXAA
-// (composite completo de "ProjectorLive", ver CompositePostChain.h).
+// Vive como seccion del sidebar del hub de Diseño (ver StylesHubPanel.h):
+// toggles + sliders para el post-proceso de la salida en vivo — FSR
+// (BackgroundLayer, solo fondo) + CRT/Grano/FXAA (composite completo de
+// "ProjectorLive", ver CompositePostChain.h).
 class ShadersPanel {
 public:
     void RenderContent();

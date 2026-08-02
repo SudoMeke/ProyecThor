@@ -6,6 +6,7 @@
 namespace ProyecThor::UI {
 
 class LayersStyleTab; // Tu clase original que renderiza los estilos
+class UIManager;
 
 // Ya no es un IPanel independiente: vive como seccion del sidebar del hub de
 // Diseño (ver StylesHubPanel.h/.cpp).
@@ -15,6 +16,7 @@ public:
     ~CanvasStylesPanel();
 
     void RenderContent();
+    void SetUIManager(UIManager* uiManager);
     std::string GetName() const { return "Estilos"; }
 
 private:

@@ -4,6 +4,8 @@
 #include "backend/settings/SettingsManager.h"
 #include "backend/settings/StageLayoutTemplates.h"
 #include "frontend/panels/capture/CapturePanel.h"
+#include "frontend/panels/monitor/MonitorTheme.h"
+#include "frontend/panels/overlay/OverlayLayerRender.h"
 #include "frontend/ui/TextEffectsRenderer.h"
 #include <algorithm>
 #include <cfloat>
@@ -14,6 +16,8 @@
 
 namespace ProyecThor::UI {
 
+namespace { namespace MT = MonitorTheme; }
+
 void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float drawH)
 {
     auto& core  = ProyecThor::Core::PresentationCore::Get();
@@ -22,17 +26,17 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     // ── Fondo de video / Estado Inactivo ──────────────────────────────────
     if (!state.isProjecting)
     {
-        dl->AddRectFilled(p0, p1, IM_COL32(8, 9, 16, 255));
+        dl->AddRectFilled(p0, p1, ImGui::GetColorU32(MT::k_Bg3));
 
         const char* msg     = "Sin proyeccion activa";
         ImVec2      msgSize = ImGui::CalcTextSize(msg);
         dl->AddText(
             ImVec2(p0.x + (drawW - msgSize.x) * 0.5f,
                    p0.y + (drawH - msgSize.y) * 0.5f),
-            IM_COL32(60, 65, 90, 255),
+            ImGui::GetColorU32(MT::k_TextDim),
             msg);
 
-        dl->AddRect(p0, p1, IM_COL32(40, 44, 64, 255), 0.0f, 0, 1.0f);
+        dl->AddRect(p0, p1, ImGui::GetColorU32(MT::k_BorderSubtle), 0.0f, 0, 1.0f);
         return;
     }
 
@@ -87,13 +91,6 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     else {
          // Fondo base si proyecta algo que no es video (como imágenes o color sólido)
          dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
-    }
-
-    // Overlay (logos, videos de overlay, etc.)
-    if (core.IsOverlayActive())
-    {
-        if (void* overlayTex = core.GetOverlayTexture())
-            dl->AddImage(overlayTex, p0, p1, ImVec2(0, 0), ImVec2(1, 1));
     }
 
     // ── Texto proyectado ───────────────────────────────────────────────────
@@ -201,6 +198,40 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
         }
 
         dl->PopClipRect();
+    }
+
+    // ── Overlay (PNG transparente) ──────────────────────────────────────────
+    // Capa APARTE de fondo/texto (ver PresentationCore::SetOverlayMedia) --
+    // se dibuja encima de los dos, dejando ver lo que haya debajo gracias al
+    // alpha real del PNG. Mismo orden que en la salida real (UIManager.cpp).
+    if (void* overlayTex = core.GetOverlayTexture())
+        dl->AddImage(overlayTex, p0, p1);
+
+    // ── Reloj/contador en vivo sobre el overlay ─────────────────────────────
+    // Cuadro-flag definido en el overlay activo (ver OverlayCanvasEditor,
+    // capa Clock) -- se dibuja en vivo aca, nunca esta horneado en el PNG
+    // del overlay (ver PresentationCore::SetOverlayClockLayer/
+    // SetLiveOverlayClockText, publicado desde OClock::SyncTransmission()).
+    if (core.HasOverlayClockLayer()) {
+        std::string clockTxt = core.GetLiveOverlayClockText();
+        if (!clockTxt.empty()) {
+            OverlayLayer cl = core.GetOverlayClockLayer();
+            ImFont* clockFont = core.GetImGuiFont(cl.fontName, cl.fontSize);
+            if (!clockFont) clockFont = ImGui::GetFont();
+
+            float clockScale = drawW / (float)std::max(1, core.GetOverlayClockCanvasW());
+            float clockDispSize = std::max(4.0f, cl.fontSize * clockScale);
+            ImVec2 clockBlockSz = clockFont->CalcTextSizeA(clockDispSize, FLT_MAX, FLT_MAX, clockTxt.c_str());
+            ImVec2 clockCenter = ImVec2(p0.x + cl.posX * drawW, p0.y + cl.posY * drawH);
+            ImVec2 clockTL = ImVec2(clockCenter.x - clockBlockSz.x * 0.5f, clockCenter.y - clockBlockSz.y * 0.5f);
+
+            float clockColorOverride[4];
+            bool hasOverride = core.HasLiveOverlayClockColorOverride();
+            if (hasOverride) core.GetLiveOverlayClockColorOverride(clockColorOverride);
+
+            DrawOverlayLayerStyledText(dl, clockFont, clockDispSize, clockTL, clockBlockSz, cl,
+                                       clockTxt.c_str(), clockScale, hasOverride ? clockColorOverride : nullptr);
+        }
     }
 
     // ── Captura (cámara/pantalla/ventana) ──────────────────────────────────

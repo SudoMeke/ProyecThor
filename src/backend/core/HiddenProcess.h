@@ -37,6 +37,14 @@ bool StartHiddenProcess(const std::string& commandLine,
 // el handle del proceso -- no llamar dos veces con el mismo handle.
 int WaitHiddenProcess(void* processHandle);
 
+// Mata el proceso ya mismo (ej. boton "Cancelar" de una conversion en
+// curso, ver MediaConverter::Cancel). NO cierra el handle -- el llamador
+// igual necesita pasarlo a WaitHiddenProcess() despues para liberar
+// recursos y obtener el codigo de salida (va a ser distinto de 0, el
+// consumidor debe tratar una cancelacion como un caso aparte, no como
+// error generico).
+void TerminateHiddenProcess(void* processHandle);
+
 #endif // _WIN32
 
 } // namespace ProyecThor::Core

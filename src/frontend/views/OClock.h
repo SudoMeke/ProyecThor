@@ -7,16 +7,18 @@ namespace ProyecThor::UI {
 
 class GlassRenderer; // fwd decl (ver GlassRenderer.h)
 
-// Modo de transmisión del contador.
-//   Off      -> no transmite a ningún lado.
-//   MainOnly -> comportamiento clásico: escribe en currentText (pantalla principal / proyector).
-//   LANOnly  -> SOLO transmite a los dispositivos conectados por red (no toca la pantalla principal).
-//   Both     -> pantalla principal + LAN a la vez.
+// Modo de transmisión a LAN del contador. La pantalla principal YA NO es un
+// modo explicito aca: el reloj aparece en pantalla automaticamente cuando el
+// overlay activo tiene un cuadro de reloj (ver OverlayCanvasEditor, capa
+// Clock) -- el operador lo controla eligiendo/editando el overlay activo,
+// no desde este panel. Lo unico que sigue siendo un interruptor real es la
+// transmision a dispositivos en red (celulares/tablets), que no pasa por el
+// sistema de overlays.
+//   Off -> no transmite a la red.
+//   LAN -> transmite a los dispositivos conectados por red.
 enum class OClockTransmitMode {
     Off,
-    MainOnly,
-    LANOnly,
-    Both
+    LAN
 };
 
 // Sentido del conteo (solo aplica en OClockMode::Timer).
@@ -59,14 +61,15 @@ public:
     void Render(GlassRenderer& glass);
 
     // ── API publica para paneles externos (ej. ViewPanel > "Limpiar reloj") ──
-    // true mientras este transmitiendo a la pantalla principal y/o LAN (ver
-    // m_TransmitMode) — independiente de si el cronometro esta corriendo o
-    // en pausa, que es un concepto distinto (m_IsRunning).
+    // true mientras este transmitiendo a LAN (ver m_TransmitMode) —
+    // independiente de si el cronometro esta corriendo o en pausa (concepto
+    // distinto, ver m_IsRunning) y del reloj en overlay (que no tiene on/off
+    // propio, ver comentario de OClockTransmitMode).
     bool IsLive() const { return m_TransmitMode != OClockTransmitMode::Off; }
 
-    // Saca el reloj de pantalla (m_TransmitMode = Off). La proxima Update()
-    // ya limpia el quick note principal/LAN via el diff wasMain/wasLAN que
-    // hace SyncTransmission — no hace falta tocar nada mas aca.
+    // Apaga la transmision a LAN (m_TransmitMode = Off). La proxima Update()
+    // ya limpia el quick note de LAN via el diff wasLAN que hace
+    // SyncTransmission — no hace falta tocar nada mas aca.
     void StopTransmitting() { m_TransmitMode = OClockTransmitMode::Off; }
 
 private:

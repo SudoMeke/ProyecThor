@@ -40,6 +40,12 @@ namespace ProyecThor {
     inline std::string BiblesPath()    { return GetAssetsPath() + "/bibles/";    }
     inline std::string DocumentsPath() { return GetAssetsPath() + "/documents/"; }
 
+    // Overlays guardados (ver OverlayLibraryTab/OverlayRecipeIO): "<name>.overlay"
+    // (receta) + "<name>.png" (rasterizado transparente) + "images/" (capas de
+    // imagen importadas). Sin barra final -- a diferencia de las de arriba, para
+    // poder usarla directo como filesystem::path en OverlayLibraryTab/SyncServer.
+    inline std::string OverlaysPath()  { return GetAssetsPath() + "/overlays";   }
+
     // Imagenes propias de la app (ej. el Logo de pantalla de carga, ver
     // Ajustes > Proyeccion): igual que Fondos (LayersBgTab::BgRootDir), los
     // archivos elegidos se COPIAN aca en vez de guardar la ruta externa tal
@@ -47,5 +53,19 @@ namespace ProyecThor {
     // rompen si el archivo original se mueve/borra/no existe en otra
     // maquina.
     inline std::string BrandingPath()  { return GetAssetsPath() + "/branding/";  }
+
+    // Raiz real de AppData\ProyecThor (un nivel arriba de assets/): ahi
+    // tambien viven settings.json, songs_authors.ini, themes/, etc. Usada
+    // por SyncServer para sincronizar TODO el arbol de datos del usuario,
+    // no solo assets/ -- ver SyncServer.cpp.
+    inline std::string GetAppDataRoot() {
+        std::string assets = GetAssetsPath(); // ".../ProyecThor/assets"
+        const std::string suffix = "/assets";
+        if (assets.size() > suffix.size() &&
+            assets.compare(assets.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            return assets.substr(0, assets.size() - suffix.size());
+        }
+        return assets;
+    }
 
 } // namespace ProyecThor

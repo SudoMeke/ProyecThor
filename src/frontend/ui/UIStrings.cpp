@@ -17,7 +17,7 @@ namespace ProyecThor::UI {
             "Biblioteca", "Preview", "Inspector de Capas y Fondos", "Control",
 
             // Menu superior
-            "Archivo", "Salir", "Editar", "Preferencias...", "Vista",
+            "Archivo", "Salir", "Editar", "Configuraciones...", "Vista",
             "Restablecer Entorno", "Ayuda", "Web", "Donaciones",
             "Acerca de ProyecThor",
 
@@ -96,7 +96,7 @@ namespace ProyecThor::UI {
             "ACTIVO", "Guardar en XML",
 
             // OClock (reset reutiliza str.reset = "Restablecer" de Generales)
-            "Reloj y Contadores",
+            "Contadores",
             "Configurar Cuenta Regresiva",
             "Minutos",
             "Segundos",
@@ -133,7 +133,7 @@ namespace ProyecThor::UI {
             "Library", "Preview", "Layers & Backgrounds Inspector", "Control",
 
             // Menu superior
-            "File", "Exit", "Edit", "Preferences...", "View",
+            "File", "Exit", "Edit", "Settings...", "View",
             "Reset Layout", "Help", "Documentation", "Donations",
             "About ProyecThor",
 
@@ -249,7 +249,7 @@ namespace ProyecThor::UI {
             "Biblioteca", "Pre-visualizacao", "Inspetor de Camadas e Fundos", "Controlo",
 
             // Menu superior
-            "Ficheiro", "Sair", "Editar", "Preferencias...", "Ver",
+            "Ficheiro", "Sair", "Editar", "Configurações...", "Ver",
             "Repor Disposicao", "Ajuda", "Documentacao", "Doacoes",
             "Sobre ProyecThor",
 

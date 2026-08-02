@@ -140,6 +140,20 @@ std::vector<std::string> GroupLyricsIntoSlides(const std::string& normalizedCont
     return verses;
 }
 
+int CalcVerseDurationMs(const std::string& stanza, int bpm)
+{
+    if (bpm <= 0) return 0;
+
+    int lines = stanza.empty() ? 0 : 1;
+    for (char c : stanza) if (c == '\n') lines++;
+    if (lines <= 0) lines = 1;
+
+    constexpr int kBeatsPerLine = 4;
+    double beatSec  = 60.0 / (double)bpm;
+    double totalSec = (double)lines * (double)kBeatsPerLine * beatSec;
+    return (int)std::lround(totalSec * 1000.0);
+}
+
 std::vector<std::string> LoadSongVerses(const std::string& filename)
 {
     std::vector<std::string> verses;
@@ -384,6 +398,55 @@ void SetStanzaColor(const std::string& filename, int stanzaIndex, unsigned int c
     }
     SaveKeyValueIni(StanzaColorsFilePath(), map);
 }
+
+std::string GetSongDisplayName(const std::string& filename)
+{
+    std::string title = GetSongMeta(filename).title;
+    return !title.empty() ? title : StripExtension(filename);
+}
+
+void MigrateSongSidecars(const std::string& oldFilename, const std::string& newFilename)
+{
+    if (oldFilename.empty() || newFilename.empty() || oldFilename == newFilename) return;
+
+    // Autor / etiquetas / estilo preset / fondo preset: mapas simples
+    // "archivo=valor", solo hay que reasignar la clave.
+    auto migrateSimpleKey = [&](const std::string& path) {
+        auto map = LoadKeyValueIni(path);
+        auto it = map.find(oldFilename);
+        if (it == map.end()) return;
+        std::string value = it->second;
+        map.erase(it);
+        map[newFilename] = value;
+        SaveKeyValueIni(path, map);
+    };
+    migrateSimpleKey(SongAuthorsFilePath());
+    migrateSimpleKey(SongTagsFilePath());
+    migrateSimpleKey(SongStyleFilePath());
+    migrateSimpleKey(SongBackgroundFilePath());
+
+    // Color de estrofa: clave compuesta "archivo#indice" — hay que
+    // reescribir el prefijo de cada entrada que pertenezca a esta cancion.
+    {
+        auto map = LoadKeyValueIni(StanzaColorsFilePath());
+        const std::string oldPrefix = oldFilename + "#";
+        bool changed = false;
+        std::unordered_map<std::string, std::string> updated;
+        updated.reserve(map.size());
+        for (auto& [k, v] : map) {
+            if (k.rfind(oldPrefix, 0) == 0) {
+                updated[newFilename + "#" + k.substr(oldPrefix.size())] = v;
+                changed = true;
+            } else {
+                updated[k] = v;
+            }
+        }
+        if (changed) SaveKeyValueIni(StanzaColorsFilePath(), updated);
+    }
+
+    RenameSongMeta(oldFilename, newFilename);
+    RenameSongInAllPlaylists(oldFilename, newFilename);
+}
 // =============================================================================
 //  RenderPaneHeader
 //  Titulo discreto de columna del grid (Canciones / Playlists), con un
@@ -410,15 +473,23 @@ static void RenderPaneHeader(const char* label, int count)
 // suelto en la funcion de abajo.
 static inline float RadiusSmallLocal() { return DS::RadiusSmall * 0.5f; }
 
+// trailingReserve: pixeles a dejar libres a la derecha de la fila SIN que
+// el area clickeable de seleccion los cubra (para poder poner un control
+// propio ahi encima, ej. el icono de creditos de Biblias — mismo criterio
+// que "selectW" en RenderPlaylistsSection). El fondo (tinte/seleccion/hover)
+// sigue pintando el ancho COMPLETO de la fila, solo se achica el
+// InvisibleButton de seleccion.
 static bool SongListRow(const char* label, bool selected,
                         ImVec4 tagColor, bool hasTag,
-                        float indent = 14.0f, float height = DS::RowHeight)
+                        float indent = 14.0f, float height = DS::RowHeight,
+                        float trailingReserve = 0.0f)
 {
     ImVec2 cursor = ImGui::GetCursorScreenPos();
     float  rowW   = ImGui::GetContentRegionAvail().x;
+    float  clickW = std::max(0.0f, rowW - trailingReserve);
 
     ImGui::PushID(label);
-    bool clicked = ImGui::InvisibleButton("##row", ImVec2(rowW, height));
+    bool clicked = ImGui::InvisibleButton("##row", ImVec2(clickW, height));
     bool hovered = ImGui::IsItemHovered();
     ImGui::PopID();
 
@@ -659,7 +730,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 // Titulo: el nombre de la cancion es el contenido principal
                 // de la fila (antes era un numero en un badge redondo y el
                 // titulo quedaba recortado a 1-2 letras).
-                std::string title = StripExtension(songs[i]);
+                std::string title = GetSongDisplayName(songs[i]);
                 ImVec2 titlePos = { p_min.x + 12.f, p_min.y + std::floor((cardH - ImGui::GetTextLineHeight()) * 0.5f) };
                 dl->PushClipRect(p_min, { p_min.x + selectW - 8.f, p_max.y }, true);
                 dl->AddText(titlePos, isActive ? DS::TextPrimary : DS::TextSecondary, title.c_str());
@@ -852,7 +923,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         {
             if (!q.empty())
             {
-                std::string title = StripExtension(item);
+                std::string title = GetSongDisplayName(item);
                 std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
 
                 bool match = title.find(q) != std::string::npos;
@@ -868,7 +939,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
             matches.push_back(item);
         }
         std::sort(matches.begin(), matches.end(), [](const std::string& a, const std::string& b) {
-            std::string ta = StripExtension(a), tb = StripExtension(b);
+            std::string ta = GetSongDisplayName(a), tb = GetSongDisplayName(b);
             std::transform(ta.begin(), ta.end(), ta.begin(), [](unsigned char c){ return (char)::tolower(c); });
             std::transform(tb.begin(), tb.end(), tb.begin(), [](unsigned char c){ return (char)::tolower(c); });
             return ta < tb;
@@ -916,7 +987,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 if (isHovered)
                     dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 18), DS::RadiusSmall, 0, 0.5f);
 
-                std::string title  = StripExtension(item);
+                std::string title  = GetSongDisplayName(item);
                 std::string author = GetSongAuthor(item);
 
                 dl->PushClipRect(p_min, { p_min.x + clickW - 8.f, p_max.y }, true);
@@ -1023,6 +1094,11 @@ static void RenderItemsListPane(LibraryContext& ctx)
                     std::transform(lo.begin(), lo.end(), lo.begin(), [](unsigned char c){ return (char)::tolower(c); });
                     match = lo.find(cur) != std::string::npos;
                     if (!match && ctx.currentCategoryInt == kCat_Songs) {
+                        std::string title = GetSongDisplayName(item);
+                        std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
+                        if (title.find(cur) != std::string::npos) match = true;
+                    }
+                    if (!match && ctx.currentCategoryInt == kCat_Songs) {
                         std::string author = GetSongAuthor(item);
                         std::transform(author.begin(), author.end(), author.begin(), [](unsigned char c){ return (char)::tolower(c); });
                         if (author.find(cur) != std::string::npos) match = true;
@@ -1098,7 +1174,9 @@ static void RenderItemsListPane(LibraryContext& ctx)
                 ? (int)std::distance(ctx.items.begin(), it) : -1;
 
             const bool sel   = (ctx.selectedIndex == origIdx);
-            std::string disp = StripExtension(filteredItems[n]);
+            std::string disp = (ctx.currentCategoryInt == kCat_Songs)
+                ? GetSongDisplayName(filteredItems[n])
+                : StripExtension(filteredItems[n]);
 
             if (ctx.currentCategoryInt == kCat_Songs)
             {
@@ -1123,7 +1201,8 @@ static void RenderItemsListPane(LibraryContext& ctx)
             }
 
             ImGui::PushID(n);
-            bool clicked = SongListRow(disp.c_str(), sel, tagColor, hasTag);
+            bool clicked = SongListRow(disp.c_str(), sel, tagColor, hasTag,
+                                       14.0f, DS::RowHeight, 0.0f);
 
             if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
                 if (ctx.currentCategoryInt == kCat_Songs) {

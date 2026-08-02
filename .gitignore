@@ -13,6 +13,9 @@ compile_commands.json
 .ninja_log
 .ninja_deps
 
+# ── Contador de builds local (uno por maquina/CI, ver CMakeLists.txt) ────────
+build_count.txt
+
 # ── Instaladores / paquetes generados ────────────────────────────────────────
 iss/installer_output/
 *.exe
@@ -59,3 +62,7 @@ desktop.ini
 
 # ── Configuracion local del usuario (puede contener API keys, ej. Pexels) ────
 settings.json
+# Build de Linux extraido a mano para probar (binario + .so vendorizados +
+# plugins de VLC) -- son artifacts de build, no fuente; ya se generan solos
+# via CI (build-linux) o compilando local, no hace falta trackearlos.
+packaging/Linux/
