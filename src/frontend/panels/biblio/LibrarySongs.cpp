@@ -476,7 +476,7 @@ static inline float RadiusSmallLocal() { return DS::RadiusSmall * 0.5f; }
 // trailingReserve: pixeles a dejar libres a la derecha de la fila SIN que
 // el area clickeable de seleccion los cubra (para poder poner un control
 // propio ahi encima, ej. el icono de creditos de Biblias — mismo criterio
-// que "selectW" en RenderPlaylistsSection). El fondo (tinte/seleccion/hover)
+// que "selectW" en RenderPlaylistsSection). El fondo (tinte/selección/hover)
 // sigue pintando el ancho COMPLETO de la fila, solo se achica el
 // InvisibleButton de seleccion.
 static bool SongListRow(const char* label, bool selected,
@@ -547,7 +547,7 @@ static bool SongListRow(const char* label, bool selected,
 
 // =============================================================================
 //  RenderToolbarRow
-//  Combo de "Estilo por defecto" a nivel de categoria — solo le queda a
+//  Combo de "Estilo por defecto" a nivel de categoría — solo le queda a
 //  Biblias. En Canciones se saco: ahora cada cancion tiene su propio
 //  estilo/fondo preset (ver la tarjeta de ajustes en SongView), que
 //  reemplaza al default compartido por toda la categoria. El boton
@@ -645,7 +645,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
             // rightX menor al cursor real (tras dibujar el titulo) y las dos
             // etiquetas terminaban superpuestas ("2acanciones" ilegible).
             // Ahora van en lineas separadas: siempre legibles sin importar
-            // el ancho disponible, y el titulo se trunca con "..." si no
+            // el ancho disponible, y el título se trunca con "..." si no
             // entra en vez de desbordar el panel.
             if (DS::GlassButton("< Volver", { 90.f, 26.f }, DS::TextSecondary))
                 openPlaylist.clear();
@@ -897,7 +897,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         ImGui::SetNextItemWidth(-1.0f);
         if (ImGui::IsWindowAppearing())
             ImGui::SetKeyboardFocusHere();
-        ImGui::InputTextWithHint("##addSongsSearch", "Buscar por titulo o autor...",
+        ImGui::InputTextWithHint("##addSongsSearch", "Buscar por título o autor...",
                                  addSongsSearchBuffer, sizeof(addSongsSearchBuffer));
 
         ImGui::Spacing();
@@ -911,7 +911,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         // se notaba solo por un tono de verde en el propio titulo. Ahora las
         // filas usan el mismo lenguaje visual que el resto de Biblioteca
         // (hover/borde sutil, radio chico) y una zona de accion fija a la
-        // derecha: boton "+" para agregar, o insignia verde si ya esta.
+        // derecha: botón "+" para agregar, o insignia verde si ya esta.
         std::string q(addSongsSearchBuffer);
         std::transform(q.begin(), q.end(), q.begin(), [](unsigned char c){ return (char)::tolower(c); });
 
@@ -947,7 +947,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
         {
             std::string countLabel = std::to_string(matches.size()) +
-                (matches.size() == 1 ? " cancion encontrada" : " canciones encontradas");
+                (matches.size() == 1 ? " canción encontrada" : " canciones encontradas");
             ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
             ImGui::TextUnformatted(countLabel.c_str());
             ImGui::PopStyleColor();
@@ -1320,7 +1320,7 @@ static void RenderSongsAndPlaylistsGrid(LibraryContext& ctx)
 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
 
-        // Boton "Canciones"
+        // Botón "Canciones"
         {
             ImVec4 fill = ImGui::ColorConvertU32ToFloat4(!showPlaylists ? DS::AccentColorDim : DS::BtnDefaultFill);
             ImVec4 hov  = ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill);
@@ -1337,7 +1337,7 @@ static void RenderSongsAndPlaylistsGrid(LibraryContext& ctx)
 
         ImGui::SameLine(0.f, gap);
 
-        // Boton "Playlists"
+        // Botón "Playlists"
         {
             ImVec4 fill = ImGui::ColorConvertU32ToFloat4(showPlaylists ? DS::AccentColorDim : DS::BtnDefaultFill);
             ImVec4 hov  = ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill);
@@ -1384,13 +1384,13 @@ static void RenderSongsAndPlaylistsGrid(LibraryContext& ctx)
 //
 //  Rework del editor: ya no abre un popup pidiendo titulo/autor/contenido
 //  antes de crear el archivo (RenderSongEditor, retirado). Crea de una un
-//  archivo vacio con nombre unico, lo selecciona, y pide (cue "consumir una
+//  archivo vacio con nombre único, lo selecciona, y pide (cue "consumir una
 //  vez" de PresentationCore) que SongView entre directo al editor unificado
 //  apenas la seleccion coincida — el titulo visible se cambia desde ahi.
 // =============================================================================
 void CreateNewSong(LibraryContext& ctx)
 {
-    const std::string base = "Nueva cancion";
+    const std::string base = "Nueva canción";
     std::string filename = base + ".txt";
     int suffix = 2;
     while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
@@ -1426,7 +1426,7 @@ void CreateNewSong(LibraryContext& ctx)
 // =============================================================================
 void CreateNewSongFromClipboard(const std::string& clipboardText)
 {
-    const std::string base = "Cancion pegada";
+    const std::string base = "Canción pegada";
     std::string filename = base + ".txt";
     int suffix = 2;
     while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
@@ -1574,4 +1574,4 @@ static void SelectLibraryItem(LibraryContext& ctx,
     ApplyDefaultStyleIfSet(ctx);
 }
 
-} // namespace ProyecThor::Library
+} // namespace ProyecThor::Library

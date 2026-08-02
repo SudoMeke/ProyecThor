@@ -8,7 +8,7 @@ namespace ProyecThor::UI::BibleBooks {
 namespace {
 
 const char* kBookNames[] = {
-    "Genesis","Exodo","Levitico","Numeros","Deuteronomio",
+    "Genesis","Exodo","Levitico","Números","Deuteronomio",
     "Josue","Jueces","Rut","1 Samuel","2 Samuel","1 Reyes","2 Reyes",
     "1 Cronicas","2 Cronicas","Esdras","Nehemias","Ester","Job","Salmos",
     "Proverbios","Eclesiastes","Cantares","Isaias","Jeremias","Lamentaciones",
@@ -31,7 +31,7 @@ const AbbrevEntry kAbbrevTable[] = {
     {"genesis",1},{"gen",1},{"gn",1},
     {"exodo",2},{"exo",2},{"ex",2},
     {"levitico",3},{"lev",3},{"lv",3},
-    {"numeros",4},{"num",4},{"nm",4},
+    {"números",4},{"num",4},{"nm",4},
     {"deuteronomio",5},{"deut",5},{"dt",5},
     {"josue",6},{"jos",6},
     {"jueces",7},{"jue",7},{"jc",7},

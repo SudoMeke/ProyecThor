@@ -241,7 +241,7 @@ static void RenderDeleteModal() {
     ImGui::OpenPopup("Eliminar##mm");
     ImGui::SetNextWindowSize(ImVec2(360, 0));
     if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal, ImGuiWindowFlags_NoResize)) {
-        ImGui::TextWrapped("Eliminar \"%s\"? Esta accion no se puede deshacer.",
+        ImGui::TextWrapped("Eliminar \"%s\"? Esta acción no se puede deshacer.",
                            s_DeleteItem.filename.c_str());
         ImGui::Spacing();
 

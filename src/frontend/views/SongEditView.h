@@ -73,7 +73,7 @@ private:
 
     std::vector<std::string> ComputePreviewSlides() const;
 
-    std::string m_Filename;   // "Cancion.txt"
+    std::string m_Filename;   // "Canción.txt"
     std::string m_FilePath;   // ruta absoluta al .txt
 
     EditSnapshot m_Current;

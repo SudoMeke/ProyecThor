@@ -60,7 +60,7 @@ void BibleView::SaveVerseToXML(int bookIdx, int chapIdx, int verseIdx) {
         { m_EditStatus = "Error: libro invalido"; return; }
     auto& book = m_CurrentBible.books[bookIdx];
     if (chapIdx  < 0 || chapIdx  >= (int)book.chapters.size())
-        { m_EditStatus = "Error: capitulo invalido"; return; }
+        { m_EditStatus = "Error: capítulo invalido"; return; }
     auto& chap = book.chapters[chapIdx];
     if (verseIdx < 0 || verseIdx >= (int)chap.verses.size())
         { m_EditStatus = "Error: versiculo invalido"; return; }
@@ -380,7 +380,7 @@ void BibleView::RenderTopBar() {
         m_QuickNav.Open();
 
     if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Buscador rapido (Ctrl+F)");
+    ImGui::SetTooltip("Buscador rápido (Ctrl+F)");
 }
 
     m_QuickNavBtnPos  = ImGui::GetItemRectMin();
@@ -389,7 +389,7 @@ void BibleView::RenderTopBar() {
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
 
-    // ── Boton del buscador por palabras (lupa + "Aa": busca DENTRO del
+    // ── Botón del buscador por palabras (lupa + "Aa": busca DENTRO del
     // texto de los versiculos, para cuando el usuario recuerda palabras
     // sueltas pero no la cita -- distinto del buscador rapido de arriba,
     // que resuelve una referencia exacta) ─────────────────────────────
@@ -1366,10 +1366,10 @@ void BibleView::ConfirmJump() {
     auto& book = m_CurrentBible.books[m_SelectedBook];
 
     if (m_JumpMode == JumpKind::Chapter) {
-        if (m_JumpBuffer.empty()) { m_JumpStatus = "Escribe un numero de capitulo"; return; }
+        if (m_JumpBuffer.empty()) { m_JumpStatus = "Escribe un número de capítulo"; return; }
         int chapNum = 0;
         try { chapNum = std::stoi(m_JumpBuffer); }
-        catch (...) { m_JumpStatus = "Numero invalido"; return; }
+        catch (...) { m_JumpStatus = "Número invalido"; return; }
 
         for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
             if (book.chapters[ci].number == chapNum) {
@@ -1379,7 +1379,7 @@ void BibleView::ConfirmJump() {
                 return;
             }
         }
-        m_JumpStatus = "Ese capitulo no existe en " + book.name;
+        m_JumpStatus = "Ese capítulo no existe en " + book.name;
     }
     else if (m_JumpMode == JumpKind::Verse) {
         if (m_SelectedChapter < 0 || m_SelectedChapter >= (int)book.chapters.size()) {
@@ -1387,10 +1387,10 @@ void BibleView::ConfirmJump() {
             return;
         }
         auto& chap = book.chapters[m_SelectedChapter];
-        if (m_JumpBuffer.empty()) { m_JumpStatus = "Escribe un numero de versiculo"; return; }
+        if (m_JumpBuffer.empty()) { m_JumpStatus = "Escribe un número de versiculo"; return; }
         int verseNum = 0;
         try { verseNum = std::stoi(m_JumpBuffer); }
-        catch (...) { m_JumpStatus = "Numero invalido"; return; }
+        catch (...) { m_JumpStatus = "Número invalido"; return; }
 
         for (int vi = 0; vi < (int)chap.verses.size(); vi++) {
             if (chap.verses[vi].number == verseNum) {
@@ -1401,7 +1401,7 @@ void BibleView::ConfirmJump() {
                 return;
             }
         }
-        m_JumpStatus = "Ese versiculo no existe en este capitulo";
+        m_JumpStatus = "Ese versiculo no existe en este capítulo";
     }
 }
 
@@ -1457,7 +1457,7 @@ void BibleView::RenderJumpOverlay() {
     ImVec2 winSize = ImGui::GetWindowSize();
     m_JumpCardMax = ImVec2(m_JumpCardMin.x + winSize.x, m_JumpCardMin.y + winSize.y);
 
-    const char* label = (m_JumpMode == JumpKind::Chapter) ? "Ir a capitulo" : "Ir a versiculo";
+    const char* label = (m_JumpMode == JumpKind::Chapter) ? "Ir a capítulo" : "Ir a versiculo";
     ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
@@ -1491,4 +1491,4 @@ void BibleView::RenderJumpOverlay() {
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
 }
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

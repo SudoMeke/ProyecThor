@@ -22,7 +22,7 @@ int ResolveAbbrev(const std::string& normalizedText);
 // normalizado, o alguna de sus abreviaturas, EMPIEZA con el prefijo dado
 // (ya normalizado: minuscula, sin acentos, sin espacios).
 // El resultado viene ordenado ascendente por numero canonico y sin
-// duplicados. Es la base del buscador rapido tipo "type-ahead": mientras
+// duplicados. Es la base del buscador rápido tipo "type-ahead": mientras
 // el usuario escribe letra por letra, este vector se va reduciendo hasta
 // quedar en un solo candidato (o el usuario confirma con Enter el mejor
 // candidato actual, que es siempre el de menor numero canonico).

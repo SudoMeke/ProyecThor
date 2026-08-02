@@ -72,7 +72,7 @@ static bool TemplateButton(const char* id, const char* label, bool active, float
 }
 
 void StageDisplayPanel::RenderContent() {
-    ImGui::TextDisabled("Configura que ve el equipo en el escenario a traves del Monitor de Control.");
+    ImGui::TextDisabled("Configura que ve el equipo en el escenario a través del Monitor de Control.");
     ImGui::Spacing();
 
     RenderActivationCard();
@@ -123,7 +123,7 @@ void StageDisplayPanel::RenderActivationCard() {
 
     // El estado real de "activo" se consulta a la fuente correspondiente en
     // vez de fiarse solo del booleano local: si el usuario tambien controla
-    // la transmision LAN desde el panel "Transmisión en Red", este panel debe
+    // la transmisión LAN desde el panel "Transmisión en Red", este panel debe
     // reflejar eso igual (evita que ambos paneles queden desincronizados).
     const bool stageActive = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
 
@@ -326,7 +326,7 @@ void StageDisplayPanel::CaptureAndPushLANFrame(int w, int h, int quality) {
 void StageDisplayPanel::RenderTemplateSelector() {
     auto& sd = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
 
-    ImGui::TextUnformatted("Distribucion");
+    ImGui::TextUnformatted("Distribución");
     ImGui::Spacing();
 
     float w = ImGui::GetContentRegionAvail().x;

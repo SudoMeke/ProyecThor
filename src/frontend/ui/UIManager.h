@@ -92,7 +92,7 @@ uint64_t m_LastTransitionTrigger = 0;
     // solo porque el operador esta mirando Proyector. Yggdrasil,
     // LibraryPanel (grupo "Red") y ViewPanel (popup "Chat", ver
     // RenderChatPopup) reciben un puntero a la MISMA instancia (ver
-    // main.cpp), asi que aparecen "en varias partes" pero comparten un
+    // main.cpp), así que aparecen "en varias partes" pero comparten un
     // unico servidor de verdad.
     StreamingPanel& GetRedPanel()      { return m_Red; }
     TeamChatPanel&  GetChatPanel()     { return m_Chat; }
@@ -118,7 +118,7 @@ private:
     void RenderModeToolbar();
     void RenderQuickSwitcher();
 
-    // Puntos "Publico"/"Stage" + "Borrar Todo" — antes vivian en ViewPanel
+    // Puntos "Público"/"Stage" + "Borrar Todo" — antes vivian en ViewPanel
     // (arriba del video), pedido explicito de subirlos a la toolbar
     // superior (lado derecho) para liberarle mas espacio a "Vista en Vivo".
     void RenderModeToolbarStatusActions(float winW, float railH);
@@ -133,7 +133,7 @@ private:
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
 
-    // Popup de acceso rapido a "Estilos" -- boton propio en RenderModeToolbar
+    // Popup de acceso rápido a "Estilos" -- botón propio en RenderModeToolbar
     // (junto a Notas), lista los estilos guardados (Diseño > Estilos, ver
     // Core::PresentationCore::GetSavedStyleNames/ApplyStyleByName) para
     // aplicar uno sin salir de donde este el operador.

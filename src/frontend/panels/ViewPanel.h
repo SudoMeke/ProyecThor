@@ -32,7 +32,7 @@ private:
     // Riel vertical de iconos a la derecha del video ("Limpiar <tipo>",
     // contenido en vivo) + franja horizontal debajo del transporte
     // (configuracion/vista: proporcion, ajustes, que fuente previsualizar,
-    // Overlays, Chat, Pads) -- separados a proposito para no mezclar "accion
+    // Overlays, Chat, Pads) -- separados a proposito para no mezclar "acción
     // destructiva" con "ajuste de vista".
     void RenderQuickActionsClear(float railW);
     void RenderQuickActionsConfig(float stripH);
@@ -74,11 +74,11 @@ private:
     void RenderLiveTransport(float w, float h);
 
     // Que fuente previsualiza el video de "Vista en Vivo" — no confundir con
-    // los puntos de estado "Publico"/"Stage" (ahora en la toolbar superior,
+    // los puntos de estado "Público"/"Stage" (ahora en la toolbar superior,
     // ver UIManager::RenderModeToolbarStatusActions), que prenden/apagan las
     // salidas reales. Esto solo cambia que ve el OPERADOR aca, para poder
     // llevar constancia de Publico y Stage sin pararse frente al segundo
-    // monitor (ver boton "vaPreviewSource" en RenderQuickActions).
+    // monitor (ver botón "vaPreviewSource" en RenderQuickActions).
     enum class PreviewSource { Publico, Stage };
     PreviewSource m_PreviewSource = PreviewSource::Publico;
 

@@ -803,7 +803,7 @@ void AudioPanel::ImportAudioFile() {
     }
 #else
     // FIXED: antes este metodo no tenia ninguna rama para Linux/macOS, asi
-    // que el boton "+ Importar" simplemente no hacia nada fuera de Windows.
+    // que el botón "+ Importar" simplemente no hacia nada fuera de Windows.
     // Usamos el mismo enfoque zenity/kdialog que en TabTypography::ImportFont.
     std::string selected = OpenAudioFileDialogUnix();
     if (selected.empty()) return;
@@ -1057,7 +1057,7 @@ void AudioPanel::RenderNowPlayingCard() {
 
     dl->AddRectFilled(winPos, ImVec2(winPos.x + winW, winPos.y + 2.0f), accentColor);
 
-    // ── Boton "En vivo" — manda disco+caratula+ondas al proyector real ────
+    // ── Botón "En vivo" — manda disco+caratula+ondas al proyector real ────
     // (ver PresentationCore::SetBackgroundAudio / AudioPanel::RenderLiveBackground)
     {
         bool  live       = m_IsLiveBackground;

@@ -91,8 +91,8 @@ static fs::path BgImagesRootDir() {
 static std::string OpenImageFileDialogUnix() {
     const char* commands[] = {
         "zenity --file-selection --title=\"Seleccionar imagen\" "
-        "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
+        "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
     };
     for (const char* cmd : commands) {
         std::string result;
@@ -316,7 +316,7 @@ std::string OverlayLibraryTab::ImportOverlayImage() {
     OPENFILENAMEA ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Imagenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
+    ofn.lpstrFilter = "Imágenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
     ofn.lpstrFile   = filename;
     ofn.nMaxFile    = MAX_PATH;
     ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
@@ -591,7 +591,7 @@ void OverlayLibraryTab::RenderGallery() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x+w,p.y+64}, LPU32(LP::Surface1), 10.0f);
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* msg = "Sin overlays aun. Usa el boton + de arriba para crear uno.";
+        const char* msg = "Sin overlays aun. Usa el botón + de arriba para crear uno.";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
         ImGui::Text("%s", msg);

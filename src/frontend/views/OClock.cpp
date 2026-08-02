@@ -37,7 +37,7 @@ static constexpr int kPresetMinutes[] = { 5, 10, 15, 20, 30, 45 };
 
 // Constantes de espaciado, centralizadas para que todo el panel respete la
 // misma grilla en vez de numeros sueltos repartidos por cada funcion (eso
-// era buena parte de por que la UI se sentia "en el aire": cada seccion
+// era buena parte de por que la UI se sentia "en el aire": cada sección
 // usaba su propio gap arbitrario, sin relacion con las demas).
 namespace {
     constexpr float kGapTight  = 5.0f;   // separacion entre elementos muy relacionados (ej. checkboxes)
@@ -211,7 +211,7 @@ void OClock::Update() {
     // PushRemoteClockTitle / SyncServer POST /remote/clock-message) -- se
     // agregan a la lista igual que "Agregar" a mano, pero se activan de
     // inmediato (a diferencia del boton de escritorio, que no cambia la
-    // seleccion activa): el sentido de "enviar" desde el celular es verlo
+    // selección activa): el sentido de "enviar" desde el celular es verlo
     // en el momento. Si llegara mas de uno en el mismo frame, gana el
     // ultimo (queda como m_TitleIndex final).
     for (auto& text : Core::PresentationCore::Get().DrainRemoteClockTitles()) {
@@ -247,7 +247,7 @@ void OClock::Update() {
     // junto al resto de las actualizaciones de fondo de la aplicacion.
     SyncTransmission(GetFormattedTime());
 
-    // Cue de cambio de estilo pendiente: "consumir una vez", asi no pisa un
+    // Cue de cambio de estilo pendiente: "consumir una vez", así no pisa un
     // cambio manual del operador en RenderStyleSelector salvo que realmente
     // haya una cue pendiente que lo pida.
     std::string clockCue = Core::PresentationCore::Get().ConsumeClockStyleCue();
@@ -298,7 +298,7 @@ void OClock::RenderStyleSelector() {
     };
 
     renderCombo("Estilo (LAN)", "##oclockStyle", m_StyleName,
-        "Hereda el ultimo estilo activo.");
+        "Hereda el último estilo activo.");
 
     renderCombo("Estilo al finalizar (LAN)", "##oclockFinalStyle", m_FinalStyleName,
         "Usa el estilo normal + color de peligro.");
@@ -343,7 +343,7 @@ void OClock::RenderModeSelector() {
 
         if (clicked && m_Mode != opt.mode) {
             m_Mode = opt.mode;
-            // Cambiar a "Hora actual" corta cualquier cronometro en curso:
+            // Cambiar a "Hora actual" corta cualquier cronómetro en curso:
             // evita que quede corriendo (y consumiendo overtime) de forma
             // invisible mientras se muestra la hora del dispositivo.
             if (opt.mode == OClockMode::WallClock)
@@ -457,7 +457,7 @@ void OClock::RenderTitleSection() {
 
         // Ancho del boton de borrar fijo, y el Selectable ocupa exactamente
         // el resto del ancho disponible. Antes el Selectable media
-        // "w - 60" pero el boton se posicionaba a mano en "w - 50" con
+        // "w - 60" pero el botón se posicionaba a mano en "w - 50" con
         // ancho 40, dejando un hueco de 10px sin usar entre ambos y el
         // boton sin llegar al borde derecho real. Calculando todo a partir
         // del mismo "w" y encadenando con SameLine(0, gap) en vez de

@@ -70,7 +70,7 @@ void HomePanel::RenderHomeContent()
         // estaba en pantalla: ni el boton Reproducir, ni el target de
         // drag-and-drop para agregar videos, nada. Eso explicaba reportes
         // de "agrego un video y no pasa nada" / "aprieto reproducir y no
-        // hace nada" — no era que la logica fallara, es que la UI de la
+        // hace nada" — no era que la lógica fallara, es que la UI de la
         // cola no estaba ahi para interactuar. Ahora se muestra tambien
         // aca (el estado por defecto de Home, sin nada mas seleccionado),
         // asi la cola queda accesible de forma confiable sin depender de

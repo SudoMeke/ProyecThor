@@ -141,7 +141,7 @@ std::string StripParenthesesLine(const std::string& line)
     return CollapseSpaces(stripped);
 }
 
-// Excepcion: quitar marcadores "//" (y espacios pegados) de una linea —
+// Excepción: quitar marcadores "//" (y espacios pegados) de una linea —
 // convencion usada por algunos para marcar "repetir" que a veces la gente
 // prefiere no ver proyectada literalmente.
 std::string StripSlashMarkersLine(const std::string& line)
@@ -399,7 +399,7 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
 
     // Modal (no un popup chico anclado al icono): siempre queda adelante,
     // centrado y con tamano fijo grande, para que no se "pierda" y sea
-    // obvio que hay que elegir una opcion o cerrar con "Listo" — un popup
+    // obvio que hay que elegir una opción o cerrar con "Listo" — un popup
     // comun se podia cerrar sin querer con un click afuera y quedaba muy
     // chico/discreto para una accion que reescribe la letra.
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -419,7 +419,7 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
         ImGui::Spacing();
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
-        ImGui::TextWrapped("Ajustes opcionales para la letra. Ninguno se aplica solo: cada uno es un boton que transforma la letra actual una sola vez, cuando vos lo apretas.");
+        ImGui::TextWrapped("Ajustes opcionales para la letra. Ninguno se aplica solo: cada uno es un botón que transforma la letra actual una sola vez, cuando vos lo apretas.");
         ImGui::PopStyleColor();
         ImGui::Spacing();
         ImGui::Spacing();
@@ -605,10 +605,10 @@ void SongEditView::RenderLeftPane(float width)
     float titleW   = std::max(60.0f, ImGui::GetContentRegionAvail().x - infoBtnW - 8.0f);
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-    ImGui::TextUnformatted("Titulo");
+    ImGui::TextUnformatted("Título");
     ImGui::PopStyleColor();
     ImGui::SetNextItemWidth(titleW);
-    InputTextStd("##Titulo", &m_Current.title);
+    InputTextStd("##Título", &m_Current.title);
     if (ImGui::IsItemActivated()) PushUndoSnapshot();
     if (ImGui::IsItemEdited())    MarkDirty();
 
@@ -626,7 +626,7 @@ void SongEditView::RenderLeftPane(float width)
     if (ImGui::BeginPopup("moreSongInfoPopup"))
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::TextUnformatted("Mas datos de la cancion");
+        ImGui::TextUnformatted("Mas datos de la canción");
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
@@ -803,7 +803,7 @@ void SongEditView::RenderRightPane(float width)
             HomeIcons::DrawIcon_Clock(dl, clkMin, clockSize, clockCol);
 
             if (clockHovered)
-                ImGui::SetTooltip("Duracion de esta diapositiva%s", hasOverride ? " (ajustada a mano)" : "");
+                ImGui::SetTooltip("Duración de esta diapositiva%s", hasOverride ? " (ajustada a mano)" : "");
 
             if (clockClicked)
             {
@@ -833,7 +833,7 @@ void SongEditView::RenderRightPane(float width)
 //  reloj de cada diapositiva (ver RenderRightPane): muestra el calculo
 //  automatico por tempo como referencia y deja escribir un override manual
 //  en milisegundos. "Guardar" persiste via MarkDirty()+FlushIfDirty() (el
-//  autoguardado normal del editor); "Usar calculo automatico" borra el
+//  autoguardado normal del editor); "Usar calculo automático" borra el
 //  override para volver al valor derivado del tempo.
 // =============================================================================
 void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slides)
@@ -858,7 +858,7 @@ void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slid
         else
         {
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-            ImGui::Text("Duracion de la diapositiva %d", slide + 1);
+            ImGui::Text("Duración de la diapositiva %d", slide + 1);
             ImGui::PopStyleColor();
             ImGui::Spacing();
 
@@ -867,11 +867,11 @@ void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slid
             if (m_TempoBpm > 0)
                 ImGui::TextWrapped("Calculado con el tempo actual (%d BPM): %.1fs", m_TempoBpm, autoMs / 1000.0f);
             else
-                ImGui::TextWrapped("Configura el tempo (BPM) en la vista de reproduccion para ver un calculo automatico.");
+                ImGui::TextWrapped("Configura el tempo (BPM) en la vista de reproducción para ver un calculo automático.");
             ImGui::PopStyleColor();
             ImGui::Spacing();
 
-            ImGui::TextUnformatted("Duracion manual (segundos):");
+            ImGui::TextUnformatted("Duración manual (segundos):");
             float durSec = m_DurationPopupValueMs / 1000.0f;
             ImGui::SetNextItemWidth(120.0f);
             if (ImGui::InputFloat("##durSec", &durSec, 0.1f, 1.0f, "%.1f"))
@@ -887,7 +887,7 @@ void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slid
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (DS::GlassButton("Usar calculo automatico", { 190.f, DS::ButtonHeight }, DS::TextSecondary))
+            if (DS::GlassButton("Usar calculo automático", { 190.f, DS::ButtonHeight }, DS::TextSecondary))
             {
                 if ((size_t)slide < m_VerseDurationOverrideMs.size())
                     m_VerseDurationOverrideMs[slide] = -1;

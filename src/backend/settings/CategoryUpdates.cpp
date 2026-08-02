@@ -297,7 +297,7 @@ void RenderGlobalUpdatePopup() {
 
         // Encabezado del modal
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97f, 1.0f));
-        ImGui::TextUnformatted("Nueva version disponible");
+        ImGui::TextUnformatted("Nueva versión disponible");
         ImGui::PopStyleColor();
 
         ImGui::Spacing();
@@ -353,7 +353,7 @@ void RenderGlobalUpdatePopup() {
         } else {
             // ── Estado: esperando confirmación ───────────────────────────────
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.72f, 0.86f, 1.0f));
-            ImGui::TextWrapped("Hay una nueva version disponible. Al aceptar, ProyecThor "
+            ImGui::TextWrapped("Hay una nueva versión disponible. Al aceptar, ProyecThor "
                                "descargara el instalador y se cerrara automaticamente "
                                "para aplicar la actualizacion.");
             ImGui::PopStyleColor();
@@ -411,7 +411,7 @@ void SettingsPanel::RenderCategoryUpdates() {
     auto  st  = s_Status.load();
 
     // ── Versión instalada ─────────────────────────────────────────────────────
-    if (SectionTitle("Version instalada")) {
+    if (SectionTitle("Versión instalada")) {
         // Badge de versión
         {
             ImDrawList* dl  = ImGui::GetWindowDrawList();
@@ -434,7 +434,7 @@ void SettingsPanel::RenderCategoryUpdates() {
         // Fecha de última comprobación
         if (!u.lastChecked.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
-            ImGui::Text("Ultima comprobacion: %s", u.lastChecked.c_str());
+            ImGui::Text("Ultima comprobación: %s", u.lastChecked.c_str());
             ImGui::PopStyleColor();
         }
 
@@ -446,11 +446,11 @@ void SettingsPanel::RenderCategoryUpdates() {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
         ImGui::TextUnformatted("Verificar versiones antiguas instaladas");
         ImGui::PopStyleColor();
-        HelpTooltip("El instalador borra automaticamente cualquier version anterior de "
+        HelpTooltip("El instalador borra automaticamente cualquier versión anterior de "
                     "ProyecThor que haya quedado instalada. Si igual sospechas que te "
-                    "quedo mas de una version (por ejemplo, de antes de que existiera "
+                    "quedo mas de una versión (por ejemplo, de antes de que existiera "
                     "este sistema de actualizaciones), revisa 'Agregar o quitar "
-                    "programas' de Windows y desinstala a mano cualquier version vieja "
+                    "programas' de Windows y desinstala a mano cualquier versión vieja "
                     "sobrante.");
     }
 
@@ -489,7 +489,7 @@ void SettingsPanel::RenderCategoryUpdates() {
             break;
         case UpdateStatus::Available:
             ss = { ImVec4(0.88f,0.58f,0.10f,0.55f), ImVec4(0.14f,0.10f,0.03f,1), ImVec4(0.96f,0.75f,0.30f,1) };
-            statusTitle  = "Nueva version disponible";
+            statusTitle  = "Nueva versión disponible";
             statusDetail = "";
             break;
         case UpdateStatus::Error:
@@ -531,7 +531,7 @@ void SettingsPanel::RenderCategoryUpdates() {
     if (st == UpdateStatus::Available && !s_LatestVersion.empty()) {
         ImGui::SetCursorScreenPos(ImVec2(boxPos.x + 16.0f, boxPos.y + 34.0f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.75f, 0.30f, 0.80f));
-        ImGui::Text("Version %s disponible", s_LatestVersion.c_str());
+        ImGui::Text("Versión %s disponible", s_LatestVersion.c_str());
         ImGui::PopStyleColor();
     }
 
@@ -619,7 +619,7 @@ void SettingsPanel::RenderCategoryUpdates() {
         HelpTooltip("Comprueba actualizaciones automaticamente al abrir ProyecThor.");
 
         ImGui::Checkbox("Descarga automatica", &u.autoDownload);
-        HelpTooltip("Descarga la nueva version en segundo plano sin pedir confirmacion.");
+        HelpTooltip("Descarga la nueva versión en segundo plano sin pedir confirmación.");
 
         ImGui::Spacing();
 

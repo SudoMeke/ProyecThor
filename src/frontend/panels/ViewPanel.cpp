@@ -114,7 +114,7 @@ ImVec4 Brighten(const ImVec4& c, float amount)
 //  mientras esta en vivo, Mute activo-). "lit" ya no oscurece el color base
 //  (antes lo dejaba practicamente invisible en botones que nunca pasan por
 //  el estado "prendido"): ahora solo agrega el halo de brillo, para pedir
-//  "boton fisico iluminado" sin perder legibilidad en el resto.
+//  "botón fisico iluminado" sin perder legibilidad en el resto.
 // ─────────────────────────────────────────────────────────────────────────────
 bool DrawPadButton(const char* iconName, float iconSize, ImVec4 padColor, ImVec2 btnSize, bool lit,
                     DrawIconFn vectorIcon = nullptr)
@@ -310,7 +310,7 @@ void DrawIcon_Disc(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 // iconKey busca una textura en StyleGeneralApp::Icons; si no hay ninguna
 // registrada con ese nombre, se usa vectorIcon (dibujado a mano, ver
 // AppIcons.h/HomeIcons.h/DrawIcon_Disc/DrawIcon_Gear) en su lugar — el
-// pedido explicito fue "no quiero letras", asi que el glifo de texto ya no
+// pedido explicito fue "no quiero letras", así que el glifo de texto ya no
 // se usa como ultimo recurso salvo que ninguno de los dos este disponible.
 bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIcon,
                        const char* fallbackGlyph, const char* tooltip, ImVec2 size,
@@ -357,7 +357,7 @@ bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIco
 
     // Chip de acento fino, centrado abajo del icono, cuando el estado esta
     // activo/encendido -- reemplaza la barra lateral + linea de celda negra
-    // que tenia la version "hoja de calculo" anterior.
+    // que tenia la versión "hoja de calculo" anterior.
     if (toggledOn)
     {
         ImU32 accent = ImGui::ColorConvertFloat4ToU32(tint);
@@ -393,7 +393,7 @@ static const PadIconEntry kPadIcons[] = {
     { "Paleta",     AppIcons::DrawIcon_Palette   },
     { "Overlay",    AppIcons::DrawIcon_Overlay   },
     { "Tipografia", AppIcons::DrawIcon_TextAa    },
-    { "Transicion", AppIcons::DrawIcon_Swap      },
+    { "Transición", AppIcons::DrawIcon_Swap      },
     { "Shader",     AppIcons::DrawIcon_Shader    },
     { "Home",       HomeIcons::DrawIcon_Home     },
     { "Reloj",      HomeIcons::DrawIcon_Clock    },
@@ -410,7 +410,7 @@ const PadIconEntry& PadIconFor(int index)
     return kPadIcons[std::clamp(index, 0, kPadIconCount - 1)];
 }
 
-// Grilla de seleccion de icono, usada dentro del submenu "Elegir icono" del
+// Grilla de selección de icono, usada dentro del submenu "Elegir icono" del
 // menu contextual de cada pad. Devuelve true si el usuario eligio uno nuevo.
 bool RenderPadIconGrid(int& iconIndex)
 {
@@ -563,7 +563,7 @@ void ViewPanel::Render()
             // configurado en Ajustes > Proyeccion) — se calcula antes de
             // todo porque tanto el video principal como la tira de Stage
             // (mas abajo) letterboxean contra la MISMA proporcion, sea 16:9
-            // o cualquier otra resolucion "rara" que use el operador.
+            // o cualquier otra resolución "rara" que use el operador.
             float srcAspect = 1920.0f / 1080.0f;
             {
                 int monitorCount = 0;
@@ -578,7 +578,7 @@ void ViewPanel::Render()
                 }
             }
 
-            // Puntos "Publico"/"Stage" + "Borrar Todo" -- se mudaron a la
+            // Puntos "Público"/"Stage" + "Borrar Todo" -- se mudaron a la
             // toolbar superior (ver UIManager::RenderModeToolbarStatusActions),
             // pedido explicito para liberarle este espacio a "Vista en Vivo".
             const float dotsH = 0.0f;
@@ -596,7 +596,7 @@ void ViewPanel::Render()
             const float minVideoH = 40.0f;
 
             // El video nunca se lleva mas del 65% de lo que queda, aunque
-            // "quisiera" mas (relacion de aspecto muy vertical) — asi el
+            // "quisiera" mas (relacion de aspecto muy vertical) — así el
             // transporte siempre conserva un piso usable. std::clamp() en
             // este libstdc++ hace assert si hi < lo, y con remain2 chico
             // (panel muy bajo) "remain2*0.65f" puede quedar por debajo de
@@ -622,7 +622,7 @@ void ViewPanel::Render()
             // despues del transporte se le da a la herramienta inline
             // (Overlays/Chat/Pads) si hay una abierta; si no, se deja en
             // blanco al fondo del panel, debajo de la toolbar -- nunca
-            // "flotando" entre el transporte y la franja, que es lo unico
+            // "flotando" entre el transporte y la franja, que es lo único
             // que se pidio evitar.
             const bool  toolActive   = (m_ActiveTool != InlineTool::None);
             const float sobrante     = std::max(0.0f, remain2 - videoH);
@@ -791,7 +791,7 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
         ImVec4      tint;
     };
 
-    // Utilidades de vista/configuracion -- separadas de "Limpiar <tipo>"
+    // Utilidades de vista/configuración -- separadas de "Limpiar <tipo>"
     // (riel derecho) a pedido explicito, para no mezclar accion destructiva
     // con ajuste de vista. Mute/Desmute se saco de aca (pedido explicito,
     // sobraba: el mismo control ya esta en RenderLiveTransport).
@@ -974,7 +974,7 @@ void ViewPanel::RenderChatContent()
     // recalculado desde cero cada frame en Render() (no acumulado) -- a
     // diferencia del viejo popup, ImGui::GetContentRegionAvail() dentro de
     // TeamChatPanel::RenderContent() no puede retroalimentarse en un loop de
-    // "mas contenido -> ventana mas alta", asi que no hace falta forzar un
+    // "mas contenido -> ventana mas alta", así que no hace falta forzar un
     // tamaño fijo con ImGuiCond_Always como antes.
     if (m_TeamChatPanelRef)
         m_TeamChatPanelRef->RenderContent();
@@ -1037,7 +1037,7 @@ void ViewPanel::RenderPadsContent()
         if (clicked && pad.assigned) ApplyPad(pad);
 
         if (ImGui::BeginPopupContextItem("##padCtx")) {
-            if (ImGui::MenuItem(pad.assigned ? "Guardar aqui (reemplazar)" : "Guardar aqui"))
+            if (ImGui::MenuItem(pad.assigned ? "Guardar aquí (reemplazar)" : "Guardar aquí"))
                 SavePad(pad);
 
             if (ImGui::BeginMenu("Elegir icono")) {
@@ -1071,7 +1071,7 @@ void ViewPanel::RenderPadsContent()
 }
 
 // NOTA: RenderStatusDots/StatusDotToggle/ToggleAudience/ToggleStageQuick y
-// el boton "Borrar Todo" que vivian aca se mudaron a UIManager.cpp
+// el botón "Borrar Todo" que vivian aca se mudaron a UIManager.cpp
 // (RenderModeToolbarStatusActions), pedido explicito para subirlos a la
 // toolbar superior y liberarle este espacio a "Vista en Vivo".
 
@@ -1152,7 +1152,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     // chico (panel angosto, riel de acciones activado), los pads y el fader
     // se ACHICAN en vez de cortarse: todo se calcula a partir de innerW en
     // vez de usar tamaños fijos.
-    // Pads chicos (pedido explicito: "achica los de reproduccion") -- antes
+    // Pads chicos (pedido explicito: "achica los de reproducción") -- antes
     // llegaban hasta 56px, ahora quedan bien por debajo de los botones de la
     // franja de config de abajo.
     const float rowH      = std::clamp(ImGui::GetContentRegionAvail().y, 24.0f, 36.0f);
@@ -1170,7 +1170,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     // Un solo tono neutro (tema) para las acciones momentaneas, acento del
     // tema solo para lo que tiene un estado real de encendido/apagado (Play
     // en vivo, Mute activo) -- pedido explicito: "mas simple, con iconos, no
-    // botones" en vez del esquema anterior de un color fijo por accion
+    // botones" en vez del esquema anterior de un color fijo por acción
     // (ambar/rojo/azul/rojo) sin relacion con el tema.
     const ImVec4 kNeutral = MT::k_NeutBtn;
     const ImVec4 kLive    = MT::k_LiveBtn;
@@ -1307,7 +1307,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     // ── 3+4. Contenido: Público (fondo+overlay+texto) o Stage (grilla/mirror)
     // Movido a UI::DrawPublicContent/DrawStageContent para poder reusarlo
     // desde el Monitor de Control (ver LiveContentRenderer.h) — el operador
-    // elige la fuente con el boton "vaPreviewSource" del riel derecho.
+    // elige la fuente con el botón "vaPreviewSource" del riel derecho.
     if (m_PreviewSource == PreviewSource::Publico)
         UI::DrawPublicContent(dl, p0, p1, drawW, drawH);
     else
@@ -1383,4 +1383,4 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     ImGui::Dummy(ImVec2(drawW, drawH));
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

@@ -11,7 +11,7 @@ void TabMargins::Render(StyleData& data, float colWidth, ImDrawList* dl) {
     CanvaStyleEditor::Badge("MARGENES", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-    CanvaStyleEditor::SectionLabel("En pixeles, referencia a resolucion 1920x1080");
+    CanvaStyleEditor::SectionLabel("En pixeles, referencia a resolución 1920x1080");
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
     RenderMarginInputs(data, colWidth);
@@ -118,7 +118,7 @@ void TabMargins::RenderAutoScaleCheckbox(StyleData& data) {
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::TextWrapped(
-        "Reduce el tamanio automaticamente hasta que el bloque de texto entre "
+        "Reduce el tamaño automáticamente hasta que el bloque de texto entre "
         "dentro de la zona segura.");
     ImGui::PopStyleColor();
 }

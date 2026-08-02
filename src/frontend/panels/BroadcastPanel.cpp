@@ -72,7 +72,7 @@ void BroadcastPanel::RenderLayerSection() {
 void BroadcastPanel::RenderStartSection() {
     auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().streaming;
 
-    ImGui::TextUnformatted("Configuracion de la transmision");
+    ImGui::TextUnformatted("Configuración de la transmisión");
     ImGui::Spacing();
 
     bool streaming = m_Encoder.IsStreaming();
@@ -106,7 +106,7 @@ void BroadcastPanel::RenderStartSection() {
     if (streaming) ImGui::EndDisabled();
 
     ImGui::Spacing();
-    ImGui::TextDisabled("La resolucion de salida sigue a la fuente de Capture activa (no hay escalado).");
+    ImGui::TextDisabled("La resolución de salida sigue a la fuente de Capture activa (no hay escalado).");
     ImGui::Spacing();
 
     if (!m_StatusMessage.empty()) {
@@ -118,7 +118,7 @@ void BroadcastPanel::RenderStartSection() {
     if (!streaming) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.28f, 0.28f, 1.0f));
-        if (ImGui::Button("Iniciar transmision", ImVec2(220, 40))) {
+        if (ImGui::Button("Iniciar transmisión", ImVec2(220, 40))) {
             ProyecThor::Settings::SettingsManager::Get().Save();
 
             if (!m_ShowInLayer || !m_Capture.IsLive()) {
@@ -139,10 +139,10 @@ void BroadcastPanel::RenderStartSection() {
         ImGui::PopStyleColor(2);
     } else {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f, 0.32f, 0.40f, 1.0f));
-        if (ImGui::Button("Detener transmision", ImVec2(220, 40))) {
+        if (ImGui::Button("Detener transmisión", ImVec2(220, 40))) {
             m_Encoder.Stop();
             m_StatusIsError = false;
-            m_StatusMessage = "Transmision detenida.";
+            m_StatusMessage = "Transmisión detenida.";
         }
         ImGui::PopStyleColor();
 
