@@ -205,4 +205,19 @@ inline bool& ForceListUpdate()
     return s_flag;
 }
 
+// =============================================================================
+//  Flag global de reescaneo completo de la lista (ctx.items) desde disco
+// =============================================================================
+// A diferencia de ForceListUpdate() (que solo reordena/refiltra lo YA
+// cargado en ctx.items), esta pide un reescaneo real del directorio via
+// LibraryPanel::RefreshList() — necesario cuando un archivo cambio de
+// nombre en disco desde un lugar sin acceso directo a LibraryContext (ver
+// SongEditView::FlushIfDirty / RenameNewSongToTitleIfApplicable). La
+// consume LibraryPanel::Render() en cada frame.
+inline bool& ForceLibraryRescan()
+{
+    static bool s_flag = false;
+    return s_flag;
+}
+
 } // namespace ProyecThor::Library

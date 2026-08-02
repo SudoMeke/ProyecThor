@@ -291,6 +291,14 @@ void SongEditView::FlushIfDirty()
 {
     if (!m_Dirty) return;
 
+    // Cancion recien creada (todavia "Nueva cancion.txt"/"Cancion pegada.txt")
+    // a la que el usuario ya le puso Titulo propio: renombra el archivo (y
+    // migra sus sidecars) para que el nombre en disco coincida, en vez de
+    // dejarlo para siempre con el nombre generico (ver src/notes.txt). No-op
+    // para canciones que ya tenian nombre de archivo propio.
+    m_Filename = Library::RenameNewSongToTitleIfApplicable(m_Filename, m_Current.title);
+    m_FilePath = Library::GetAssetsPath() + "/songs/" + m_Filename;
+
     std::error_code ec;
     std::filesystem::create_directories(Library::U8Path(Library::GetAssetsPath() + "/songs"), ec);
 

@@ -44,12 +44,26 @@ void SetSongAuthor(const std::string& filename, const std::string& author);
 
 // Nombre a mostrar en listas/playlists/buscador: el Titulo guardado desde el
 // editor unificado (LibrarySongMeta::title) si existe, si no el nombre de
-// archivo sin extension (comportamiento legacy). El archivo en si NUNCA se
-// renombra al tipear un titulo nuevo (rompería la seleccion activa en
-// PresentationCore y las referencias en playlists, que usan el nombre de
-// archivo como clave) — esta funcion es lo que hace que ese Titulo
-// realmente se "vea" en la Biblioteca en vez de quedar solo en el sidecar.
+// archivo sin extension (comportamiento legacy). Para canciones YA
+// renombradas a mano (o con un Titulo distinto del archivo) el .txt en si no
+// se toca — esta funcion es lo que hace que ese Titulo realmente se "vea" en
+// la Biblioteca en vez de quedar solo en el sidecar. Ver
+// RenameNewSongToTitleIfApplicable para el unico caso en el que el archivo
+// SI se renombra automaticamente.
 std::string GetSongDisplayName(const std::string& filename);
+
+// Cancion recien creada por CreateNewSong/CreateNewSongFromClipboard (todavia
+// con su nombre generico "Nueva cancion(...).txt" / "Cancion pegada(...).txt")
+// a la que el usuario ya le puso <title> en el editor unificado: renombra el
+// .txt (y migra todos sus sidecars, ver MigrateSongSidecars) para que el
+// nombre en disco coincida, evitando dedup con "(2)", "(3)"... si ya existe
+// un archivo con ese nombre. Soluciona que las canciones nuevas se sigan
+// guardando para siempre como "Nueva cancion" en el sistema de archivos (ver
+// src/notes.txt). No-op (devuelve <filename> sin cambios) si la cancion ya
+// tiene un nombre de archivo propio, si <title> esta vacio, o si el
+// renombrado en disco falla. Llamar SIEMPRE con el filename devuelto en
+// adelante (ver SongEditView::FlushIfDirty).
+std::string RenameNewSongToTitleIfApplicable(const std::string& filename, const std::string& title);
 
 // Migra TODOS los sidecars de una cancion (autor, etiquetas, estilo/fondo
 // preset, color de estrofa, meta JSON de LibrarySongMeta, y las referencias
