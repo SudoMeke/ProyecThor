@@ -20,6 +20,7 @@
 #include "UIStrings.h"
 #include "frontend/ui/UIManager.h"
 #include "frontend/ui/IconRail.h"
+#include "frontend/ui/FilePicker.h"
 #include "ui/DesignSystem.h"
 #include "biblio/LibraryPlaylists.h"
 #include <iostream>
@@ -28,6 +29,7 @@
 #include <filesystem>
 #include <cstring>
 #include <cstdio>
+#include <cmath>
 #include <vector>
 #include <string>
 #include <iterator>
@@ -877,6 +879,37 @@ static void PopConverterFrameStyle() {
     ImGui::PopStyleColor(4);
 }
 
+// Estimacion GRUESA (no exacta -- no hay forma de saberlo sin codificar de
+// verdad) de que fraccion del tamaño de entrada va a pesar el archivo
+// convertido, segun el codec elegido y el % de compresion -- basado en
+// relaciones tipicas de eficiencia entre codecs a calidad comparable
+// (H.265/VP9 suelen pesar 30-40% menos que H.264 equivalente, AV1 otro
+// 15-20% menos que esos) interpoladas contra el rango de CRF de cada uno
+// (ver BuildVideoCodecArgs, MediaConverter.cpp). Sirve de referencia para
+// que el usuario tenga una idea antes de convertir -- el tamaño real
+// depende del contenido del video y puede variar bastante.
+static float EstimateSizeRatio(Core::VideoCodec codec, int compression) {
+    float t = std::clamp(compression, 0, 100) / 100.0f;
+    switch (codec) {
+        case Core::VideoCodec::H264: return 0.90f - t * (0.90f - 0.32f);
+        case Core::VideoCodec::H265: return 0.72f - t * (0.72f - 0.24f);
+        case Core::VideoCodec::VP9:  return 0.68f - t * (0.68f - 0.22f);
+        case Core::VideoCodec::AV1:  return 0.58f - t * (0.58f - 0.18f);
+        case Core::VideoCodec::Auto:
+        default: return 1.0f;
+    }
+}
+
+static std::string FormatFileSize(uint64_t bytes) {
+    static const char* kUnits[] = { "B", "KB", "MB", "GB" };
+    double b = (double)bytes;
+    int u = 0;
+    while (b >= 1024.0 && u < 3) { b /= 1024.0; u++; }
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.1f %s", b, kUnits[u]);
+    return buf;
+}
+
 void LibraryPanel::RenderConverterSection()
 {
     if (m_ConvertibleNeedsRefresh) RefreshConvertibleItems();
@@ -906,6 +939,23 @@ void LibraryPanel::RenderConverterSection()
     if (m_Converter.PollFinished(finishedOk, finishedMsg)) {
         m_ConvertStatusIsError = !finishedOk;
         m_ConvertStatus        = finishedMsg;
+
+        // Comparacion EXACTA (a diferencia de la estimacion previa a
+        // convertir, esto ya es el archivo real) -- se agrega al mensaje
+        // de exito si se pudo leer el tamaño de ambos archivos.
+        if (finishedOk && m_ConvertLastInputSize > 0) {
+            std::error_code sizeEc;
+            uint64_t outSize = fs::file_size(U8Path(m_ConvertLastOutputPath), sizeEc);
+            if (!sizeEc) {
+                double pct = 100.0 * (1.0 - (double)outSize / (double)m_ConvertLastInputSize);
+                char suffix[128];
+                std::snprintf(suffix, sizeof(suffix), " (%s, %s%.0f%% vs %s)",
+                              FormatFileSize(outSize).c_str(), pct >= 0 ? "-" : "+",
+                              std::fabs(pct), FormatFileSize(m_ConvertLastInputSize).c_str());
+                m_ConvertStatus += suffix;
+            }
+        }
+
         m_ConvertibleNeedsRefresh = true; // por si el archivo convertido cae en la misma carpeta
     }
 
@@ -969,6 +1019,87 @@ void LibraryPanel::RenderConverterSection()
     }
     PopConverterFrameStyle();
 
+    // ── Codec + compresion (solo tiene sentido para Video) ─────────────────
+    bool isVideoSource = haveSource && m_ConvertibleItems[m_ConvertSourceIndex].isVideo;
+    if (isVideoSource) {
+        ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        DS::GlassSectionHeader("CODEC");
+        static const char* kCodecLabels[] = {
+            "Automatico (sin recodificar)", "H.264", "H.265 (mas compresion)", "VP9", "AV1 (mas compresion, mas lento)"
+        };
+        constexpr int kCodecCount = (int)(sizeof(kCodecLabels) / sizeof(kCodecLabels[0]));
+        int codecIdx = (int)m_ConvertCodec;
+        PushConverterFrameStyle();
+        ImGui::SetNextItemWidth(260.0f);
+        if (ImGui::BeginCombo("##convertCodec", kCodecLabels[codecIdx])) {
+            for (int i = 0; i < kCodecCount; i++) {
+                bool sel = (i == codecIdx);
+                if (ImGui::Selectable(kCodecLabels[i], sel)) m_ConvertCodec = (Core::VideoCodec)i;
+                if (sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        PopConverterFrameStyle();
+
+        ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        DS::GlassSectionHeader("COMPRESION");
+        bool codecIsAuto = (m_ConvertCodec == Core::VideoCodec::Auto);
+        if (codecIsAuto) ImGui::BeginDisabled();
+        PushConverterFrameStyle();
+        ImGui::SetNextItemWidth(260.0f);
+        ImGui::SliderInt("##convertCompression", &m_ConvertCompression, 0, 100, "%d%%");
+        PopConverterFrameStyle();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX());
+        ImGui::TextUnformatted("Menos = mejor calidad y archivo mas pesado. Mas = mas liviano y menor calidad.");
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+
+        // Estimacion de peso -- se calcula sobre el tamaño REAL del archivo
+        // de origen (ver EstimateSizeRatio, es aproximado a proposito).
+        std::error_code sizeEc;
+        fs::path srcPath = U8Path(GetAssetsPath() + "/videos/" + m_ConvertibleItems[m_ConvertSourceIndex].filename);
+        uint64_t srcSize = fs::file_size(srcPath, sizeEc);
+        if (!sizeEc && srcSize > 0) {
+            float ratio = codecIsAuto ? 1.0f : EstimateSizeRatio(m_ConvertCodec, m_ConvertCompression);
+            uint64_t estSize = (uint64_t)((double)srcSize * ratio);
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+            ImGui::Text("Peso estimado: ~%s (original: %s)",
+                        FormatFileSize(estSize).c_str(), FormatFileSize(srcSize).c_str());
+            ImGui::PopStyleColor();
+        }
+        if (codecIsAuto) ImGui::EndDisabled();
+    }
+
+    // ── Donde guardar ────────────────────────────────────────────────────
+    ImGui::Dummy(ImVec2(0.0f, 16.0f));
+    DS::GlassSectionHeader("GUARDAR EN");
+    if (ImGui::RadioButton("Preguntar cada vez", m_ConvertAskEachTime)) m_ConvertAskEachTime = true;
+    ImGui::SameLine(0.0f, 18.0f);
+    if (ImGui::RadioButton("Carpeta fija", !m_ConvertAskEachTime)) m_ConvertAskEachTime = false;
+
+    if (!m_ConvertAskEachTime) {
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        char folderBuf[512];
+        std::snprintf(folderBuf, sizeof(folderBuf), "%s",
+                       m_ConvertPresetFolder.empty() ? "Sin elegir..." : m_ConvertPresetFolder.c_str());
+        PushConverterFrameStyle();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 96.0f);
+        ImGui::InputText("##convertPresetFolder", folderBuf, sizeof(folderBuf), ImGuiInputTextFlags_ReadOnly);
+        PopConverterFrameStyle();
+        ImGui::SameLine();
+        if (ImGui::Button("Elegir...", ImVec2(86.0f, 0.0f))) {
+            std::string chosen = UI::PickFolder("Elegir carpeta de salida para Render");
+            if (!chosen.empty()) m_ConvertPresetFolder = chosen;
+        }
+        if (m_ConvertPresetFolder.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
+            ImGui::TextUnformatted("Elegi una carpeta -- si no, se pregunta igual al convertir.");
+            ImGui::PopStyleColor();
+        }
+    }
+
     if (running) ImGui::EndDisabled();
 
     ImGui::Dummy(ImVec2(0.0f, 18.0f));
@@ -981,7 +1112,24 @@ void LibraryPanel::RenderConverterSection()
     }
 
     if (running) {
-        ImGui::TextColored(ImVec4(0.96f, 0.75f, 0.30f, 1.0f), "Convirtiendo...");
+        float progress = m_Converter.GetProgress();
+        if (progress >= 0.0f) {
+            char overlay[32];
+            std::snprintf(overlay, sizeof(overlay), "Convirtiendo... %.0f%%", progress * 100.0f);
+            ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), overlay);
+        } else {
+            // Duracion total todavia desconocida (recien arrancando, o el
+            // archivo no la reporta) -- idioma estandar de ImGui para una
+            // barra indeterminada: fraccion negativa animada con el tiempo.
+            ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(-1.0f, 0.0f), "Convirtiendo...");
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.45f, 0.16f, 0.16f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.58f, 0.20f, 0.20f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.68f, 0.22f, 0.22f, 1.0f));
+        if (ImGui::Button("Cancelar", ImVec2(160.0f, DS::ButtonHeight))) m_Converter.Cancel();
+        ImGui::PopStyleColor(3);
         return;
     }
 
@@ -989,30 +1137,56 @@ void LibraryPanel::RenderConverterSection()
     if (DS::GlassButton("Convertir", ImVec2(200.0f, DS::ButtonHeight + 6.0f)) && haveSource) {
         const auto& src     = m_ConvertibleItems[m_ConvertSourceIndex];
         std::string dirPath = src.isVideo ? (GetAssetsPath() + "/videos/") : (ProyecThor::Audio::GetAudioPath() + "/");
-        fs::path    dir     = U8Path(dirPath);
         std::string stem    = StripExtension(src.filename);
         std::string ext     = formats[m_ConvertFormatIndex];
+        std::string inputPath = dirPath + src.filename;
 
-        // Nombre de salida unico -- nunca pisa un archivo existente (mismo
-        // criterio que LibraryPanel::CreateNewSong).
-        std::string outName = stem + "." + ext;
-        int suffix = 2;
-        std::error_code ec;
-        while (fs::exists(dir / U8Path(outName), ec)) {
-            outName = stem + " (" + std::to_string(suffix) + ")." + ext;
-            suffix++;
+        std::string outputPath;
+        bool        cancelled = false;
+
+        if (m_ConvertAskEachTime || m_ConvertPresetFolder.empty()) {
+            // Dialogo nativo "Guardar como" (ver FilePicker::
+            // PickSaveVideoPath) -- sugiere el mismo nombre/carpeta que
+            // antes por defecto, pero el usuario puede elegir cualquier
+            // otro destino. Sin carpeta fija elegida, este es tambien el
+            // fallback (ver hint en la UI).
+            std::string suggested = dirPath + stem + "." + ext;
+            outputPath = UI::PickSaveVideoPath(suggested);
+            cancelled  = outputPath.empty();
+        } else {
+            // Carpeta fija: mismo criterio de nombre unico "nunca pisa un
+            // archivo existente" que antes, pero resuelto contra esa
+            // carpeta en vez de la carpeta de origen.
+            fs::path    presetDir = U8Path(m_ConvertPresetFolder);
+            std::string outName   = stem + "." + ext;
+            int suffix = 2;
+            std::error_code ec;
+            while (fs::exists(presetDir / U8Path(outName), ec)) {
+                outName = stem + " (" + std::to_string(suffix) + ")." + ext;
+                suffix++;
+            }
+            outputPath = PathToUtf8(presetDir / U8Path(outName));
         }
 
-        std::string inputPath  = dirPath + src.filename;
-        std::string outputPath = dirPath + outName;
+        if (!cancelled) {
+            // El codec/compresion elegidos solo aplican a conversiones de
+            // Video -- para Audio se manda Auto (ffmpeg infiere, igual que
+            // siempre).
+            Core::VideoCodec codec = src.isVideo ? m_ConvertCodec : Core::VideoCodec::Auto;
 
-        std::string err;
-        if (m_Converter.Start(inputPath, outputPath, &err)) {
-            m_ConvertStatusIsError = false;
-            m_ConvertStatus        = "Convirtiendo a " + outName + "...";
-        } else {
-            m_ConvertStatusIsError = true;
-            m_ConvertStatus        = err;
+            std::string err;
+            if (m_Converter.Start(inputPath, outputPath, codec, m_ConvertCompression, &err)) {
+                m_ConvertStatusIsError = false;
+                m_ConvertStatus        = "Convirtiendo a " + PathToUtf8(U8Path(outputPath).filename()) + "...";
+
+                std::error_code sizeEc;
+                m_ConvertLastInputSize  = fs::file_size(U8Path(inputPath), sizeEc);
+                if (sizeEc) m_ConvertLastInputSize = 0;
+                m_ConvertLastOutputPath = outputPath;
+            } else {
+                m_ConvertStatusIsError = true;
+                m_ConvertStatus        = err;
+            }
         }
     }
     if (!haveSource) { ImGui::EndDisabled(); }

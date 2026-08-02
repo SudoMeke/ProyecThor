@@ -11,16 +11,18 @@ struct ImGuiWindow; // ver imgui_internal.h
 namespace ProyecThor::UI {
 
 // Herramienta activa en la toolbar inferior (ver RenderBottomToolbar).
-//   Mover      -> click+arrastre normal, una capa a la vez (comportamiento
-//                 de siempre).
-//   Seleccion  -> click agrega/saca capas de una seleccion multiple;
-//                 arrastrar cualquiera de las seleccionadas mueve a TODAS
-//                 juntas, manteniendo sus posiciones relativas.
+//   Mover      -> click+arrastre normal (siempre disponible, no hace falta
+//                 cambiar de herramienta para mover una capa). Ademas:
+//                 Ctrl+click agrega/saca una capa de la seleccion multiple,
+//                 y arrastrar sobre area vacia dibuja un recuadro tipo
+//                 Windows Explorer que selecciona todo lo que toque: en
+//                 cualquiera de los dos casos, arrastrar cualquier capa de
+//                 la seleccion multiple mueve a TODAS juntas.
 //   Borrador   -> pincel circular que borra pixeles (alpha=0) de la capa
 //                 Image seleccionada, sobre una copia privada del archivo.
 //   Degradado  -> desvanece la capa Image seleccionada en un angulo/fuerza
 //                 elegidos, a transparencia o a un color solido.
-enum class OverlayTool { Move, MultiSelect, Eraser, Gradient };
+enum class OverlayTool { Move, Eraser, Gradient };
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  OverlayCanvasEditor — editor tipo Canva: canvas central con capas de
@@ -155,9 +157,14 @@ private:
 
     // ── Herramienta activa + seleccion multiple ──────────────────────────
     OverlayTool      m_ActiveTool = OverlayTool::Move;
-    std::vector<int> m_MultiSelected;      // indices en m_Doc.layers, modo Seleccion
+    std::vector<int> m_MultiSelected;      // indices en m_Doc.layers, seleccionados a la vez
     ImVec2           m_MultiDragStartMouse{};
     std::vector<ImVec2> m_MultiDragStartPos; // posX/posY de cada capa en m_MultiSelected, al iniciar el arrastre
+
+    // Recuadro de seleccion tipo Windows Explorer: arrastrar sobre area
+    // vacia del canvas selecciona todo lo que el recuadro toque.
+    bool   m_RubberBandActive = false;
+    ImVec2 m_RubberBandStart{};
 
     // ── Edicion de pixeles (Borrador/Degradado) ──────────────────────────
     // Buffer RGBA mutable de la capa Image actualmente en edicion -- se

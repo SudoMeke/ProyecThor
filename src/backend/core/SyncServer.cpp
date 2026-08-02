@@ -15,6 +15,7 @@
 #include "frontend/views/biblia/BibleTextUtils.h"
 #include "frontend/views/Audio.h"
 #include "frontend/views/audio/AudioHelpers.h"
+#include "frontend/panels/overlay/OverlayRecipeIO.h"
 
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -207,6 +208,42 @@ std::vector<RemoteMultimediaEntry> ListRemoteMultimedia() {
     scan(ProyecThor::Audio::GetAudioPath(),
          { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" }, "audio");
 
+    return out;
+}
+
+// ── Overlays — mismo criterio que OverlayLibraryTab::ReloadList (requiere
+// ".overlay" + ".png" existentes), pero usando OverlayRecipeIO directamente
+// en vez de una instancia de OverlayLibraryTab (que es dueño de la UI, uno
+// por proceso, y no expone su lista). El PNG de cada uno se sirve con el
+// endpoint generico ya existente GET /sync/file?path=assets/overlays/<name>.png.
+struct RemoteOverlayEntry { std::string name; int canvasW = 1920, canvasH = 1080; bool hasClock = false; };
+
+std::vector<RemoteOverlayEntry> ListRemoteOverlays() {
+    std::vector<RemoteOverlayEntry> out;
+    fs::path dir = ProyecThor::OverlaysPath();
+    std::error_code ec;
+    if (!fs::exists(dir, ec)) return out;
+
+    for (const auto& entry : fs::directory_iterator(dir, ec)) {
+        if (ec) break;
+        std::error_code fec;
+        if (!entry.is_regular_file(fec) || fec) continue;
+        if (entry.path().extension() != ".overlay") continue;
+
+        std::string name = entry.path().stem().string();
+        if (!fs::exists(dir / (name + ".png"), fec)) continue;
+
+        RemoteOverlayEntry re;
+        re.name = name;
+        ProyecThor::UI::OverlayDoc doc;
+        if (ProyecThor::UI::LoadOverlayRecipe(dir, name, doc)) {
+            re.canvasW  = doc.canvasW;
+            re.canvasH  = doc.canvasH;
+            re.hasClock = ProyecThor::UI::FindClockLayer(doc) != nullptr;
+        }
+        out.push_back(std::move(re));
+    }
+    std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
     return out;
 }
 
@@ -1103,6 +1140,103 @@ void SyncServer::ServerThreadFunc(int port, std::promise<bool> startedPromise) {
     svr.Post("/remote/multimedia/clear", [&checkToken](const httplib::Request& req, httplib::Response& res) {
         if (!checkToken(req, res)) return;
         Core::PresentationCore::Get().StopBackgroundMedia();
+        res.set_content(R"({"ok":true})", "application/json");
+    });
+
+    // ── GET /remote/overlays ──────────────────────────────────────────────────
+    // Galeria de Overlays (ver OverlayLibraryTab::ReloadList). La miniatura
+    // de cada uno se pide aparte con el endpoint generico ya existente
+    // GET /sync/file?path=assets/overlays/<name>.png -- no hace falta nada
+    // nuevo para eso.
+    svr.Get("/remote/overlays", [&checkToken](const httplib::Request& req, httplib::Response& res) {
+        if (!checkToken(req, res)) return;
+        json arr = json::array();
+        for (const auto& o : ListRemoteOverlays())
+            arr.push_back({ {"name", o.name}, {"canvasW", o.canvasW}, {"canvasH", o.canvasH}, {"hasClock", o.hasClock} });
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_content(arr.dump(), "application/json; charset=utf-8");
+    });
+
+    // ── POST /remote/overlays/select?name=... ────────────────────────────────
+    // Misma secuencia exacta que OverlayLibraryTab::RenderCard/RenderRow al
+    // hacer click sobre un overlay de la galeria.
+    svr.Post("/remote/overlays/select", [&checkToken](const httplib::Request& req, httplib::Response& res) {
+        if (!checkToken(req, res)) return;
+        if (!req.has_param("name")) { res.status = 400; return; }
+
+        std::string name = req.get_param_value("name");
+        if (name.find('/') != std::string::npos || name.find('\\') != std::string::npos) {
+            res.status = 400;
+            res.set_content(R"({"error":"invalid_path"})", "application/json");
+            return;
+        }
+
+        fs::path dir = ProyecThor::OverlaysPath();
+        fs::path pngPath = dir / (name + ".png");
+        if (!fs::exists(pngPath)) {
+            res.status = 404;
+            res.set_content(R"({"error":"not_found"})", "application/json");
+            return;
+        }
+
+        ProyecThor::UI::OverlayDoc doc;
+        ProyecThor::UI::LoadOverlayRecipe(dir, name, doc);
+
+        Core::PresentationCore::Get().SetOverlayMedia(pngPath.string());
+        if (const auto* cl = ProyecThor::UI::FindClockLayer(doc))
+            Core::PresentationCore::Get().SetOverlayClockLayer(true, *cl, doc.canvasW, doc.canvasH);
+        else
+            Core::PresentationCore::Get().SetOverlayClockLayer(false, ProyecThor::UI::OverlayLayer{}, doc.canvasW, doc.canvasH);
+        res.set_content(R"({"ok":true})", "application/json");
+    });
+
+    // ── POST /remote/overlays/clear ───────────────────────────────────────────
+    svr.Post("/remote/overlays/clear", [&checkToken](const httplib::Request& req, httplib::Response& res) {
+        if (!checkToken(req, res)) return;
+        Core::PresentationCore::Get().ClearOverlay();
+        Core::PresentationCore::Get().SetOverlayClockLayer(false, ProyecThor::UI::OverlayLayer{}, 1920, 1080);
+        res.set_content(R"({"ok":true})", "application/json");
+    });
+
+    // ── POST /remote/overlays/publish?name=... ───────────────────────────────
+    // Se llama DESPUES de que el celular ya subio "<name>.overlay" y sus
+    // imagenes nuevas via el endpoint generico ya existente PUT /sync/file
+    // (a "assets/overlays/<name>.overlay" y "assets/overlays/images/<file>").
+    // El celular no puede conocer de antemano la ruta absoluta real de la PC
+    // (depende del usuario de Windows de esta maquina), asi que marca sus
+    // imagenes nuevas con el sentinel "PHONE_ASSET:<filename>" en vez de una
+    // ruta -- esta llamada las reescribe (reescritura ESTRUCTURAL via
+    // OverlayRecipeIO, no substitucion de texto) a la ruta absoluta real
+    // antes de que el overlay quede disponible para activarse. Una imagePath
+    // que ya venia de un overlay existente en la PC (sin el sentinel) se deja
+    // intacta.
+    svr.Post("/remote/overlays/publish", [&checkToken](const httplib::Request& req, httplib::Response& res) {
+        if (!checkToken(req, res)) return;
+        if (!req.has_param("name")) { res.status = 400; return; }
+
+        std::string name = req.get_param_value("name");
+        if (name.find('/') != std::string::npos || name.find('\\') != std::string::npos) {
+            res.status = 400;
+            res.set_content(R"({"error":"invalid_path"})", "application/json");
+            return;
+        }
+
+        fs::path dir = ProyecThor::OverlaysPath();
+        ProyecThor::UI::OverlayDoc doc;
+        if (!ProyecThor::UI::LoadOverlayRecipe(dir, name, doc)) {
+            res.status = 404;
+            res.set_content(R"({"error":"not_found"})", "application/json");
+            return;
+        }
+
+        static const std::string kSentinel = "PHONE_ASSET:";
+        std::string imagesDir = (dir / "images").string();
+        for (auto& layer : doc.layers) {
+            if (layer.imagePath.rfind(kSentinel, 0) != 0) continue;
+            layer.imagePath = imagesDir + "/" + layer.imagePath.substr(kSentinel.size());
+        }
+
+        ProyecThor::UI::SaveOverlayRecipe(dir, name, doc);
         res.set_content(R"({"ok":true})", "application/json");
     });
 

@@ -40,6 +40,12 @@ namespace ProyecThor {
     inline std::string BiblesPath()    { return GetAssetsPath() + "/bibles/";    }
     inline std::string DocumentsPath() { return GetAssetsPath() + "/documents/"; }
 
+    // Overlays guardados (ver OverlayLibraryTab/OverlayRecipeIO): "<name>.overlay"
+    // (receta) + "<name>.png" (rasterizado transparente) + "images/" (capas de
+    // imagen importadas). Sin barra final -- a diferencia de las de arriba, para
+    // poder usarla directo como filesystem::path en OverlayLibraryTab/SyncServer.
+    inline std::string OverlaysPath()  { return GetAssetsPath() + "/overlays";   }
+
     // Imagenes propias de la app (ej. el Logo de pantalla de carga, ver
     // Ajustes > Proyeccion): igual que Fondos (LayersBgTab::BgRootDir), los
     // archivos elegidos se COPIAN aca en vez de guardar la ruta externa tal

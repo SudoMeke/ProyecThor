@@ -28,12 +28,6 @@ void StylesHubPanel::RenderTransitionQuickBar()
 {
     if (!m_TransitionsRef) return;
 
-    // Una sola linea chica, no mas alta que la toolbar superior (pedido
-    // explicito: "ya no quiero botones y un slide gigante, sino una linea
-    // con iconos y el slide al lado muy pequenos") -- antes eran 3 botones
-    // de texto a lo ancho completo + un slider de ancho completo en su
-    // propia fila, un combo mucho mas alto de lo que esta config realmente
-    // necesita.
     const ImU32  kAccent  = IM_COL32(94, 107, 255, 255);
     const ImVec4 kAccentV = ImGui::ColorConvertU32ToFloat4(kAccent);
     const ImVec4 kMutedV  = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);

@@ -8,6 +8,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cstring>
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <GL/gl.h>
@@ -450,35 +451,72 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
     }
     fgDl->PushClipRect(p0, p1, true);
 
-    // Guias de composicion siempre visibles (centro + tercios, tenues) --
-    // para que el usuario vea de entrada donde estan las "zonas
-    // especiales" del canvas, no solo cuando ya esta arrastrando algo (ver
-    // guias de snap mas abajo, que se resaltan solo durante el arrastre).
-    // Foreground: chrome de edicion, nunca termina en el PNG exportado.
-    {
-        ImU32 guideDim = (CanvaPalette::ToU32(CanvaPalette::TextMuted) & 0x00FFFFFFu) | (70u << 24);
-        static const float kGuideFracs[3] = { 1.0f / 3.0f, 0.5f, 2.0f / 3.0f };
-        for (float f : kGuideFracs) {
-            float gx = p0.x + f * m_CanvasScreenSize.x;
-            fgDl->AddLine(ImVec2(gx, p0.y), ImVec2(gx, p1.y), guideDim, 1.0f);
-            float gy = p0.y + f * m_CanvasScreenSize.y;
-            fgDl->AddLine(ImVec2(p0.x, gy), ImVec2(p1.x, gy), guideDim, 1.0f);
-        }
-    }
-
     // Click en area vacia = deseleccionar. Va ANTES que las capas para que
     // estas, dibujadas despues, le "roben" el hover en su propia zona — sin
     // AllowOverlap, ImGui le da el hover de toda la zona al primer item
     // sometido (este), y ninguna capa por encima llegaria a recibirlo nunca.
-    ImGui::SetCursorScreenPos(p0);
-    ImGui::SetNextItemAllowOverlap();
-    if (ImGui::InvisibleButton("##ovCanvasBg", m_CanvasScreenSize)) {
-        m_SelectedLayer = -1;
-        m_DraggingLayer = -1;
-    }
-
     auto&  core  = Core::PresentationCore::Get();
     float  scale = m_CanvasScreenSize.x / (float)std::max(1, m_Doc.canvasW);
+
+    // Bbox en pantalla de una capa, misma formula que el loop de dibujo de
+    // abajo -- factorizado para reusar en el recuadro de seleccion (ver
+    // mas abajo), que necesita testear TODAS las capas de una sola vez al
+    // soltar el mouse, antes de que el loop principal las haya recorrido
+    // este frame.
+    auto ComputeLayerBounds = [&](int idx, ImVec2& outTl, ImVec2& outBr) {
+        const auto& l = m_Doc.layers[idx];
+        ImVec2 bsz;
+        if (l.kind == OverlayLayerKind::Text || l.kind == OverlayLayerKind::Clock) {
+            ImFont* f = core.GetImGuiFont(l.fontName, l.fontSize);
+            if (!f) f = ImGui::GetFont();
+            float ds = std::max(4.0f, l.fontSize * scale);
+            bsz = f->CalcTextSizeA(ds, FLT_MAX, FLT_MAX, l.text.c_str());
+        } else {
+            bsz = ImVec2(std::max(4.0f, l.sizeW * m_CanvasScreenSize.x),
+                        std::max(4.0f, l.sizeH * m_CanvasScreenSize.y));
+        }
+        ImVec2 c = ImVec2(p0.x + l.posX * m_CanvasScreenSize.x, p0.y + l.posY * m_CanvasScreenSize.y);
+        outTl = ImVec2(c.x - bsz.x * 0.5f, c.y - bsz.y * 0.5f);
+        outBr = ImVec2(outTl.x + bsz.x, outTl.y + bsz.y);
+    };
+
+    ImGui::SetCursorScreenPos(p0);
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::InvisibleButton("##ovCanvasBg", m_CanvasScreenSize);
+
+    if (m_ActiveTool == OverlayTool::Move) {
+        if (ImGui::IsItemActivated()) {
+            m_RubberBandActive = true;
+            m_RubberBandStart  = ImGui::GetIO().MousePos;
+            if (!ImGui::GetIO().KeyCtrl) { m_SelectedLayer = -1; m_MultiSelected.clear(); }
+        }
+        if (m_RubberBandActive && ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            ImVec2 cur = ImGui::GetIO().MousePos;
+            ImVec2 rMin(std::min(m_RubberBandStart.x, cur.x), std::min(m_RubberBandStart.y, cur.y));
+            ImVec2 rMax(std::max(m_RubberBandStart.x, cur.x), std::max(m_RubberBandStart.y, cur.y));
+            fgDl->AddRectFilled(rMin, rMax, IM_COL32(90, 150, 255, 40));
+            fgDl->AddRect(rMin, rMax, IM_COL32(130, 175, 255, 220), 0.0f, 0, 1.5f);
+        }
+        if (ImGui::IsItemDeactivated()) {
+            if (m_RubberBandActive) {
+                ImVec2 cur = ImGui::GetIO().MousePos;
+                ImVec2 rMin(std::min(m_RubberBandStart.x, cur.x), std::min(m_RubberBandStart.y, cur.y));
+                ImVec2 rMax(std::max(m_RubberBandStart.x, cur.x), std::max(m_RubberBandStart.y, cur.y));
+                bool didDrag = (rMax.x - rMin.x > 3.0f || rMax.y - rMin.y > 3.0f);
+                if (didDrag) {
+                    for (int i = 0; i < (int)m_Doc.layers.size(); i++) {
+                        ImVec2 ltl, lbr;
+                        ComputeLayerBounds(i, ltl, lbr);
+                        bool intersects = !(ltl.x > rMax.x || lbr.x < rMin.x || ltl.y > rMax.y || lbr.y < rMin.y);
+                        if (intersects && !IsMultiSelected(i)) m_MultiSelected.push_back(i);
+                    }
+                    if (!m_MultiSelected.empty()) m_SelectedLayer = m_MultiSelected.back();
+                }
+                m_RubberBandActive = false;
+            }
+            m_DraggingLayer = -1;
+        }
+    }
 
     for (int i = 0; i < (int)m_Doc.layers.size(); i++) {
         auto& layer = m_Doc.layers[i];
@@ -583,8 +621,8 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         ImGui::SetCursorScreenPos(ImVec2(tl.x - 4.0f, tl.y - 4.0f));
         ImGui::InvisibleButton("##ovLayerHit", ImVec2(blockSz.x + 8.0f, blockSz.y + 8.0f));
 
-        bool isMultiTool = (m_ActiveTool == OverlayTool::MultiSelect);
-        bool isSel  = isMultiTool ? IsMultiSelected(i) : (m_SelectedLayer == i);
+        bool isMoveTool = (m_ActiveTool == OverlayTool::Move);
+        bool isSel  = isMoveTool ? IsMultiSelected(i) : (m_SelectedLayer == i);
         bool isHov  = ImGui::IsItemHovered();
 
         // Chrome de edicion (marco de seleccion / hover) — solo en el
@@ -604,69 +642,113 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
             // Estas herramientas no mueven capas -- clickear solo selecciona
             // cual es el objetivo (ver RenderBottomToolbar).
             if (ImGui::IsItemActivated()) m_SelectedLayer = i;
-        } else if (isMultiTool) {
+        } else { // Move -- siempre se puede mover presionando el objeto; Ctrl+click
+                 // suma/saca esta capa de la seleccion multiple, y agarrar
+                 // cualquier capa de una seleccion multiple existente mueve
+                 // a todo el grupo junto (ver comentario del enum OverlayTool).
             if (ImGui::IsItemActivated()) {
-                ToggleMultiSelected(i);
-                m_SelectedLayer = i; // "principal" para el panel de Propiedades
-                m_MultiDragStartMouse = ImGui::GetIO().MousePos;
-                m_MultiDragStartPos.clear();
-                for (int idx : m_MultiSelected)
-                    m_MultiDragStartPos.push_back(ImVec2(m_Doc.layers[idx].posX, m_Doc.layers[idx].posY));
-            }
-            if (IsMultiSelected(i) && ImGui::IsItemActive() &&
-                ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !m_MultiSelected.empty()) {
-                ImVec2 mouse = ImGui::GetIO().MousePos;
-                float dx = (mouse.x - m_MultiDragStartMouse.x) / m_CanvasScreenSize.x;
-                float dy = (mouse.y - m_MultiDragStartMouse.y) / m_CanvasScreenSize.y;
-                for (size_t k = 0; k < m_MultiSelected.size() && k < m_MultiDragStartPos.size(); k++) {
-                    auto& mLayer = m_Doc.layers[m_MultiSelected[k]];
-                    mLayer.posX = std::clamp(m_MultiDragStartPos[k].x + dx, 0.0f, 1.0f);
-                    mLayer.posY = std::clamp(m_MultiDragStartPos[k].y + dy, 0.0f, 1.0f);
+                bool ctrl = ImGui::GetIO().KeyCtrl;
+                bool alreadyInGroup = IsMultiSelected(i) && m_MultiSelected.size() > 1;
+
+                if (ctrl) {
+                    ToggleMultiSelected(i);
+                } else if (!alreadyInGroup) {
+                    // Click normal sobre una capa que no es parte de una
+                    // seleccion multiple existente: selecciona solo esta.
+                    m_MultiSelected.clear();
+                    m_MultiSelected.push_back(i);
+                }
+                // Si ctrl==false y alreadyInGroup==true, se mantiene la
+                // seleccion multiple tal cual estaba (para poder arrastrar
+                // el grupo entero agarrando cualquiera de sus miembros).
+
+                m_SelectedLayer = IsMultiSelected(i) ? i
+                                : (m_MultiSelected.empty() ? -1 : m_MultiSelected.back());
+
+                if (IsMultiSelected(i)) {
+                    m_DraggingLayer  = i;
+                    m_DragStartMouse = ImGui::GetIO().MousePos;
+                    m_DragStartPosX  = layer.posX;
+                    m_DragStartPosY  = layer.posY;
+                    m_MultiDragStartMouse = ImGui::GetIO().MousePos;
+                    m_MultiDragStartPos.clear();
+                    for (int idx : m_MultiSelected)
+                        m_MultiDragStartPos.push_back(ImVec2(m_Doc.layers[idx].posX, m_Doc.layers[idx].posY));
+                } else {
+                    // Ctrl+click que acaba de SACAR esta capa de la seleccion:
+                    // no arrastra nada (el usuario la esta deseleccionando).
+                    m_DraggingLayer = -1;
                 }
             }
-        } else { // Move
-            if (ImGui::IsItemActivated()) {
-                m_DragStartMouse = ImGui::GetIO().MousePos;
-                m_DragStartPosX  = layer.posX;
-                m_DragStartPosY  = layer.posY;
-                m_DraggingLayer  = i;
-                m_SelectedLayer  = i;
-            }
+
+            bool groupDrag = m_MultiSelected.size() > 1 && IsMultiSelected(i);
+
             if (m_DraggingLayer == i && ImGui::IsItemActive() &&
                 ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-                ImVec2 mouse = ImGui::GetIO().MousePos;
-                float dx = (mouse.x - m_DragStartMouse.x) / m_CanvasScreenSize.x;
-                float dy = (mouse.y - m_DragStartMouse.y) / m_CanvasScreenSize.y;
-                float newX = std::clamp(m_DragStartPosX + dx, 0.0f, 1.0f);
-                float newY = std::clamp(m_DragStartPosY + dy, 0.0f, 1.0f);
-
-                // Guias de alineacion: al arrastrar, si el centro de la capa
-                // queda cerca del centro o los tercios del canvas ("zonas
-                // especiales" tipicas de composicion), se ajusta exacto a esa
-                // posicion y se resalta una guia -- asi el usuario ve clarito
-                // donde esta la mitad sin tener que calcularlo el mismo.
-                static const float kSnapCandidates[5] = { 0.0f, 1.0f / 3.0f, 0.5f, 2.0f / 3.0f, 1.0f };
-                constexpr float kSnapTol = 0.012f;
-                ImU32 guideCol = CanvaPalette::ToU32(CanvaPalette::Accent);
-                for (float c : kSnapCandidates) {
-                    if (std::fabs(newX - c) < kSnapTol) {
-                        newX = c;
-                        float gx = p0.x + c * m_CanvasScreenSize.x;
-                        fgDl->AddLine(ImVec2(gx, p0.y), ImVec2(gx, p0.y + m_CanvasScreenSize.y), guideCol, 1.5f);
-                        break;
+                if (groupDrag) {
+                    ImVec2 mouse = ImGui::GetIO().MousePos;
+                    float dx = (mouse.x - m_MultiDragStartMouse.x) / m_CanvasScreenSize.x;
+                    float dy = (mouse.y - m_MultiDragStartMouse.y) / m_CanvasScreenSize.y;
+                    for (size_t k = 0; k < m_MultiSelected.size() && k < m_MultiDragStartPos.size(); k++) {
+                        auto& mLayer = m_Doc.layers[m_MultiSelected[k]];
+                        mLayer.posX = std::clamp(m_MultiDragStartPos[k].x + dx, 0.0f, 1.0f);
+                        mLayer.posY = std::clamp(m_MultiDragStartPos[k].y + dy, 0.0f, 1.0f);
                     }
-                }
-                for (float c : kSnapCandidates) {
-                    if (std::fabs(newY - c) < kSnapTol) {
-                        newY = c;
-                        float gy = p0.y + c * m_CanvasScreenSize.y;
-                        fgDl->AddLine(ImVec2(p0.x, gy), ImVec2(p0.x + m_CanvasScreenSize.x, gy), guideCol, 1.5f);
-                        break;
+                } else {
+                    ImVec2 mouse = ImGui::GetIO().MousePos;
+                    float dx = (mouse.x - m_DragStartMouse.x) / m_CanvasScreenSize.x;
+                    float dy = (mouse.y - m_DragStartMouse.y) / m_CanvasScreenSize.y;
+                    float newX = std::clamp(m_DragStartPosX + dx, 0.0f, 1.0f);
+                    float newY = std::clamp(m_DragStartPosY + dy, 0.0f, 1.0f);
+
+                    // Guias de alineacion: al arrastrar, si el centro de la capa
+                    // queda cerca del centro o los tercios del canvas ("zonas
+                    // especiales" tipicas de composicion), se ajusta exacto a esa
+                    // posicion y se resalta una guia -- asi el usuario ve clarito
+                    // donde esta la mitad sin tener que calcularlo el mismo.
+                    // Son las UNICAS guias visibles: no hay lineas permanentes,
+                    // solo aparecen mientras se arrastra cerca de una de estas
+                    // posiciones especiales.
+                    static const float kSnapCandidates[5] = { 0.0f, 1.0f / 3.0f, 0.5f, 2.0f / 3.0f, 1.0f };
+                    constexpr float kSnapTol = 0.012f;
+                    ImU32 guideCol = CanvaPalette::ToU32(CanvaPalette::Accent);
+                    for (float c : kSnapCandidates) {
+                        if (std::fabs(newX - c) < kSnapTol) {
+                            newX = c;
+                            float gx = p0.x + c * m_CanvasScreenSize.x;
+                            fgDl->AddLine(ImVec2(gx, p0.y), ImVec2(gx, p0.y + m_CanvasScreenSize.y), guideCol, 1.5f);
+                            break;
+                        }
                     }
+                    for (float c : kSnapCandidates) {
+                        if (std::fabs(newY - c) < kSnapTol) {
+                            newY = c;
+                            float gy = p0.y + c * m_CanvasScreenSize.y;
+                            fgDl->AddLine(ImVec2(p0.x, gy), ImVec2(p0.x + m_CanvasScreenSize.x, gy), guideCol, 1.5f);
+                            break;
+                        }
+                    }
+
+                    layer.posX = newX;
+                    layer.posY = newY;
                 }
 
-                layer.posX = newX;
-                layer.posY = newY;
+                // Medidor de tamano/posicion en px reales del canvas (ver pedido
+                // de "medidor de px de los bordes y altura de cada imagen") --
+                // se muestra junto al cursor mientras se arrastra, sea grupo o
+                // capa individual.
+                char dimBuf[96];
+                int  pxX = (int)std::lround(layer.posX * m_Doc.canvasW);
+                int  pxY = (int)std::lround(layer.posY * m_Doc.canvasH);
+                int  pxW = (int)std::lround(blockSz.x / std::max(0.0001f, scale));
+                int  pxH = (int)std::lround(blockSz.y / std::max(0.0001f, scale));
+                snprintf(dimBuf, sizeof(dimBuf), "%d, %d  •  %d x %d px", pxX, pxY, pxW, pxH);
+                ImVec2 dimPos = ImVec2(br.x + 10.0f, tl.y);
+                ImVec2 txtSz  = ImGui::CalcTextSize(dimBuf);
+                fgDl->AddRectFilled(ImVec2(dimPos.x - 5.0f, dimPos.y - 3.0f),
+                                    ImVec2(dimPos.x + txtSz.x + 5.0f, dimPos.y + txtSz.y + 3.0f),
+                                    IM_COL32(20, 20, 24, 220), 4.0f);
+                fgDl->AddText(dimPos, IM_COL32(255, 255, 255, 255), dimBuf);
             }
             if (ImGui::IsItemDeactivated()) m_DraggingLayer = -1;
         }
@@ -675,7 +757,8 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         // si esta seleccionada (para no saturar el canvas de agarres). Los
         // handles en si se mantienen sin rotar (ejes del bounding box) para
         // no complicar el hit-testing; solo el contenido visual rota.
-        if (!isText && !isClock && isSel && m_ActiveTool == OverlayTool::Move) {
+        if (!isText && !isClock && isSel && m_ActiveTool == OverlayTool::Move &&
+            m_MultiSelected.size() <= 1) {
             RenderResizeHandle(i, layer, 0, ImVec2(tl.x, tl.y), fgDl);
             RenderResizeHandle(i, layer, 1, ImVec2(br.x, tl.y), fgDl);
             RenderResizeHandle(i, layer, 2, ImVec2(tl.x, br.y), fgDl);
@@ -950,6 +1033,14 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
         ImGui::TextWrapped("Sin capas todavia. Usa la toolbar de arriba del canvas para anadir texto, formas, imagenes o un reloj.");
         ImGui::PopStyleColor();
     }
+    // Filas estilo Photoshop: mas altura, cuadradas con padding, y agarrables
+    // (drag and drop) para reordenar -- ademas de los botones ^/v, que se
+    // mantienen para quien prefiera clicks precisos.
+    constexpr float kRowH   = 52.0f;
+    constexpr float kRowGap = 6.0f;
+    constexpr float kRowPad = 10.0f;
+    ImDrawList* rowsDl = ImGui::GetWindowDrawList();
+
     for (int i = 0; i < (int)m_Doc.layers.size(); i++) {
         ImGui::PushID(i);
         bool isSel = (m_SelectedLayer == i);
@@ -974,21 +1065,59 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
             label = (l.shapeKind == OverlayShapeKind::Ellipse) ? "Elipse" : "Rectangulo";
             tag = "[F] ";
         }
-        if (label.size() > 20) label = label.substr(0, 17) + "...";
+        if (label.size() > 18) label = label.substr(0, 15) + "...";
         label = std::string(tag) + label;
 
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(
-            CanvaPalette::Accent.x * 0.28f, CanvaPalette::Accent.y * 0.28f,
-            CanvaPalette::Accent.z * 0.55f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, CanvaPalette::Surface2);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  CanvaPalette::Surface2);
-        bool clicked = ImGui::Selectable(label.c_str(), isSel, 0, ImVec2(w - 76.0f, 0.0f));
-        ImGui::PopStyleColor(3);
-        if (clicked) m_SelectedLayer = i;
+        ImVec2 rowP0 = ImGui::GetCursorScreenPos();
+        ImVec2 rowP1 = ImVec2(rowP0.x + w, rowP0.y + kRowH);
+
+        // Item unico que cubre toda la fila -- selecciona al clickear y es
+        // la fuente/destino del drag and drop. AllowOverlap para que los
+        // botones dibujados encima (^/v/x) sigan siendo clickeables.
+        ImGui::SetNextItemAllowOverlap();
+        ImGui::InvisibleButton("##ovLayerRow", ImVec2(w, kRowH));
+        bool rowHovered = ImGui::IsItemHovered();
+        if (ImGui::IsItemClicked()) m_SelectedLayer = i;
+
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip)) {
+            ImGui::SetDragDropPayload("OVERLAY_LAYER_ROW", &i, sizeof(int));
+            ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::Accent);
+            ImGui::TextUnformatted(label.c_str());
+            ImGui::PopStyleColor();
+            m_SelectedLayer = i;
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OVERLAY_LAYER_ROW")) {
+                int srcIdx = *(const int*)payload->Data;
+                if (srcIdx != i && srcIdx >= 0 && srcIdx < (int)m_Doc.layers.size()) {
+                    OverlayLayer moved = m_Doc.layers[srcIdx];
+                    m_Doc.layers.erase(m_Doc.layers.begin() + srcIdx);
+                    int destIdx = (srcIdx < i) ? (i - 1) : i;
+                    m_Doc.layers.insert(m_Doc.layers.begin() + destIdx, moved);
+                    m_SelectedLayer = destIdx;
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        ImU32 rowBg = isSel ? ImGui::ColorConvertFloat4ToU32(ImVec4(
+                          CanvaPalette::Accent.x * 0.30f, CanvaPalette::Accent.y * 0.30f,
+                          CanvaPalette::Accent.z * 0.58f, 1.0f))
+                    : rowHovered ? CanvaPalette::ToU32(CanvaPalette::Surface2)
+                                 : CanvaPalette::ToU32(CanvaPalette::Surface1);
+        rowsDl->AddRectFilled(rowP0, rowP1, rowBg, 8.0f);
+        if (isSel)
+            rowsDl->AddRect(rowP0, rowP1, CanvaPalette::ToU32(CanvaPalette::Accent), 8.0f, 0, 1.5f);
+
+        float textH = ImGui::GetTextLineHeight();
+        rowsDl->AddText(ImVec2(rowP0.x + kRowPad, rowP0.y + (kRowH - textH) * 0.5f),
+                        CanvaPalette::ToU32(CanvaPalette::Text), label.c_str());
 
         // Reordenar (subir/bajar en z-order) -- swap con el vecino, no
         // cambia la cantidad de capas asi que es seguro seguir iterando.
-        ImGui::SameLine(w - 68.0f);
+        float btnY = rowP0.y + (kRowH - 22.0f) * 0.5f;
+        ImGui::SetCursorScreenPos(ImVec2(rowP1.x - kRowPad - 90.0f, btnY));
         ImGui::BeginDisabled(i == 0);
         if (ImGui::SmallButton("^")) {
             std::swap(m_Doc.layers[i], m_Doc.layers[i - 1]);
@@ -997,7 +1126,7 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
         }
         ImGui::EndDisabled();
 
-        ImGui::SameLine(w - 48.0f);
+        ImGui::SameLine(0.0f, 4.0f);
         ImGui::BeginDisabled(i == (int)m_Doc.layers.size() - 1);
         if (ImGui::SmallButton("v")) {
             std::swap(m_Doc.layers[i], m_Doc.layers[i + 1]);
@@ -1006,10 +1135,12 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
         }
         ImGui::EndDisabled();
 
-        ImGui::SameLine(w - 24.0f);
+        ImGui::SameLine(0.0f, 4.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::Red);
         bool removeClicked = ImGui::SmallButton("x");
         ImGui::PopStyleColor();
+
+        ImGui::SetCursorScreenPos(ImVec2(rowP0.x, rowP1.y + kRowGap));
         ImGui::PopID();
 
         if (removeClicked) {

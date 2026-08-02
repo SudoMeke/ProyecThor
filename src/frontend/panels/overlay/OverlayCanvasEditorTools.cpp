@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  OverlayCanvasEditorTools.cpp — herramientas de la toolbar inferior del
-//  editor de Overlays: Mover (default, ver OverlayCanvasEditor.cpp), Seleccion
-//  multiple, Borrador y Degradado. Separado de OverlayCanvasEditor.cpp por
-//  tamaño, pero son metodos de la misma clase.
+//  editor de Overlays: Mover (default, seleccion multiple incluida, ver
+//  OverlayCanvasEditor.cpp), Borrador y Degradado. Separado de
+//  OverlayCanvasEditor.cpp por tamaño, pero son metodos de la misma clase.
 //
 //  Borrador/Degradado editan PIXELES de una capa Image en vivo: la primera
 //  vez que se tocan, el archivo se "bifurca" (copia a un PNG propio, ver
@@ -225,30 +225,36 @@ void OverlayCanvasEditor::ApplyGradientPreview() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  RenderBottomToolbar — banda de herramientas arriba del footer (ver
-//  Render()). Mover/Seleccion cambian como se interactua con el canvas
-//  (ver el loop de capas en RenderCanvas); Borrador/Degradado muestran
-//  controles propios aca al lado de los botones.
+//  Render()). Se dibuja sobre un fondo propio (para separarla claramente del
+//  canvas/paneles arriba y del footer abajo). Mover siempre permite arrastrar
+//  capas y seleccionar varias (Ctrl+click / recuadro, ver el loop de capas en
+//  RenderCanvas); Borrador/Degradado muestran controles propios aca al lado
+//  de los botones.
 // ─────────────────────────────────────────────────────────────────────────────
 void OverlayCanvasEditor::RenderBottomToolbar(float w) {
-    (void)w;
+    ImVec2 barP0 = ImGui::GetCursorScreenPos();
+    ImVec2 barP1 = ImVec2(barP0.x + w, barP0.y + 44.0f);
+    ImGui::GetWindowDrawList()->AddRectFilled(barP0, barP1, CanvaPalette::ToU32(CanvaPalette::Surface1), 8.0f);
+    ImGui::GetWindowDrawList()->AddRect(barP0, barP1, CanvaPalette::ToU32(CanvaPalette::Border), 8.0f);
+    ImGui::SetCursorScreenPos(ImVec2(barP0.x + 10.0f, barP0.y + 7.0f));
+
     struct ToolOpt { const char* label; OverlayTool tool; };
-    static const ToolOpt opts[4] = {
+    static const ToolOpt opts[3] = {
         { "Mover",       OverlayTool::Move },
-        { "Seleccion",   OverlayTool::MultiSelect },
         { "Borrador",    OverlayTool::Eraser },
         { "Degradado",   OverlayTool::Gradient },
     };
 
     constexpr float kBtnW = 96.0f, kBtnH = 30.0f;
 
-    for (int t = 0; t < 4; t++) {
+    for (int t = 0; t < 3; t++) {
         bool active = (m_ActiveTool == opts[t].tool);
         ImGui::PushStyleColor(ImGuiCol_Button, active
             ? ImVec4(CanvaPalette::Accent.x, CanvaPalette::Accent.y, CanvaPalette::Accent.z, 0.85f)
-            : CanvaPalette::Surface1);
+            : CanvaPalette::Surface2);
         if (ImGui::Button(opts[t].label, ImVec2(kBtnW, kBtnH))) {
             m_ActiveTool = opts[t].tool;
-            if (opts[t].tool != OverlayTool::MultiSelect) m_MultiSelected.clear();
+            if (opts[t].tool != OverlayTool::Move) m_MultiSelected.clear();
             bool selIsImage = m_SelectedLayer >= 0 && m_SelectedLayer < (int)m_Doc.layers.size() &&
                               m_Doc.layers[m_SelectedLayer].kind == OverlayLayerKind::Image;
             if ((opts[t].tool == OverlayTool::Eraser || opts[t].tool == OverlayTool::Gradient) && selIsImage)
@@ -310,9 +316,9 @@ void OverlayCanvasEditor::RenderBottomToolbar(float w) {
         }
     } else {
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-        ImGui::TextUnformatted(m_ActiveTool == OverlayTool::MultiSelect
-            ? "Click agrega/quita capas de la seleccion; arrastra cualquiera para mover todas juntas."
-            : "Arrastra una capa para moverla.");
+        ImGui::TextUnformatted(
+            "Arrastra una capa para moverla. Ctrl+click o un recuadro sobre el "
+            "canvas selecciona varias para moverlas juntas.");
         ImGui::PopStyleColor();
     }
 

@@ -45,8 +45,6 @@ private:
     OverlayLayer ImportOverlaySvgSingle(int canvasW, int canvasH);
     std::string PickSvgFile();
 
-    bool SaveOverlayRecipe(const std::string& name, const OverlayDoc& doc);
-    bool LoadOverlayRecipe(const std::string& name, OverlayDoc& out);
     bool DeleteOverlay(const std::string& name);
 
     void RenderTopBar();

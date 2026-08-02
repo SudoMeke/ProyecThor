@@ -14,6 +14,22 @@ std::string PickImageOrVideoFile();
 // sentido.
 std::string PickImageFile();
 
+// Elegir una CARPETA (no un archivo) -- usado para fijar una carpeta de
+// salida fija en el conversor de Render (ver LibraryPanel::
+// RenderConverterSection). IFileOpenDialog + FOS_PICKFOLDERS en Windows,
+// zenity --file-selection --directory / kdialog --getexistingdirectory en
+// Linux -- funcionan igual bajo X11 o Wayland, son apps GTK/Qt propias que
+// no dependen del compositor. Devuelve "" si el usuario cancela.
+std::string PickFolder(const std::string& title = "Elegir carpeta");
+
+// Elegir DONDE GUARDAR un archivo nuevo (a diferencia de los Pick* de
+// arriba, que abren uno YA existente) -- usado por "Guardar como" del
+// conversor de Render. IFileSaveDialog en Windows, zenity --file-selection
+// --save / kdialog --getsavefilename en Linux (Wayland incluido, mismo
+// motivo que PickFolder). `defaultPath` sugiere carpeta+nombre inicial
+// (con extension). Devuelve "" si cancela.
+std::string PickSaveVideoPath(const std::string& defaultPath);
+
 // Extension-sniffing simple para decidir si un path va por el pipeline de
 // video o de imagen (mismo criterio que BackgroundLayer).
 bool LooksLikeVideoPath(const std::string& path);

@@ -4,6 +4,7 @@
 #include <vector>
 #include <functional>
 #include <cstring>
+#include <cstdint>
 #include "frontend/views/Audio.h"
 #include "frontend/views/DocumentView.h"
 #include "frontend/views/OClock.h"
@@ -120,9 +121,31 @@ private:
     int  m_ConvertSourceIndex = -1;
     int  m_ConvertFormatIndex = 0;
 
+    // Codec forzado + compresion (0..100, ver MediaConverter::Start) --
+    // solo aplica a conversiones de Video, se ignora para Audio. Arranca
+    // en H264 (no Auto) para que la compresion sirva de entrada sin que el
+    // usuario tenga que cambiar el codec primero.
+    Core::VideoCodec m_ConvertCodec       = Core::VideoCodec::H264;
+    int               m_ConvertCompression = 40;
+
+    // Donde se guarda el archivo convertido: preguntar cada vez (dialogo
+    // nativo "Guardar como", ver FilePicker::PickSaveVideoPath) o una
+    // carpeta fija elegida una vez (FilePicker::PickFolder) y reusada sin
+    // volver a preguntar -- el nombre de archivo se sigue auto-generando
+    // (mismo criterio "nunca pisa un existente" de siempre) dentro de esa
+    // carpeta.
+    bool        m_ConvertAskEachTime  = true;
+    std::string m_ConvertPresetFolder;
+
     Core::MediaConverter m_Converter;
     std::string          m_ConvertStatus;
     bool                 m_ConvertStatusIsError = false;
+
+    // Tamaño de entrada/salida de la ULTIMA conversion arrancada -- para
+    // poder mostrar "era X, quedo en Y" en el mensaje de estado una vez
+    // termina (ver PollFinished en RenderConverterSection). 0 = desconocido.
+    uint64_t    m_ConvertLastInputSize  = 0;
+    std::string m_ConvertLastOutputPath;
 
     bool m_ShowSongEditor = false;
     char m_EditTitle  [256]{};
