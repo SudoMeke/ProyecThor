@@ -10,6 +10,18 @@ struct ImGuiWindow; // ver imgui_internal.h
 
 namespace ProyecThor::UI {
 
+// Herramienta activa en la toolbar inferior (ver RenderBottomToolbar).
+//   Mover      -> click+arrastre normal, una capa a la vez (comportamiento
+//                 de siempre).
+//   Seleccion  -> click agrega/saca capas de una seleccion multiple;
+//                 arrastrar cualquiera de las seleccionadas mueve a TODAS
+//                 juntas, manteniendo sus posiciones relativas.
+//   Borrador   -> pincel circular que borra pixeles (alpha=0) de la capa
+//                 Image seleccionada, sobre una copia privada del archivo.
+//   Degradado  -> desvanece la capa Image seleccionada en un angulo/fuerza
+//                 elegidos, a transparencia o a un color solido.
+enum class OverlayTool { Move, MultiSelect, Eraser, Gradient };
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  OverlayCanvasEditor — editor tipo Canva: canvas central con capas de
 //  texto, forma o imagen arrastrables (y redimensionables/rotables, en el
@@ -32,8 +44,26 @@ public:
     using ListBgImagesFn    = std::function<std::vector<std::string>()>;
     using ImportImageFn     = std::function<std::string()>; // abre dialogo, copia el archivo, devuelve ruta (o "" si cancela)
 
+    // Abre dialogo para elegir un .svg, lo separa en capas (una por grupo
+    // <g id="..."> de primer nivel) y devuelve un OverlayLayer Image ya
+    // rasterizado por cada una, listas para agregar a m_Doc.layers -- ver
+    // OverlaySvgImport.h. Vacio si el usuario cancela o el archivo no pudo
+    // leerse. canvasW/canvasH: tamano del overlay activo, para ubicar el
+    // SVG proporcionalmente dentro de el. Ideal para archivos de
+    // Illustrator/Figma/Inkscape que agrupan de forma sensata; Canva (y
+    // similares) exportan cada forma/glifo suelto como su propio grupo, asi
+    // que este modo termina fragmentando de mas en esos casos -- ver
+    // ImportSvgSingleFn para esos.
+    using ImportSvgFn = std::function<std::vector<OverlayLayer>(int canvasW, int canvasH)>;
+
+    // Misma idea, pero rasteriza el SVG entero como UNA sola capa Image
+    // (garantiza verse igual al archivo original). imagePath vacio en el
+    // layer devuelto = cancelado/fallo.
+    using ImportSvgSingleFn = std::function<OverlayLayer(int canvasW, int canvasH)>;
+
     OverlayCanvasEditor(std::vector<std::string>* fontList, ResolvePngPathFn resolvePngPath,
-                        ListBgImagesFn listBgImages, ImportImageFn importImage);
+                        ListBgImagesFn listBgImages, ImportImageFn importImage,
+                        ImportSvgFn importSvg, ImportSvgSingleFn importSvgSingle);
     ~OverlayCanvasEditor() = default;
 
     void OpenNew(const OverlayDoc& defaults = {});
@@ -51,7 +81,8 @@ private:
     void RenderHeader(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize);
     void RenderFloatingToolbar(ImVec2 canvasPos, ImVec2 canvasSize);
     void RenderCanvas(float w, float h);
-    void RenderSidebar(float w, float h);
+    void RenderLayersPanel(float w, float h);
+    void RenderPropertiesPanel(float w, float h);
     void RenderFooter(ImVec2 winPos, ImVec2 winSize, OnSaveCallback& onSave, OnCancelCallback& onClose);
 
     void RenderResizeHandle(int layerIdx, OverlayLayer& layer, int corner,
@@ -60,6 +91,18 @@ private:
                             ImDrawList* fgDl);
     void AddImageLayerFromMenu();
     ImTextureID GetImageTexture(const std::string& path);
+
+    // Herramientas de la toolbar inferior (ver OverlayTool) -- viven en su
+    // propio archivo (OverlayCanvasEditorTools.cpp) por tamaño, pero son
+    // metodos de esta misma clase (acceden a m_Doc/m_ImageTexCache/etc).
+    void RenderBottomToolbar(float w);
+    bool IsMultiSelected(int idx) const;
+    void ToggleMultiSelected(int idx);
+    void EnsurePixelEditBuffer(int layerIdx);
+    void UploadPixelEditTexture();
+    void SavePixelEditToDisk();
+    void ApplyEraserStroke(ImVec2 canvasPos, ImVec2 canvasScreenSize);
+    void ApplyGradientPreview();
 
     // Dibuja SOLO el contenido real de las capas (fondo del doc + Text/
     // Image/Shape; Clock se saltea siempre, nunca se hornea) en un
@@ -77,6 +120,8 @@ private:
     ResolvePngPathFn           m_ResolvePngPath;
     ListBgImagesFn             m_ListBgImages;
     ImportImageFn              m_ImportImage;
+    ImportSvgFn                m_ImportSvg;
+    ImportSvgSingleFn          m_ImportSvgSingle;
 
     OverlayDoc m_Doc;
     char       m_Name[128] = {};
@@ -107,6 +152,32 @@ private:
 
     // Cache de texturas GL de imagenes usadas como capa (clave = ruta)
     std::unordered_map<std::string, ImTextureID> m_ImageTexCache;
+
+    // ── Herramienta activa + seleccion multiple ──────────────────────────
+    OverlayTool      m_ActiveTool = OverlayTool::Move;
+    std::vector<int> m_MultiSelected;      // indices en m_Doc.layers, modo Seleccion
+    ImVec2           m_MultiDragStartMouse{};
+    std::vector<ImVec2> m_MultiDragStartPos; // posX/posY de cada capa en m_MultiSelected, al iniciar el arrastre
+
+    // ── Edicion de pixeles (Borrador/Degradado) ──────────────────────────
+    // Buffer RGBA mutable de la capa Image actualmente en edicion -- se
+    // "bifurca" (copia a un archivo propio) la PRIMERA vez que se edita esa
+    // capa, para nunca pisar un PNG que pueda estar compartido (Fondos,
+    // otro overlay, etc). La textura editada se sube al MISMO
+    // m_ImageTexCache que ya usa el render normal (clave = layer.imagePath
+    // ya actualizado a la copia), asi el dibujo de la capa no necesita
+    // ningun caso especial.
+    int                        m_PixelEditLayer = -1;
+    int                        m_PixelEditW = 0, m_PixelEditH = 0;
+    std::vector<unsigned char> m_PixelEditPixels;      // RGBA, se modifica en vivo (Borrador) o se recalcula desde m_PixelEditOriginal (Degradado)
+    std::vector<unsigned char> m_PixelEditOriginal;    // copia intacta, solo para poder recalcular el Degradado sin acumular
+    bool                       m_PixelEditDirty = false; // true = hay cambios sin escribir a disco
+
+    float m_BrushRadiusPx   = 40.0f;  // px referidos a un canvas 1920x1080
+    float m_GradientAngle   = 0.0f;   // grados
+    float m_GradientStrength = 1.0f;  // 0..1
+    bool  m_GradientToColor  = false; // false = desvanece a transparente, true = a m_GradientColor
+    float m_GradientColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
     // Capturado cada frame al dibujar el canvas — usado al presionar Guardar
     // para pedirle a OverlayExportService que rasterice exactamente ese

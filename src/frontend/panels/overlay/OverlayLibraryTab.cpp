@@ -1,4 +1,5 @@
 #include "OverlayLibraryTab.h"
+#include "OverlaySvgImport.h"
 #include "layers/LayersTheme.h"
 #include "frontend/ui/UIManager.h"
 #include "backend/core/PresentationCore.h"
@@ -101,6 +102,27 @@ static std::string OpenImageFileDialogUnix() {
     }
     return {};
 }
+
+static std::string OpenSvgFileDialogUnix() {
+    const char* commands[] = {
+        "zenity --file-selection --title=\"Seleccionar SVG\" "
+        "--file-filter=\"SVG | *.svg\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.svg|SVG\" 2>/dev/null"
+    };
+    for (const char* cmd : commands) {
+        std::string result;
+        char buffer[1024];
+        FILE* pipe = popen(cmd, "r");
+        if (!pipe) continue;
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
+        int status = pclose(pipe);
+        if (status != 0) continue;
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+            result.pop_back();
+        if (!result.empty()) return result;
+    }
+    return {};
+}
 #endif
 
 static std::string EscapeNewlines(const std::string& s) {
@@ -158,7 +180,9 @@ OverlayLibraryTab::OverlayLibraryTab(UIManager* uiManager)
         &m_AvailableFonts,
         [this](const std::string& name) { return ResolvePngPath(name); },
         [this]() { return ListBgImages(); },
-        [this]() { return ImportOverlayImage(); });
+        [this]() { return ImportOverlayImage(); },
+        [this](int canvasW, int canvasH) { return ImportOverlaySvgAsLayers(canvasW, canvasH); },
+        [this](int canvasW, int canvasH) { return ImportOverlaySvgSingle(canvasW, canvasH); });
     SeedDefaultOverlaysIfEmpty();
     ReloadList();
 }
@@ -326,6 +350,35 @@ std::string OverlayLibraryTab::ImportOverlayImage() {
     return dst.string();
 }
 
+std::string OverlayLibraryTab::PickSvgFile() {
+#ifdef _WIN32
+    char filename[MAX_PATH] = {};
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = NULL;
+    ofn.lpstrFilter = "Archivos SVG\0*.svg\0Todos los archivos\0*.*\0";
+    ofn.lpstrFile   = filename;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameA(&ofn)) return {};
+    return filename;
+#else
+    return OpenSvgFileDialogUnix();
+#endif
+}
+
+std::vector<OverlayLayer> OverlayLibraryTab::ImportOverlaySvgAsLayers(int canvasW, int canvasH) {
+    std::string selectedPath = PickSvgFile();
+    if (selectedPath.empty()) return {};
+    return ImportSvgAsLayers(selectedPath, canvasW, canvasH, OverlayImagesDir().string());
+}
+
+OverlayLayer OverlayLibraryTab::ImportOverlaySvgSingle(int canvasW, int canvasH) {
+    std::string selectedPath = PickSvgFile();
+    if (selectedPath.empty()) return {};
+    return ImportSvgAsSingleImage(selectedPath, canvasW, canvasH, OverlayImagesDir().string());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Persistencia de la receta editable (.overlay)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,6 +412,7 @@ bool OverlayLibraryTab::SaveOverlayRecipe(const std::string& name, const Overlay
         f << "layer" << i << ".rotation=" << l.rotation << "\n";
         f << "layer" << i << ".posX="  << l.posX << "\n";
         f << "layer" << i << ".posY="  << l.posY << "\n";
+        f << "layer" << i << ".opacity=" << l.opacity << "\n";
 
         f << "layer" << i << ".shadowOn="  << (l.shadowEnabled ? 1 : 0) << "\n";
         f << "layer" << i << ".shadowCol=" << l.shadowColor[0] << "," << l.shadowColor[1] << ","
@@ -428,6 +482,7 @@ bool OverlayLibraryTab::LoadOverlayRecipe(const std::string& name, OverlayDoc& o
             else if (field == "rotation") l.rotation = (float)std::atof(v.c_str());
             else if (field == "posX")  l.posX     = (float)std::atof(v.c_str());
             else if (field == "posY")  l.posY     = (float)std::atof(v.c_str());
+            else if (field == "opacity") l.opacity = (float)std::atof(v.c_str());
             else if (field == "color")
                 sscanf(v.c_str(), "%f,%f,%f,%f", &l.color[0], &l.color[1], &l.color[2], &l.color[3]);
             else if (field == "shadowOn")   l.shadowEnabled = (v != "0");

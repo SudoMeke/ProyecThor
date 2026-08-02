@@ -41,6 +41,9 @@ private:
     std::string ResolvePngPath(const std::string& name);
     std::vector<std::string> ListBgImages();
     std::string ImportOverlayImage();
+    std::vector<OverlayLayer> ImportOverlaySvgAsLayers(int canvasW, int canvasH);
+    OverlayLayer ImportOverlaySvgSingle(int canvasW, int canvasH);
+    std::string PickSvgFile();
 
     bool SaveOverlayRecipe(const std::string& name, const OverlayDoc& doc);
     bool LoadOverlayRecipe(const std::string& name, OverlayDoc& out);

@@ -18,11 +18,15 @@ namespace ProyecThor::UI {
 OverlayCanvasEditor::OverlayCanvasEditor(std::vector<std::string>* fontList,
                                          ResolvePngPathFn resolvePngPath,
                                          ListBgImagesFn listBgImages,
-                                         ImportImageFn importImage)
+                                         ImportImageFn importImage,
+                                         ImportSvgFn importSvg,
+                                         ImportSvgSingleFn importSvgSingle)
     : m_FontList(fontList)
     , m_ResolvePngPath(std::move(resolvePngPath))
     , m_ListBgImages(std::move(listBgImages))
     , m_ImportImage(std::move(importImage))
+    , m_ImportSvg(std::move(importSvg))
+    , m_ImportSvgSingle(std::move(importSvgSingle))
 {}
 
 ImTextureID OverlayCanvasEditor::GetImageTexture(const std::string& path) {
@@ -118,23 +122,43 @@ void OverlayCanvasEditor::Render(OnSaveCallback onSave, OnCancelCallback onClose
 
     RenderHeader(dl, winPos, winSize);
 
-    constexpr float kHeaderH  = 40.0f;
-    constexpr float kFooterH  = 52.0f;
-    constexpr float kPadH     = 14.0f;
-    constexpr float kSidebarW = 260.0f;
-    constexpr float kGap      = 14.0f;
+    constexpr float kHeaderH      = 40.0f;
+    constexpr float kToolsBarH    = 44.0f;
+    constexpr float kFooterH      = 52.0f;
+    constexpr float kPadH         = 14.0f;
+    constexpr float kLayersPanelW = 200.0f;
+    constexpr float kPropsPanelW  = 280.0f;
+    constexpr float kGap          = 14.0f;
 
-    float contentH = winSize.y - kHeaderH - kFooterH - kPadH * 2.0f;
-    float canvasW  = std::max(200.0f, winSize.x - kSidebarW - kGap - kPadH * 2.0f);
+    float contentH = winSize.y - kHeaderH - kToolsBarH - kFooterH - kPadH * 2.0f;
+    float canvasW  = std::max(200.0f, winSize.x - kLayersPanelW - kPropsPanelW - kGap * 2.0f - kPadH * 2.0f);
 
+    // Izquierda: Capas -- centro: Canvas -- derecha: Propiedades. Antes
+    // Capas y Propiedades vivian apiladas en una unica columna a la
+    // derecha; separarlas en dos paneles propios (cada uno con su propio
+    // recuadro, ver RenderLayersPanel/RenderPropertiesPanel) da mas orden y
+    // dedica todo el ancho de cada uno a lo que realmente muestra.
     ImGui::SetCursorPos(ImVec2(kPadH, kHeaderH + kPadH));
+    ImGui::BeginGroup();
+    RenderLayersPanel(kLayersPanelW, contentH);
+    ImGui::EndGroup();
+
+    ImGui::SetCursorPos(ImVec2(kPadH + kLayersPanelW + kGap, kHeaderH + kPadH));
     ImGui::BeginGroup();
     RenderCanvas(canvasW, contentH);
     ImGui::EndGroup();
 
-    ImGui::SetCursorPos(ImVec2(kPadH + canvasW + kGap, kHeaderH + kPadH));
+    ImGui::SetCursorPos(ImVec2(kPadH + kLayersPanelW + kGap + canvasW + kGap, kHeaderH + kPadH));
     ImGui::BeginGroup();
-    RenderSidebar(kSidebarW, contentH);
+    RenderPropertiesPanel(kPropsPanelW, contentH);
+    ImGui::EndGroup();
+
+    // Toolbar de herramientas -- banda propia ARRIBA del footer (nunca lo
+    // solapa, tiene su propio espacio reservado): Mover/Seleccion multiple/
+    // Borrador/Degradado, ver RenderBottomToolbar.
+    ImGui::SetCursorPos(ImVec2(kPadH, kHeaderH + kPadH + contentH));
+    ImGui::BeginGroup();
+    RenderBottomToolbar(winSize.x - kPadH * 2.0f);
     ImGui::EndGroup();
 
     RenderFooter(winPos, winSize, onSave, onClose);
@@ -324,6 +348,38 @@ void OverlayCanvasEditor::AddImageLayerFromMenu() {
         }
         ImGui::CloseCurrentPopup();
     }
+
+    if (ImGui::Selectable("Importar SVG (una imagen)")) {
+        // Rasteriza el SVG completo como UNA sola capa -- garantiza verse
+        // igual al archivo original. Recomendado para SVG de Canva y
+        // similares, que no agrupan de forma util para separar en capas
+        // (ver comentario largo en "por capas" mas abajo).
+        OverlayLayer single = m_ImportSvgSingle ? m_ImportSvgSingle(m_Doc.canvasW, m_Doc.canvasH) : OverlayLayer{};
+        if (!single.imagePath.empty()) {
+            m_Doc.layers.push_back(single);
+            m_SelectedLayer = (int)m_Doc.layers.size() - 1;
+        }
+        ImGui::CloseCurrentPopup();
+    }
+
+    if (ImGui::Selectable("Importar SVG (por capas)...")) {
+        // Cada grupo de primer nivel del SVG (<g id="...">) entra como su
+        // propia capa Image ya rasterizada -- permite traer un diseño de
+        // Illustrator/Figma/Inkscape y seguir moviendo cada parte por
+        // separado, en vez de una sola imagen plana. Ver OverlaySvgImport.h.
+        // ADVERTENCIA: Canva (y herramientas similares) exportan cada
+        // forma/glifo suelto como su propio grupo de primer nivel sin
+        // jerarquia real de "capas de diseño" -- en esos archivos este modo
+        // termina fragmentando en decenas de pedazos irreconocibles; usa
+        // "una imagen" arriba para esos casos.
+        std::vector<OverlayLayer> svgLayers =
+            m_ImportSvg ? m_ImportSvg(m_Doc.canvasW, m_Doc.canvasH) : std::vector<OverlayLayer>{};
+        if (!svgLayers.empty()) {
+            for (auto& l : svgLayers) m_Doc.layers.push_back(std::move(l));
+            m_SelectedLayer = (int)m_Doc.layers.size() - 1;
+        }
+        ImGui::CloseCurrentPopup();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -393,6 +449,22 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         dl->AddRectFilled(p0, p1, bg);
     }
     fgDl->PushClipRect(p0, p1, true);
+
+    // Guias de composicion siempre visibles (centro + tercios, tenues) --
+    // para que el usuario vea de entrada donde estan las "zonas
+    // especiales" del canvas, no solo cuando ya esta arrastrando algo (ver
+    // guias de snap mas abajo, que se resaltan solo durante el arrastre).
+    // Foreground: chrome de edicion, nunca termina en el PNG exportado.
+    {
+        ImU32 guideDim = (CanvaPalette::ToU32(CanvaPalette::TextMuted) & 0x00FFFFFFu) | (70u << 24);
+        static const float kGuideFracs[3] = { 1.0f / 3.0f, 0.5f, 2.0f / 3.0f };
+        for (float f : kGuideFracs) {
+            float gx = p0.x + f * m_CanvasScreenSize.x;
+            fgDl->AddLine(ImVec2(gx, p0.y), ImVec2(gx, p1.y), guideDim, 1.0f);
+            float gy = p0.y + f * m_CanvasScreenSize.y;
+            fgDl->AddLine(ImVec2(p0.x, gy), ImVec2(p1.x, gy), guideDim, 1.0f);
+        }
+    }
 
     // Click en area vacia = deseleccionar. Va ANTES que las capas para que
     // estas, dibujadas despues, le "roben" el hover en su propia zona — sin
@@ -470,8 +542,9 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
                 return ImVec2(center.x + lx * cs - ly * sn, center.y + lx * sn + ly * cs);
             };
             ImVec2 qTL = Rot(-hw, -hh), qTR = Rot(hw, -hh), qBR = Rot(hw, hh), qBL = Rot(-hw, hh);
+            ImU32 tint = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, std::clamp(layer.opacity, 0.0f, 1.0f)));
             if (tex) {
-                dl->AddImageQuad(tex, qTL, qTR, qBR, qBL);
+                dl->AddImageQuad(tex, qTL, qTR, qBR, qBL, ImVec2(0,0), ImVec2(1,0), ImVec2(1,1), ImVec2(0,1), tint);
             } else {
                 dl->AddQuadFilled(qTL, qTR, qBR, qBL, IM_COL32(40, 40, 46, 255));
                 dl->AddQuad(qTL, qTR, qBR, qBL, IM_COL32(150, 70, 70, 255));
@@ -480,10 +553,11 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
             ImVec2 center = ImVec2((tl.x + br.x) * 0.5f, (tl.y + br.y) * 0.5f);
             float hw = blockSz.x * 0.5f, hh = blockSz.y * 0.5f;
             float rotRad = layer.rotation * (float)M_PI / 180.0f;
+            float op = std::clamp(layer.opacity, 0.0f, 1.0f);
             ImU32 fillCol = ImGui::ColorConvertFloat4ToU32(
-                ImVec4(layer.color[0], layer.color[1], layer.color[2], layer.color[3]));
+                ImVec4(layer.color[0], layer.color[1], layer.color[2], layer.color[3] * op));
             ImU32 strokeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(
-                layer.outlineColor[0], layer.outlineColor[1], layer.outlineColor[2], layer.outlineColor[3]));
+                layer.outlineColor[0], layer.outlineColor[1], layer.outlineColor[2], layer.outlineColor[3] * op));
             float ow = std::max(0.5f, layer.outlineWidth * scale);
 
             if (layer.shapeKind == OverlayShapeKind::Ellipse) {
@@ -509,7 +583,8 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         ImGui::SetCursorScreenPos(ImVec2(tl.x - 4.0f, tl.y - 4.0f));
         ImGui::InvisibleButton("##ovLayerHit", ImVec2(blockSz.x + 8.0f, blockSz.y + 8.0f));
 
-        bool isSel  = (m_SelectedLayer == i);
+        bool isMultiTool = (m_ActiveTool == OverlayTool::MultiSelect);
+        bool isSel  = isMultiTool ? IsMultiSelected(i) : (m_SelectedLayer == i);
         bool isHov  = ImGui::IsItemHovered();
 
         // Chrome de edicion (marco de seleccion / hover) — solo en el
@@ -523,30 +598,84 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
                           ImVec2(tl.x + blockSz.x + 4.0f, tl.y + blockSz.y + 4.0f),
                           IM_COL32(255, 255, 255, 90), 3.0f, 0, 1.0f);
         }
-        if (isHov) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        if (isHov && m_ActiveTool == OverlayTool::Move) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 
-        if (ImGui::IsItemActivated()) {
-            m_DragStartMouse = ImGui::GetIO().MousePos;
-            m_DragStartPosX  = layer.posX;
-            m_DragStartPosY  = layer.posY;
-            m_DraggingLayer  = i;
-            m_SelectedLayer  = i;
+        if (m_ActiveTool == OverlayTool::Eraser || m_ActiveTool == OverlayTool::Gradient) {
+            // Estas herramientas no mueven capas -- clickear solo selecciona
+            // cual es el objetivo (ver RenderBottomToolbar).
+            if (ImGui::IsItemActivated()) m_SelectedLayer = i;
+        } else if (isMultiTool) {
+            if (ImGui::IsItemActivated()) {
+                ToggleMultiSelected(i);
+                m_SelectedLayer = i; // "principal" para el panel de Propiedades
+                m_MultiDragStartMouse = ImGui::GetIO().MousePos;
+                m_MultiDragStartPos.clear();
+                for (int idx : m_MultiSelected)
+                    m_MultiDragStartPos.push_back(ImVec2(m_Doc.layers[idx].posX, m_Doc.layers[idx].posY));
+            }
+            if (IsMultiSelected(i) && ImGui::IsItemActive() &&
+                ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !m_MultiSelected.empty()) {
+                ImVec2 mouse = ImGui::GetIO().MousePos;
+                float dx = (mouse.x - m_MultiDragStartMouse.x) / m_CanvasScreenSize.x;
+                float dy = (mouse.y - m_MultiDragStartMouse.y) / m_CanvasScreenSize.y;
+                for (size_t k = 0; k < m_MultiSelected.size() && k < m_MultiDragStartPos.size(); k++) {
+                    auto& mLayer = m_Doc.layers[m_MultiSelected[k]];
+                    mLayer.posX = std::clamp(m_MultiDragStartPos[k].x + dx, 0.0f, 1.0f);
+                    mLayer.posY = std::clamp(m_MultiDragStartPos[k].y + dy, 0.0f, 1.0f);
+                }
+            }
+        } else { // Move
+            if (ImGui::IsItemActivated()) {
+                m_DragStartMouse = ImGui::GetIO().MousePos;
+                m_DragStartPosX  = layer.posX;
+                m_DragStartPosY  = layer.posY;
+                m_DraggingLayer  = i;
+                m_SelectedLayer  = i;
+            }
+            if (m_DraggingLayer == i && ImGui::IsItemActive() &&
+                ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                ImVec2 mouse = ImGui::GetIO().MousePos;
+                float dx = (mouse.x - m_DragStartMouse.x) / m_CanvasScreenSize.x;
+                float dy = (mouse.y - m_DragStartMouse.y) / m_CanvasScreenSize.y;
+                float newX = std::clamp(m_DragStartPosX + dx, 0.0f, 1.0f);
+                float newY = std::clamp(m_DragStartPosY + dy, 0.0f, 1.0f);
+
+                // Guias de alineacion: al arrastrar, si el centro de la capa
+                // queda cerca del centro o los tercios del canvas ("zonas
+                // especiales" tipicas de composicion), se ajusta exacto a esa
+                // posicion y se resalta una guia -- asi el usuario ve clarito
+                // donde esta la mitad sin tener que calcularlo el mismo.
+                static const float kSnapCandidates[5] = { 0.0f, 1.0f / 3.0f, 0.5f, 2.0f / 3.0f, 1.0f };
+                constexpr float kSnapTol = 0.012f;
+                ImU32 guideCol = CanvaPalette::ToU32(CanvaPalette::Accent);
+                for (float c : kSnapCandidates) {
+                    if (std::fabs(newX - c) < kSnapTol) {
+                        newX = c;
+                        float gx = p0.x + c * m_CanvasScreenSize.x;
+                        fgDl->AddLine(ImVec2(gx, p0.y), ImVec2(gx, p0.y + m_CanvasScreenSize.y), guideCol, 1.5f);
+                        break;
+                    }
+                }
+                for (float c : kSnapCandidates) {
+                    if (std::fabs(newY - c) < kSnapTol) {
+                        newY = c;
+                        float gy = p0.y + c * m_CanvasScreenSize.y;
+                        fgDl->AddLine(ImVec2(p0.x, gy), ImVec2(p0.x + m_CanvasScreenSize.x, gy), guideCol, 1.5f);
+                        break;
+                    }
+                }
+
+                layer.posX = newX;
+                layer.posY = newY;
+            }
+            if (ImGui::IsItemDeactivated()) m_DraggingLayer = -1;
         }
-        if (m_DraggingLayer == i && ImGui::IsItemActive() &&
-            ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            ImVec2 mouse = ImGui::GetIO().MousePos;
-            float dx = (mouse.x - m_DragStartMouse.x) / m_CanvasScreenSize.x;
-            float dy = (mouse.y - m_DragStartMouse.y) / m_CanvasScreenSize.y;
-            layer.posX = std::clamp(m_DragStartPosX + dx, 0.0f, 1.0f);
-            layer.posY = std::clamp(m_DragStartPosY + dy, 0.0f, 1.0f);
-        }
-        if (ImGui::IsItemDeactivated()) m_DraggingLayer = -1;
 
         // Handles de redimension y rotacion — capas de imagen/forma, y solo
         // si esta seleccionada (para no saturar el canvas de agarres). Los
         // handles en si se mantienen sin rotar (ejes del bounding box) para
         // no complicar el hit-testing; solo el contenido visual rota.
-        if (!isText && !isClock && isSel) {
+        if (!isText && !isClock && isSel && m_ActiveTool == OverlayTool::Move) {
             RenderResizeHandle(i, layer, 0, ImVec2(tl.x, tl.y), fgDl);
             RenderResizeHandle(i, layer, 1, ImVec2(br.x, tl.y), fgDl);
             RenderResizeHandle(i, layer, 2, ImVec2(tl.x, br.y), fgDl);
@@ -556,6 +685,29 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         }
 
         ImGui::PopID();
+    }
+
+    // Herramienta Borrador: superficie propia sobre TODO el canvas (encima
+    // de las capas, para capturar el arrastre sin competir con el hit-test
+    // de cada una) -- solo activa si hay una capa Image seleccionada.
+    if (m_ActiveTool == OverlayTool::Eraser && m_SelectedLayer >= 0 &&
+        m_SelectedLayer < (int)m_Doc.layers.size() &&
+        m_Doc.layers[m_SelectedLayer].kind == OverlayLayerKind::Image) {
+        EnsurePixelEditBuffer(m_SelectedLayer);
+
+        ImGui::SetCursorScreenPos(p0);
+        ImGui::SetNextItemAllowOverlap();
+        ImGui::InvisibleButton("##ovEraserSurface", m_CanvasScreenSize);
+
+        ImVec2 mouse = ImGui::GetIO().MousePos;
+        if (ImGui::IsItemHovered()) {
+            float scalePx = m_CanvasScreenSize.x / (float)std::max(1, m_Doc.canvasW);
+            fgDl->AddCircle(mouse, m_BrushRadiusPx * scalePx, CanvaPalette::ToU32(CanvaPalette::Accent), 32, 1.5f);
+        }
+        if (ImGui::IsItemActive())
+            ApplyEraserStroke(mouse, m_CanvasScreenSize);
+        if (ImGui::IsItemDeactivated())
+            SavePixelEditToDisk();
     }
 
     fgDl->PopClipRect();
@@ -628,15 +780,19 @@ void OverlayCanvasEditor::DrawLayersForExport(ImDrawList* dl, ImVec2 p0, ImVec2 
                 return ImVec2(center.x + lx * cs - ly * sn, center.y + lx * sn + ly * cs);
             };
             ImVec2 qTL = Rot(-hw, -hh), qTR = Rot(hw, -hh), qBR = Rot(hw, hh), qBL = Rot(-hw, hh);
-            if (tex) dl->AddImageQuad(tex, qTL, qTR, qBR, qBL);
+            if (tex) {
+                ImU32 tint = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, std::clamp(layer.opacity, 0.0f, 1.0f)));
+                dl->AddImageQuad(tex, qTL, qTR, qBR, qBL, ImVec2(0,0), ImVec2(1,0), ImVec2(1,1), ImVec2(0,1), tint);
+            }
         } else { // Shape
             ImVec2 center = ImVec2((tl.x + br.x) * 0.5f, (tl.y + br.y) * 0.5f);
             float hw = blockSz.x * 0.5f, hh = blockSz.y * 0.5f;
             float rotRad = layer.rotation * (float)M_PI / 180.0f;
+            float op = std::clamp(layer.opacity, 0.0f, 1.0f);
             ImU32 fillCol = ImGui::ColorConvertFloat4ToU32(
-                ImVec4(layer.color[0], layer.color[1], layer.color[2], layer.color[3]));
+                ImVec4(layer.color[0], layer.color[1], layer.color[2], layer.color[3] * op));
             ImU32 strokeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(
-                layer.outlineColor[0], layer.outlineColor[1], layer.outlineColor[2], layer.outlineColor[3]));
+                layer.outlineColor[0], layer.outlineColor[1], layer.outlineColor[2], layer.outlineColor[3] * op));
             float ow = std::max(0.5f, layer.outlineWidth * scale);
 
             if (layer.shapeKind == OverlayShapeKind::Ellipse) {
@@ -772,16 +928,23 @@ void OverlayCanvasEditor::RenderRotateHandle(int layerIdx, OverlayLayer& layer, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  RenderSidebar — lista de capas (objetos) + propiedades de la seleccionada.
-//  Anadir capas ahora vive en la toolbar flotante (ver RenderFloatingToolbar)
-//  -- este panel solo lista/edita lo que ya existe.
+//  RenderLayersPanel — lista de capas (objetos), panel propio a la
+//  izquierda del canvas. Anadir capas vive en la toolbar flotante (ver
+//  RenderFloatingToolbar) -- este panel solo lista/reordena/selecciona lo
+//  que ya existe.
 // ─────────────────────────────────────────────────────────────────────────────
-void OverlayCanvasEditor::RenderSidebar(float w, float h) {
+void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
     CanvaStyleEditor::SectionLabel("CAPAS");
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
+    // Padding explicito -- sin esto, los controles (dimensionados a "w",
+    // el ancho TOTAL del panel) se salian contra el borde interno de este
+    // child bordeado, ya que su area de contenido real es mas chica que
+    // "w" (le resta el padding/borde propios).
     ImGui::PushStyleColor(ImGuiCol_ChildBg, CanvaPalette::Surface1);
-    ImGui::BeginChild("##ovLayerList", ImVec2(w, 150.0f), true, ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+    ImGui::BeginChild("##ovLayerList", ImVec2(w, h - 32.0f), true, ImGuiWindowFlags_NoScrollWithMouse);
+    w = ImGui::GetContentRegionAvail().x;
     if (m_Doc.layers.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
         ImGui::TextWrapped("Sin capas todavia. Usa la toolbar de arriba del canvas para anadir texto, formas, imagenes o un reloj.");
@@ -857,26 +1020,37 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
         }
     }
     ImGui::EndChild();
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
+}
 
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderPropertiesPanel — propiedades de la capa seleccionada, panel propio
+//  a la derecha del canvas (separado de Capas, ver comentario en Render()).
+// ─────────────────────────────────────────────────────────────────────────────
+void OverlayCanvasEditor::RenderPropertiesPanel(float w, float h) {
     CanvaStyleEditor::SectionLabel("PROPIEDADES");
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-    // Scrolleable por separado del resto del sidebar (CAPAS queda fijo
-    // arriba) -- esta seccion antes no tenia altura acotada y quedaba
-    // cortada contra el borde inferior de la ventana (que ya no scrollea
-    // como conjunto, ver kFlags en Render()), sin forma de ver los
-    // controles que no entraban (sombra/contorno/fondo, etc).
-    float propsH = std::max(80.0f, h - 212.0f);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::BeginChild("##ovPropsScroll", ImVec2(w, propsH), false);
+    // Scrolleable -- esta seccion no tiene altura acotada (sombra/contorno/
+    // fondo/etc pueden no entrar todos) y la ventana ya no scrollea como
+    // conjunto (ver kFlags en Render()), asi que necesita su propio scroll
+    // interno para no cortar controles contra el borde inferior.
+    float propsH = std::max(80.0f, h - 32.0f);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, CanvaPalette::Surface1);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+    ImGui::BeginChild("##ovPropsScroll", ImVec2(w, propsH), true);
+    // Padding explicito -- ver mismo comentario en RenderLayersPanel: sin
+    // esto los controles (dimensionados al "w" de afuera) se salian contra
+    // el borde interno de este child bordeado.
+    w = ImGui::GetContentRegionAvail().x;
 
     if (m_SelectedLayer < 0 || m_SelectedLayer >= (int)m_Doc.layers.size()) {
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
         ImGui::TextWrapped("Selecciona o crea una capa para editar sus propiedades.");
         ImGui::PopStyleColor();
         ImGui::EndChild();
+        ImGui::PopStyleVar();
         ImGui::PopStyleColor();
         return;
     }
@@ -890,6 +1064,18 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
     constexpr ImGuiColorEditFlags kSwatchFlags = ImGuiColorEditFlags_AlphaBar |
         ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_PickerHueWheel |
         ImGuiColorEditFlags_AlphaPreviewHalf;
+
+    // Opacidad general de la capa -- comun a las 4, independiente del alpha
+    // de cada color propio (permite desvanecer un texto entero con sombra+
+    // contorno+fondo, o una imagen, con un solo control).
+    ImGui::TextUnformatted("Opacidad");
+    ImGui::SetNextItemWidth(w);
+    float opacityPct = layer.opacity * 100.0f;
+    if (ImGui::DragFloat("##ovLayerOpacity", &opacityPct, 0.5f, 0.0f, 100.0f, "%.0f%%"))
+        layer.opacity = std::clamp(opacityPct / 100.0f, 0.0f, 1.0f);
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     if (layer.kind == OverlayLayerKind::Text) {
         char textBuf[512];
@@ -965,6 +1151,36 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
         ImGui::SetNextItemWidth(w);
         ImGui::DragFloat("##ovShapeRotation", &layer.rotation, 0.5f, -180.0f, 180.0f, "%.0f grados");
 
+        // Selector rapido: cubre el caso pedido explicitamente ("solo el
+        // borde con color y transparente adentro") en un click, en vez de
+        // tener que descubrir que apagar Relleno + prender Borde por
+        // separado logra lo mismo (los checkboxes de abajo siguen ahi para
+        // ajustar color/ancho una vez elegido el estilo).
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::TextUnformatted("Estilo");
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        {
+            struct StyleOpt { const char* label; bool fill; bool outline; };
+            const StyleOpt opts[3] = {
+                { "Relleno",      true,  false },
+                { "Solo borde",   false, true  },
+                { "Ambos",        true,  true  },
+            };
+            float gap  = 6.0f;
+            float btnW = (w - gap * 2.0f) / 3.0f;
+            for (int i = 0; i < 3; i++) {
+                bool active = (layer.shapeFilled == opts[i].fill && layer.outlineEnabled == opts[i].outline);
+                if (i > 0) ImGui::SameLine(0.0f, gap);
+                if (!active) ImGui::PushStyleColor(ImGuiCol_Button, CanvaPalette::Surface1);
+                if (ImGui::Button(opts[i].label, ImVec2(btnW, 26.0f))) {
+                    layer.shapeFilled    = opts[i].fill;
+                    layer.outlineEnabled = opts[i].outline;
+                    if (opts[i].outline && layer.outlineWidth <= 0.0f) layer.outlineWidth = 2.0f;
+                }
+                if (!active) ImGui::PopStyleColor();
+            }
+        }
+
         ImGui::Dummy(ImVec2(0.0f, 8.0f));
         ImGui::Checkbox("Relleno", &layer.shapeFilled);
         if (layer.shapeFilled) {
@@ -993,6 +1209,7 @@ void OverlayCanvasEditor::RenderSidebar(float w, float h) {
     ImGui::PopStyleColor(2);
 
     ImGui::EndChild();
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 }
 

@@ -66,6 +66,11 @@ struct OverlayLayer {
     // -- Comun a todas --
     float posX = 0.5f;                     // 0..1, centro de la capa
     float posY = 0.5f;                     // 0..1, centro de la capa
+    float opacity = 1.0f;                  // 0..1, multiplica TODO lo que dibuje la capa
+                                            // (independiente del alpha de cada color propio
+                                            // -- ej. desvanecer un texto entero con sombra+
+                                            // contorno+fondo de un solo control, en vez de
+                                            // ajustar cada color por separado).
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
