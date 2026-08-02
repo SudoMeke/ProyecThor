@@ -324,15 +324,34 @@ if(WIN32)
 else()
     # ── Rutas y librerias exclusivas de Linux ────────────────────────────────
 
-    find_package(glfw3 QUIET)
-    if(NOT glfw3_FOUND)
-        message(FATAL_ERROR
-            "No se encontro GLFW3 en el sistema.\n"
-            "Instala el paquete de desarrollo de GLFW3 para tu distribucion.\n"
-            "En CachyOS/Arch: sudo pacman -S glfw\n"
-            "En Debian/Ubuntu: sudo apt install libglfw3-dev"
-        )
-    endif()
+    # GLFW se compila desde fuente (FetchContent) en vez de usar el paquete
+    # del sistema. Motivo: el backend de ImGui vendorizado (ver
+    # src/external/imgui-docking/backends/imgui_impl_glfw.cpp) llama a
+    # glfwGetPlatform() -- la API que permite elegir/detectar X11 vs Wayland
+    # en tiempo de ejecucion -- que recien existe desde GLFW 3.4. Debian/
+    # Ubuntu todavia empaquetan GLFW 3.3.x ("libglfw3-dev"), asi que linkear
+    # contra esa version tira "undefined reference a glfwGetPlatform" al
+    # linkear (confirmado en CI, ver build-linux). Se compilan ambos
+    # backends (X11 + Wayland) para que el mismo binario funcione en
+    # cualquiera de los dos sin recompilar -- necesita los paquetes de
+    # desarrollo de Wayland instalados ademas de los de X11 (ver
+    # .github/workflows/build.yml).
+    include(FetchContent)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_X11      ON  CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_WAYLAND  ON  CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        glfw3_src
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG        3.4
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(glfw3_src)
+    # De aca en mas "glfw" es el target que provee FetchContent -- mismo
+    # nombre que exportaba find_package(glfw3), el resto del archivo
+    # (target_link_libraries mas abajo) no necesita cambios.
 
     find_package(OpenGL REQUIRED)
 

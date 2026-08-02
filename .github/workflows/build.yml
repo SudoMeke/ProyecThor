@@ -20,11 +20,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Instalar dependencias
+        # libglfw3-dev NO se instala a proposito: GLFW se compila desde
+        # fuente en CMakeLists.txt (FetchContent, tag 3.4) porque Ubuntu
+        # todavia empaqueta la 3.3.x, que le falta glfwGetPlatform() (usada
+        # por el backend de ImGui, ver comentario en CMakeLists.txt) -- en
+        # cambio se instalan los paquetes de desarrollo que GLFW necesita
+        # para compilar sus backends X11 y Wayland el mismo.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build libglfw3-dev libgl1-mesa-dev libx11-dev \
-            libxcomposite-dev libopencv-dev libpipewire-0.3-dev libdbus-1-dev
+            ninja-build libgl1-mesa-dev libx11-dev \
+            libxcomposite-dev libopencv-dev libpipewire-0.3-dev libdbus-1-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
 
       - name: Configurar
         run: cmake -B build-linux -G Ninja -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
