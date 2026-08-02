@@ -43,10 +43,22 @@
     #pragma comment(lib, "dwmapi.lib")
 #endif
 
-static constexpr int   SPLASH_W       = 600;
-static constexpr int   SPLASH_H       = 380;
-static constexpr int   MAIN_W         = 1280;
-static constexpr int   MAIN_H         = 720;
+// Tamanos de referencia a 100% de escala de Windows -- SPLASH_W/H y MAIN_W/H
+// de mas abajo son la version YA multiplicada por el DPI real del monitor
+// principal (ver EnableDpiAwareness()/dpiScale en main()), calculada una
+// sola vez al arrancar, antes de crear cualquier ventana o dibujar el
+// splash. Todo el layout del splash (lineas mas abajo en este archivo) y el
+// tamano de mainWindow siguen usando SPLASH_W/H y MAIN_W/H tal cual, sin
+// ningun otro cambio -- quedan proporcionales al DPI solo por reasignar
+// estas cuatro variables antes de que se lean por primera vez.
+static constexpr int   SPLASH_W_BASE  = 600;
+static constexpr int   SPLASH_H_BASE  = 380;
+static constexpr int   MAIN_W_BASE    = 1280;
+static constexpr int   MAIN_H_BASE    = 720;
+static int             SPLASH_W       = SPLASH_W_BASE;
+static int             SPLASH_H       = SPLASH_H_BASE;
+static int             MAIN_W         = MAIN_W_BASE;
+static int             MAIN_H         = MAIN_H_BASE;
 static constexpr int   LOAD_STEPS     = 5;
 
 struct SplashArt {
@@ -388,9 +400,59 @@ namespace FrameProfiler
     }
 }
 
+#ifdef _WIN32
+// Declara el proceso "Per-Monitor DPI Aware" -- sin esto Windows trata a
+// ProyecThor como una app vieja sin soporte de DPI, y en vez de dejarla
+// dibujar a la resolucion real le estira por bitmap lo que renderiza a la
+// escala que tenga el monitor (ej. 150%), quedando todo borroso y con el
+// tamano de fuente/ventana sin relacion real con el DPI configurado. Se
+// resuelve la funcion en runtime via GetProcAddress (en vez de llamarla
+// directo) para no depender de que el SDK de MinGW usado al compilar tenga
+// declarado DPI_AWARENESS_CONTEXT/SetProcessDpiAwarenessContext -- el valor
+// -4 es el sentinel documentado por Microsoft para
+// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (Windows 10 1703+); si la API
+// no esta (Windows mas viejo), se cae a SetProcessDpiAwareness (8.1+) y
+// despues a SetProcessDPIAware (Vista+) como ultimo recurso.
+static void EnableDpiAwareness() {
+    HMODULE user32 = LoadLibraryA("user32.dll");
+    if (user32) {
+        using SetCtxFn = BOOL(WINAPI*)(HANDLE);
+        auto setCtx = (SetCtxFn)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        if (setCtx && setCtx((HANDLE)(-4))) {
+            FreeLibrary(user32);
+            return;
+        }
+        FreeLibrary(user32);
+    }
+
+    HMODULE shcore = LoadLibraryA("shcore.dll");
+    if (shcore) {
+        using SetAwarenessFn = HRESULT(WINAPI*)(int);
+        auto setAwareness = (SetAwarenessFn)GetProcAddress(shcore, "SetProcessDpiAwareness");
+        if (setAwareness && SUCCEEDED(setAwareness(2 /* PROCESS_PER_MONITOR_DPI_AWARE */))) {
+            FreeLibrary(shcore);
+            return;
+        }
+        FreeLibrary(shcore);
+    }
+
+    HMODULE user32b = LoadLibraryA("user32.dll");
+    if (user32b) {
+        using SetDpiAwareFn = BOOL(WINAPI*)();
+        auto setDpiAware = (SetDpiAwareFn)GetProcAddress(user32b, "SetProcessDPIAware");
+        if (setDpiAware) setDpiAware();
+        FreeLibrary(user32b);
+    }
+}
+#endif
+
 int main()
 {
     std::cerr << "[DIAG] Iniciando main()\n";
+
+#ifdef _WIN32
+    EnableDpiAwareness();
+#endif
 
 #ifndef _WIN32
     // GLEW no soporta inicializacion nativa de Wayland: internamente intenta
@@ -408,6 +470,27 @@ int main()
         return -1;
     }
     std::cerr << "[DIAG] glfwInit() OK\n";
+
+    // Escala de DPI del monitor principal (1.0 = 100%, 1.5 = 150%, etc.) --
+    // solo se lee UNA vez, al arrancar (no hay soporte todavia para
+    // detectar un cambio de escala en caliente si el usuario mueve la
+    // ventana a otro monitor con distinto DPI mientras la app esta
+    // corriendo). Con EnableDpiAwareness() ya declarado arriba, GLFW
+    // devuelve la escala real del monitor en vez de 1.0 fijo.
+    float g_DpiScale = 1.0f;
+    {
+        GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
+        if (primaryMonitor) {
+            float sx = 1.0f, sy = 1.0f;
+            glfwGetMonitorContentScale(primaryMonitor, &sx, &sy);
+            if (sx > 0.0f) g_DpiScale = sx;
+        }
+        std::cerr << "[DIAG] Escala de DPI detectada: " << (g_DpiScale * 100.0f) << "%\n";
+    }
+    SPLASH_W = (int)(SPLASH_W_BASE * g_DpiScale);
+    SPLASH_H = (int)(SPLASH_H_BASE * g_DpiScale);
+    MAIN_W   = (int)(MAIN_W_BASE   * g_DpiScale);
+    MAIN_H   = (int)(MAIN_H_BASE   * g_DpiScale);
 
     ProyecThor::Settings::SettingsManager::Get().LoadSettings();
     std::cerr << "[DIAG] SettingsManager::LoadSettings() OK\n";
@@ -488,9 +571,9 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
         // AddFontFromFileTTF de abajo y ImGui usa su fuente embebida.
     }
 
-    ImFont* titleFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 46.0f);
-    ImFont* regularFont = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 20.0f);
-    ImFont* smallFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f);
+    ImFont* titleFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 46.0f * g_DpiScale);
+    ImFont* regularFont = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 20.0f * g_DpiScale);
+    ImFont* smallFont   = fontPath.empty() ? nullptr : splashIO.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f * g_DpiScale);
 
     if (!titleFont || !regularFont || !smallFont)
         std::cerr << "[DIAG] ADVERTENCIA: no se pudo cargar la fuente en '"
@@ -500,6 +583,7 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
     ImGui_ImplGlfw_InitForOpenGL(splashWindow, true);
     ImGui_ImplOpenGL3_Init("#version 130");
     ImGui::StyleColorsDark();
+    ImGui::GetStyle().ScaleAllSizes(g_DpiScale);
     std::cerr << "[DIAG] ImGui inicializado para splashWindow OK\n";
 
     std::string stateFile = GetAppDataFilePath("splash_state.txt");
@@ -689,13 +773,14 @@ StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png"
             fontToLoad = defaultFontPath;
 
         if (!fontToLoad.empty())
-            io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f);
+            io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f * g_DpiScale);
     }
     ProyecThor::Core::PresentationCore::Get().LoadFontsIntoImGui();
 
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
 ImGui_ImplOpenGL3_Init("#version 130");
 ImGui::StyleColorsDark();
+ImGui::GetStyle().ScaleAllSizes(g_DpiScale);
 
 {
     ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();

@@ -1075,8 +1075,10 @@ void LibraryPanel::RenderConverterSection()
     // ── Donde guardar ────────────────────────────────────────────────────
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
     DS::GlassSectionHeader("GUARDAR EN");
+    // Apilados verticalmente (no SameLine): con el panel angosto de
+    // Biblioteca, "Preguntar cada vez" + "Carpeta fija" en una sola linea
+    // no entraban y "Carpeta fija" quedaba cortado contra el borde.
     if (ImGui::RadioButton("Preguntar cada vez", m_ConvertAskEachTime)) m_ConvertAskEachTime = true;
-    ImGui::SameLine(0.0f, 18.0f);
     if (ImGui::RadioButton("Carpeta fija", !m_ConvertAskEachTime)) m_ConvertAskEachTime = false;
 
     if (!m_ConvertAskEachTime) {
