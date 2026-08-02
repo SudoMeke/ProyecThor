@@ -10,6 +10,8 @@
 #ifndef _WIN32
 #include <pwd.h>
 #include <unistd.h>
+#include <cstdio>
+#include <array>
 #else
 #include <windows.h>
 #endif
@@ -160,6 +162,7 @@ const char* ThemePresetName(ThemePreset preset) {
         case ThemePreset::Kofi:        return "Ko-fi";
         case ThemePreset::Deadlock:    return "Deadlock";
         case ThemePreset::Galaxy:      return "Galaxia";
+        case ThemePreset::Mek:         return "Mek";
         default:                       return "Personalizado";
     }
 }
@@ -172,6 +175,7 @@ ThemePreset ThemePresetFromString(const std::string& s) {
     if (s == "kofi")        return ThemePreset::Kofi;
     if (s == "deadlock")    return ThemePreset::Deadlock;
     if (s == "galaxy")      return ThemePreset::Galaxy;
+    if (s == "mek")         return ThemePreset::Mek;
     return ThemePreset::Custom;
 }
 
@@ -184,6 +188,7 @@ static std::string ThemePresetToKey(ThemePreset preset) {
         case ThemePreset::Kofi:        return "kofi";
         case ThemePreset::Deadlock:    return "deadlock";
         case ThemePreset::Galaxy:      return "galaxy";
+        case ThemePreset::Mek:         return "mek";
         default:                       return "custom";
     }
 }
@@ -350,6 +355,31 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
         break;
     }
 
+    case ThemePreset::Mek: {
+        // Catppuccin Mocha -- paleta por defecto de Omarchy (ver
+        // ~/.config/omarchy/current/theme/colors.toml). Progresion de
+        // superficies Base -> Surface0 -> Surface1 -> Surface2 -> Overlay0,
+        // mismo criterio de brillo creciente que el resto de los presets.
+        t.base[0]=0.118f; t.base[1]=0.118f; t.base[2]=0.180f; t.base[3]=1.0f;             // Base #1e1e2e
+        t.surface0[0]=0.192f; t.surface0[1]=0.196f; t.surface0[2]=0.267f; t.surface0[3]=1.0f; // Surface0 #313244
+        t.surface1[0]=0.271f; t.surface1[1]=0.278f; t.surface1[2]=0.353f; t.surface1[3]=1.0f; // Surface1 #45475a
+        t.surface2[0]=0.345f; t.surface2[1]=0.357f; t.surface2[2]=0.439f; t.surface2[3]=1.0f; // Surface2 #585b70
+        t.surface3[0]=0.424f; t.surface3[1]=0.439f; t.surface3[2]=0.525f; t.surface3[3]=1.0f; // Overlay0 #6c7086
+        t.accent[0]=0.537f; t.accent[1]=0.706f; t.accent[2]=0.980f; t.accent[3]=1.0f;          // Blue #89b4fa
+        t.accentLight[0]=0.706f; t.accentLight[1]=0.745f; t.accentLight[2]=0.996f; t.accentLight[3]=1.0f; // Lavender #b4befe
+        t.accentDim[0]=0.376f; t.accentDim[1]=0.494f; t.accentDim[2]=0.686f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.537f; t.accentFaint[1]=0.706f; t.accentFaint[2]=0.980f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.537f; t.border[1]=0.706f; t.border[2]=0.980f; t.border[3]=0.18f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.804f; t.textPrimary[1]=0.839f; t.textPrimary[2]=0.957f; t.textPrimary[3]=1.0f; // Text #cdd6f4
+        t.textDim[0]=0.651f; t.textDim[1]=0.678f; t.textDim[2]=0.784f; t.textDim[3]=1.0f;                 // Subtext0 #a6adc8
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=0.953f; t.danger[1]=0.545f; t.danger[2]=0.659f; t.danger[3]=1.0f;   // Red #f38ba8
+        t.success[0]=0.651f; t.success[1]=0.890f; t.success[2]=0.631f; t.success[3]=1.0f; // Green #a6e3a1
+        t.windowRounding=14.0f; t.frameRounding=9.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
     default:
         // Cae aca solo si llega ThemePreset::Custom, que no genera colores
         // desde codigo (se cargan desde settings.json en LoadSettings).
@@ -357,6 +387,51 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
     }
 
     return t;
+}
+
+#ifndef _WIN32
+// Busca la ruta absoluta de "JetBrainsMono Nerd Font" via fontconfig (mismo
+// popen+parseo defensivo que ya usa CategoryTheme::OpenFontFileDialogUnix
+// para zenity/kdialog) -- es la fuente que usa waybar en Omarchy por
+// defecto, y la idea del preset Mek es que la interfaz combine con el resto
+// del escritorio. Devuelve "" si fc-match no esta instalado o no encuentra
+// la fuente (Mek simplemente se queda con la fuente default de la app).
+static std::string ResolveWaybarFontPath() {
+    std::array<char, 512> buffer{};
+    std::string result;
+
+    FILE* pipe = popen("fc-match -f \"%{file}\" \"JetBrainsMono Nerd Font\" 2>/dev/null", "r");
+    if (!pipe) return "";
+
+    while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
+        result += buffer.data();
+    pclose(pipe);
+
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+        result.pop_back();
+
+    return result;
+}
+#endif
+
+void SettingsManager::ApplyPreset(ThemePreset preset) {
+    m_Settings.theme = MakeThemePreset(preset);
+
+#ifndef _WIN32
+    // Mek: ademas de los colores de Catppuccin Mocha, usa la misma fuente
+    // que waybar (JetBrainsMono Nerd Font) si esta instalada -- coherente
+    // con el resto del escritorio Omarchy. Como la fuente se carga una sola
+    // vez al arrancar (ver main.cpp), el cambio recien se ve tras reiniciar
+    // -- mismo comportamiento que ya tiene elegir una fuente a mano en
+    // Ajustes > Apariencia.
+    if (preset == ThemePreset::Mek) {
+        std::string fontPath = ResolveWaybarFontPath();
+        if (!fontPath.empty() && IsValidFontFile(fontPath))
+            m_Settings.theme.customFontPath = fontPath;
+    }
+#endif
+
+    ApplyTheme();
 }
 
 // ── Proyección ───────────────────────────────────────────────────────────

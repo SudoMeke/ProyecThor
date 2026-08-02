@@ -144,6 +144,7 @@ void SettingsPanel::RenderCategoryTheme() {
             { "Ko-fi",            ThemePreset::Kofi        },
             { "Verde",            ThemePreset::Deadlock    },
             { "Galaxia",          ThemePreset::Galaxy      },
+            { "Mek",              ThemePreset::Mek         },
         };
 
         int perRow = std::max(1, (int)(ImGui::GetContentRegionAvail().x / 90.0f));
