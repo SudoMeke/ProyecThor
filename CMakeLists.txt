@@ -599,4 +599,16 @@ endif()
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
         )
     endif()
+
+    # Entrada de menu (.desktop) -- el icono de arriba solo lo hace
+    # encontrable POR NOMBRE ("Icon=proyecthor" en el .desktop, ver
+    # packaging/proyecthor.desktop), pero sin instalar el .desktop en si el
+    # entorno de escritorio nunca se entera de que la app existe (no
+    # aparece en el menu de aplicaciones aunque el binario+icono esten bien
+    # instalados). Esto faltaba.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+        )
+    endif()
 endif()
