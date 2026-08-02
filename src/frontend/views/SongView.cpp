@@ -278,7 +278,23 @@ void SongView::Render()
 
     if (m_ShowEditor)
     {
-        if (!m_EditView.Render())
+        bool stillEditing = m_EditView.Render();
+
+        // El editor pudo haber renombrado el archivo en disco al guardar por
+        // primera vez una cancion con Titulo propio (ver SongEditView::
+        // FlushIfDirty / RenameNewSongToTitleIfApplicable). La seleccion
+        // global todavia apunta al nombre viejo -- si no la actualizamos, el
+        // resto de la app (Cast/Sync, volver a abrir el editor mas tarde)
+        // sigue buscando un archivo que ya no existe.
+        const std::string& currentFilename = m_EditView.GetFilename();
+        if (currentFilename != selection.title)
+        {
+            selection.title    = currentFilename;
+            m_CurrentSongTitle  = currentFilename;
+            core.SetSelection(selection);
+        }
+
+        if (!stillEditing)
         {
             m_ShowEditor = false;
             // El editor pudo haber cambiado el override de duracion por

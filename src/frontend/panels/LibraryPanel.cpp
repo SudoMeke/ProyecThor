@@ -487,6 +487,21 @@ void LibraryPanel::Render()
     // ahora.
     m_OClock.Update();
 
+    // Un archivo pudo haber cambiado de nombre en disco desde un lugar sin
+    // acceso directo a este ctx (ver SongEditView::FlushIfDirty /
+    // RenameNewSongToTitleIfApplicable) -- reescanea de verdad (RefreshList)
+    // en vez de solo reordenar lo ya cargado, y sigue apuntando m_SelectedIndex
+    // a la cancion actualmente seleccionada bajo su nombre nuevo.
+    if (ForceLibraryRescan())
+    {
+        ForceLibraryRescan() = false;
+        RefreshList();
+
+        const std::string currentTitle = Core::PresentationCore::Get().PeekSelection().title;
+        auto it = std::find(m_Items.begin(), m_Items.end(), currentTitle);
+        m_SelectedIndex = (it != m_Items.end()) ? (int)std::distance(m_Items.begin(), it) : -1;
+    }
+
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     if (m_CurrentCategory != m_PrevCategory)
