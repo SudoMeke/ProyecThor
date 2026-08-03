@@ -27,7 +27,7 @@ std::string PickFolder(const std::string& title = "Elegir carpeta");
 // conversor de Render. IFileSaveDialog en Windows, zenity --file-selection
 // --save / kdialog --getsavefilename en Linux (Wayland incluido, mismo
 // motivo que PickFolder). `defaultPath` sugiere carpeta+nombre inicial
-// (con extension). Devuelve "" si cancela.
+// (con extensión). Devuelve "" si cancela.
 std::string PickSaveVideoPath(const std::string& defaultPath);
 
 // Mismo patron que PickSaveVideoPath pero filtrado a texto plano (.txt) --

@@ -22,19 +22,19 @@ namespace ProyecThor::UI {
             "Acerca de ProyecThor",
 
             // About
-            "Software profesional para gestion de proyecciones.",
+            "Software profesional para gestión de proyecciones.",
             "Sin fines de lucro. Funcionamos mediante donaciones\ndel equipo de desarrollo y la comunidad.",
 
             // LibraryPanel
-            "Canciones", "Videos", "Imagenes", "Biblia", "Documentos",
+            "Canciones", "Videos", "Imágenes", "Biblia", "Documentos",
             "Buscar por nombre o letra...", "Sin reproductor disponible.",
 
             // BibleView
-            "Biblia:", "Libros", "Capitulos",
+            "Biblia:", "Libros", "Capítulos",
             "Buscar libro, cap. o vers. (Gn 1:1)", "Limpiar Historial",
             "Error: No se pudo cargar el archivo XML de la Biblia.",
             "Editar", "Guardar en XML",
-            "  LIBROS", "  CAPITULOS",
+            "  LIBROS", "  CAPÍTULOS",
 
             // SongView
             "Tabla de sonidos", "Eliminar letras", "Editar esta canción",
@@ -46,22 +46,22 @@ namespace ProyecThor::UI {
             "Usa los controles del monitor para proyectar.",
 
             // TransitionPanel
-            "Efectos de Transicion",
-            "Sin transicion",
+            "Efectos de Transición",
+            "Sin transición",
             "Disolver",
             "Zoom In",
             "Zoom Out",
-            "Duracion de la transicion",
+            "Duración de la transición",
             "Tip: Las transiciones se aplican al cambiar de estrofa o proyectar nuevo contenido.",
 
             // DocumentView
-            "El documento no tiene paginas generadas.",
+            "El documento no tiene páginas generadas.",
             "Documento: %s",
-            "Pagina %d de %d",
+            "Página %d de %d",
             "de",
             "<< Anterior",
             "Siguiente >>",
-            "Proyectar Pagina Actual",
+            "Proyectar Página Actual",
 
             // MonitorView
             "PREVIEW", "  PREVIEW ",
@@ -71,13 +71,13 @@ namespace ProyecThor::UI {
             "MUTE##lm", "Stp##p",
 
             // ControlPanel
-            "Controles Rapidos",
+            "Controles Rápidos",
             "QUITAR LETRA",
             "DETENER VIDEO",
-            "Solo se detecto 1 pantalla. Conecta un segundo monitor para proyectar.",
+            "Solo se detectó 1 pantalla. Conecta un segundo monitor para proyectar.",
             "Pantallas detectadas: %d",
             "Salida: [%d] %s  (%dx%d)",
-            "EMPEZAR PROYECCION",
+            "EMPEZAR PROYECCIÓN",
             "APAGAR PROYECTOR",
             "Proyectando activamente",
             "Proyector inactivo",
@@ -87,10 +87,10 @@ namespace ProyecThor::UI {
             "    Fondos y Videos", "    Recargar    ",
             "Arrastra videos a assets/backgrounds",
             "  + Nuevo Estilo  ", "  Recargar Fuentes  ",
-            "Crea tu primer estilo con el boton de arriba",
-            "  Ajustes Rapidos (sin guardar)",
-            "Fuente", "Color del Texto", "Tamanio  %.0f px",
-            "Alineacion horizontal", "Alineacion vertical",
+            "Crea tu primer estilo con el botón de arriba",
+            "  Ajustes Rápidos (sin guardar)",
+            "Fuente", "Color del Texto", "Tamaño  %.0f px",
+            "Alineación horizontal", "Alineación vertical",
             "Izq", "Centro", "Der",
             "Arriba", "Centro##v", "Abajo",
             "ACTIVO", "Guardar en XML",
@@ -105,8 +105,8 @@ namespace ProyecThor::UI {
             "Transmitir a Pantalla Principal",
 
             // QuickNotes
-            "Notas Rapidas",
-            "Escribe un mensaje para mostrar instantaneamente en pantalla.",
+            "Notas Rápidas",
+            "Escribe un mensaje para mostrar instantáneamente en pantalla.",
             "Mostrar en Pantalla (F5)",
             "Ocultar Mensaje (ESC)",
             "EN VIVO",
@@ -114,7 +114,7 @@ namespace ProyecThor::UI {
             // SettingsPanel
             "Selecciona el idioma de la interfaz de usuario.",
             "Idioma de la Interfaz",
-            "El cambio de idioma se aplica al guardar y reiniciar la aplicacion.\nAlgunas cadenas de texto pueden requerir reinicio completo.",
+            "El cambio de idioma se aplica al guardar y reiniciar la aplicación.\nAlgunas cadenas de texto pueden requerir reinicio completo.",
             "Vista Previa de Cadenas",
             "Preferencias",
             "Buscar (Libro Abreviado + 1:1)",
@@ -262,7 +262,7 @@ namespace ProyecThor::UI {
             "Pesquisar por nome ou letra...", "Sem reprodutor disponivel.",
 
             // BibleView
-            "Biblia:", "Livros", "Capitulos",
+            "Biblia:", "Livros", "Capítulos",
             "Pesquisar livro, cap. ou vers. (Gn 1:1)", "Limpar Historico",
             "Erro: Nao foi possivel carregar o ficheiro XML da Biblia.",
             "Editar", "Guardar em XML",
@@ -287,13 +287,13 @@ namespace ProyecThor::UI {
             "Dica: As transicoes sao aplicadas ao mudar de estrofe ou ao projetar novo conteudo.",
 
             // DocumentView
-            "O documento nao tem paginas geradas.",
+            "O documento nao tem páginas geradas.",
             "Documento: %s",
-            "Pagina %d de %d",
+            "Página %d de %d",
             "de",
             "<< Anterior",
             "Seguinte >>",
-            "Projetar Pagina Atual",
+            "Projetar Página Atual",
 
             // MonitorView
             "PREVIEW (So Video)", "  PREVIEW  SEM SINAL",
@@ -303,7 +303,7 @@ namespace ProyecThor::UI {
             "MUTE##lm", "Stp##p",
 
             // ControlPanel
-            "Controlos Rapidos",
+            "Controlos Rápidos",
             "REMOVER LETRA",
             "PARAR VIDEO",
             "Apenas 1 ecra detetado. Conecte um segundo monitor para projetar.",
@@ -320,7 +320,7 @@ namespace ProyecThor::UI {
             "Arraste videos para assets/backgrounds",
             "  + Novo Estilo  ", "  Recarregar Fontes  ",
             "Crie o seu primeiro estilo com o botao acima",
-            "  Definicoes Rapidas (nao guardado)",
+            "  Definicoes Rápidas (nao guardado)",
             "Fonte", "Cor do Texto", "Tamanho  %.0f px",
             "Alinhamento horizontal", "Alinhamento vertical",
             "Esq", "Centro", "Dir",
@@ -337,7 +337,7 @@ namespace ProyecThor::UI {
             "Transmitir para o Ecra Principal",
 
             // QuickNotes
-            "Notas Rapidas",
+            "Notas Rápidas",
             "Escreva uma mensagem para mostrar instantaneamente no ecra.",
             "Mostrar no Ecra (F5)",
             "Ocultar Mensagem (ESC)",

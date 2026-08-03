@@ -9,7 +9,7 @@
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  LayersBgTab — toda la logica del tab "Fondos"
+//  LayersBgTab — toda la lógica del tab "Fondos"
 //  Layout tipo ProPresenter: carpetas en una columna angosta a la izquierda,
 //  contenido de la carpeta seleccionada en el area central. Toolbar compacta
 //  arriba (solo iconos, sin titulos) con importar / nueva carpeta / zoom /

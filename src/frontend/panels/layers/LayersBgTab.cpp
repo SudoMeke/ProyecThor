@@ -236,7 +236,7 @@ bool LayersBgTab::ImportBackground() {
     COMDLG_FILTERSPEC fs[] = {
         {L"Video e Imagen", L"*.mp4;*.mkv;*.avi;*.mov;*.jpg;*.jpeg;*.png"},
         {L"Videos",         L"*.mp4;*.mkv;*.avi;*.mov"},
-        {L"Imagenes",       L"*.jpg;*.jpeg;*.png"}
+        {L"Imágenes",       L"*.jpg;*.jpeg;*.png"}
     };
     dlg->SetFileTypes(3, fs); dlg->SetFileTypeIndex(1); dlg->SetTitle(L"Importar Fondo");
     FILEOPENDIALOGOPTIONS o = 0; dlg->GetOptions(&o);
@@ -272,7 +272,7 @@ bool LayersBgTab::ImportBackground() {
 }
 #else
 bool LayersBgTab::ImportBackground() {
-    // En Linux se usa "zenity --file-selection" con seleccion multiple como
+    // En Linux se usa "zenity --file-selection" con selección multiple como
     // reemplazo del dialogo IFileOpenDialog de Windows. Requiere que zenity
     // este instalado en el sistema (paquete "zenity" en la mayoria de las
     // distribuciones).
@@ -854,7 +854,7 @@ void LayersBgTab::RenderContentArea(float w, float h) {
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
         const char* msg = m_CurrentBgFolder.empty()
-            ? "Sin fondos aun. Usa el boton + de arriba para importar."
+            ? "Sin fondos aun. Usa el botón + de arriba para importar."
             : "Esta carpeta esta vacia.";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));

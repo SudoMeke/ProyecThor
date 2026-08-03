@@ -128,10 +128,10 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
     if (m_Resolution.hasBook) {
         std::string crumb = bible.books[m_Resolution.bookIdx].name;
         if (m_Resolution.hasChapter)
-            crumb += "   >   Capitulo " + std::to_string(m_Resolution.chapterNumber);
+            crumb += "   >   Capítulo " + std::to_string(m_Resolution.chapterNumber);
         DrawHint(crumb);
     } else {
-        DrawHintIcon("searchico", "Buscador rapido");
+        DrawHintIcon("searchico", "Buscador rápido");
     }
 
     ImGui::Spacing();
@@ -141,7 +141,7 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
 
     const char* stepLabel =
         (m_Step == QuickNavStep::Book)    ? "Libro" :
-        (m_Step == QuickNavStep::Chapter) ? "Capitulo" : "Versiculo";
+        (m_Step == QuickNavStep::Chapter) ? "Capítulo" : "Versiculo";
 
     ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
     ImGui::TextUnformatted(stepLabel);
@@ -175,9 +175,9 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
     } else if (m_Step == QuickNavStep::Chapter) {
         const BookData& book = bible.books[m_Resolution.bookIdx];
         if (!book.chapters.empty()) {
-            DrawHint("Capitulos disponibles: " + std::to_string(book.chapters.front().number)
+            DrawHint("Capítulos disponibles: " + std::to_string(book.chapters.front().number)
                 + " - " + std::to_string(book.chapters.back().number)
-                + "   (Enter vacio = capitulo " + std::to_string(book.chapters.front().number) + ")");
+                + "   (Enter vacio = capítulo " + std::to_string(book.chapters.front().number) + ")");
         }
     } else {
         const ChapterData& chap = bible.books[m_Resolution.bookIdx].chapters[m_Resolution.chapterIdx];
@@ -255,7 +255,7 @@ void BibleQuickNav::ConfirmBookStep(const BibleData& bible) {
 void BibleQuickNav::ConfirmChapterStep(const BibleData& bible) {
     const BookData& book = bible.books[m_Resolution.bookIdx];
     if (book.chapters.empty()) {
-        m_StatusMessage = "Este libro no tiene capitulos cargados";
+        m_StatusMessage = "Este libro no tiene capítulos cargados";
         return;
     }
 
@@ -264,7 +264,7 @@ void BibleQuickNav::ConfirmChapterStep(const BibleData& bible) {
         chapNum = book.chapters.front().number;
     } else {
         try { chapNum = std::stoi(m_ChapterBuffer); }
-        catch (...) { m_StatusMessage = "Capitulo invalido"; return; }
+        catch (...) { m_StatusMessage = "Capítulo invalido"; return; }
     }
 
     for (int ci = 0; ci < (int)book.chapters.size(); ci++) {
@@ -278,7 +278,7 @@ void BibleQuickNav::ConfirmChapterStep(const BibleData& bible) {
     }
 
     if (!m_Resolution.hasChapter) {
-        m_StatusMessage = "Ese capitulo no existe";
+        m_StatusMessage = "Ese capítulo no existe";
         return;
     }
 
@@ -292,7 +292,7 @@ bool BibleQuickNav::ConfirmVerseStep(const BibleData& bible) {
     const ChapterData& chap = book.chapters[m_Resolution.chapterIdx];
 
     if (chap.verses.empty()) {
-        m_StatusMessage = "Este capitulo no tiene versiculos cargados";
+        m_StatusMessage = "Este capítulo no tiene versiculos cargados";
         return false;
     }
 

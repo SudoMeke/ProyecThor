@@ -1106,7 +1106,7 @@ void UIManager::RenderModeToolbar()
             if (clicked) ImGui::OpenPopup("##modeTbStylesPopup");
         }
         {
-            // Abre Ajustes directo en "Proyeccion" (indice 1 de k_Categories,
+            // Abre Ajustes directo en "Proyección" (indice 1 de k_Categories,
             // ver SettingsPanel.cpp) -- Streaming (RTMP) vive ahi como
             // subcategoria, junto a Red/Mobile/OSC (ver CategoryProjection.cpp).
             bool clicked = RenderPill("Streaming", HomeIcons::DrawIcon_Broadcast, false, true, gap);
@@ -1144,7 +1144,7 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
     float       clearGroupW  = clearIconSz + clearIconGap + clearTxtSz.x;
     float       clearBtnW    = clearGroupW + 24.0f;
 
-    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Publico").x + 14.0f, rowH);
+    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
     ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x    + 14.0f, rowH);
 
     const float gap   = 14.0f;
@@ -1153,7 +1153,7 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
 
     ImGui::SetCursorPos(ImVec2(startX, (railH - rowH) * 0.5f));
 
-    if (StatusDotToggle(dl, "##modeTbDotAudience", "Publico", audienceOn, MT::k_LiveAccent, rowH))
+    if (StatusDotToggle(dl, "##modeTbDotAudience", "Público", audienceOn, MT::k_LiveAccent, rowH))
         ToggleAudience(!audienceOn);
 
     ImGui::SameLine(0.0f, gap);
@@ -1567,7 +1567,7 @@ void UIManager::RenderMainMenuBar()
 
             if (ImGui::BeginMenu(str.importLabel))
             {
-                if (ImGui::MenuItem("Importar cancion desde portapapeles"))
+                if (ImGui::MenuItem("Importar canción desde portapapeles"))
                 {
                     const char* clip = ImGui::GetClipboardText();
                     if (clip && clip[0] != '\0')

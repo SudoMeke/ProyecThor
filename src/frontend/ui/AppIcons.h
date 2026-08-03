@@ -36,7 +36,7 @@ inline void DrawIcon_Pads(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 }
 
 // Yggdrasil — arbol sin hojas (tronco + ramas desnudas), el "arbol del
-// mundo": funcion fundamental de primer nivel, no un icono de red generico.
+// mundo": función fundamental de primer nivel, no un icono de red generico.
 inline void DrawIcon_Yggdrasil(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     float thick = sz * 0.06f;

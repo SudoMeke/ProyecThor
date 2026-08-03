@@ -16,7 +16,7 @@ struct SongBgEntry {
 };
 
 // Lista los fondos de assets/backgrounds (misma carpeta que usa el tab
-// "Fondos", ver LayersBgTab) — version liviana, sin miniaturas ni cache de
+// "Fondos", ver LayersBgTab) — versión liviana, sin miniaturas ni cache de
 // texturas, solo para poblar un combo de seleccion.
 std::vector<SongBgEntry> ListSongBackgrounds();
 

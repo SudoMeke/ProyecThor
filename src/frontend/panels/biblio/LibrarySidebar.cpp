@@ -31,7 +31,7 @@ static constexpr int kSideMode_Overlay    = 4;
 
 namespace ProyecThor::Library {
 
-// Progreso animado (0..1) de "mostrar titulo" — misma idea que IconRail.cpp,
+// Progreso animado (0..1) de "mostrar título" — misma idea que IconRail.cpp,
 // para que este sidebar (implementacion propia, no comparte RenderIconRail)
 // se comporte igual que los otros 3 rails ante Vista > Titulos en barras.
 static float RailLabelProgress()

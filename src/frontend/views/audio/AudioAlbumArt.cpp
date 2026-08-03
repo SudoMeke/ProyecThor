@@ -538,7 +538,7 @@ AlbumArt ExtractAlbumArt(const std::string& utf8FilePath)
         // Nota: .wav, .aac (ADTS crudo) y .wma no llevan portada embebida
         // en un contenedor estandar soportado aqui, por lo que se omiten.
     } catch (const std::exception& e) {
-        std::cerr << "[AlbumArt] Excepcion al leer portada: " << e.what() << std::endl;
+        std::cerr << "[AlbumArt] Excepción al leer portada: " << e.what() << std::endl;
     }
 
     if (!art.HasData())

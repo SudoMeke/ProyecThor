@@ -247,7 +247,7 @@ bool ShaderCard(ImVec2 origin, const char* id, IconFn icon, ImU32 accent,
     ImGui::TextUnformatted(*enabled ? "Activo" : "Inactivo");
     ImGui::PopStyleColor();
 
-    // Insignia "RECOMENDADO": entre el titulo y el toggle, con lugar de
+    // Insignia "RECOMENDADO": entre el título y el toggle, con lugar de
     // sobra ya que los titulos de estas tarjetas son cortos.
     if (recommended) {
         ImGui::SetWindowFontScale(0.78f);
@@ -399,7 +399,7 @@ void ShadersPanel::RenderContent() {
 
     std::vector<Effect> effects;
     effects.push_back(
-        { "fsr", IconUpscale, IM_COL32(90, 170, 245, 255), "FSR 1.0", "Reescala y afila video de baja resolucion (AMD, funciona en cualquier GPU).",
+        { "fsr", IconUpscale, IM_COL32(90, 170, 245, 255), "FSR 1.0", "Reescala y afila video de baja resolución (AMD, funciona en cualquier GPU).",
           &p.fsrEnabled, "Nitidez", &p.fsrSharpness, 0.0f, 2.0f,
           [&](bool v){ core.SetFSREnabled(v); }, [&](float v){ core.SetFSRSharpness(v); } });
     if (hasNvidiaGpu) {
@@ -417,7 +417,7 @@ void ShadersPanel::RenderContent() {
           &p.grainEnabled, "Intensidad", &p.grainIntensity, 0.0f, 1.0f,
           [&](bool v){ core.SetGrainEnabled(v); }, [&](float v){ core.SetGrainIntensity(v); } });
     effects.push_back(
-        { "saturation", IconSaturation, IM_COL32(235, 110, 165, 255), "Saturacion", "Colores mas vivos o desaturados hasta blanco y negro.",
+        { "saturation", IconSaturation, IM_COL32(235, 110, 165, 255), "Saturación", "Colores mas vivos o desaturados hasta blanco y negro.",
           &p.saturationEnabled, "Cantidad", &p.saturationAmount, 0.0f, 2.0f,
           [&](bool v){ core.SetSaturationEnabled(v); }, [&](float v){ core.SetSaturationAmount(v); } });
     effects.push_back(
@@ -441,7 +441,7 @@ void ShadersPanel::RenderContent() {
           &p.bloomEnabled, "Intensidad", &p.bloomIntensity, 0.0f, 1.0f,
           [&](bool v){ core.SetBloomEnabled(v); }, [&](float v){ core.SetBloomIntensity(v); } });
     effects.push_back(
-        { "chromaticaberration", IconChromaticAberration, IM_COL32(235, 100, 200, 255), "Aberracion cromatica", "Desfase de color RGB en los bordes, efecto retro/cinematografico.",
+        { "chromaticaberration", IconChromaticAberration, IM_COL32(235, 100, 200, 255), "Aberración cromática", "Desfase de color RGB en los bordes, efecto retro/cinematografico.",
           &p.chromaticAberrationEnabled, "Intensidad", &p.chromaticAberrationIntensity, 0.0f, 1.0f,
           [&](bool v){ core.SetChromaticAberrationEnabled(v); }, [&](float v){ core.SetChromaticAberrationIntensity(v); } });
     effects.push_back(

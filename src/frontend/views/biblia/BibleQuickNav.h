@@ -88,7 +88,7 @@ double m_OpenSince    = -1.0; // ImGui::GetTime() cuando se llamo Open()
 
     std::vector<int> m_BookCandidates; // numeros canonicos que calzan con m_BookBuffer
 
-    std::string  m_StatusMessage; // mensaje breve de error (ej: "Capitulo invalido")
+    std::string  m_StatusMessage; // mensaje breve de error (ej: "Capítulo invalido")
 
     QuickNavResolution m_Resolution;
 };

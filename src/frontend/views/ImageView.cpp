@@ -379,7 +379,7 @@ void ImageView::RenderAdjustmentsPanel() {
     // Contraste
     ImGui::SliderFloat("Contraste",   &m_Adj.contrast,     0.0f,  3.0f, "%.2f");
     // Saturacion
-    ImGui::SliderFloat("Saturacion",  &m_Adj.saturation,   0.0f,  3.0f, "%.2f");
+    ImGui::SliderFloat("Saturación",  &m_Adj.saturation,   0.0f,  3.0f, "%.2f");
     // Hue
     ImGui::SliderFloat("Hue",         &m_Adj.hue,        -180.0f, 180.0f, "%.1f deg");
     // Temperatura
@@ -403,4 +403,4 @@ void ImageView::ResetAdjustments() {
     m_Adj = ImageAdjustments{};
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

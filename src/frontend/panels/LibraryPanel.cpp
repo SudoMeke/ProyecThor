@@ -670,7 +670,7 @@ void LibraryPanel::Render()
 // SongEditView permite renombrar el titulo visible desde adentro.
 void LibraryPanel::CreateNewSong()
 {
-    const std::string base = "Nueva cancion";
+    const std::string base = "Nueva canción";
     std::string filename = base + ".txt";
     int suffix = 2;
     while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
@@ -770,7 +770,7 @@ void LibraryPanel::ImportFile()
     if      (m_CurrentCategory == LibraryCategory::Videos)
         ofn.lpstrFilter = L"Videos\0*.mp4;*.mkv;*.avi;*.mov\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Images)
-        ofn.lpstrFilter = L"Imagenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
+        ofn.lpstrFilter = L"Imágenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Multimedia)
         ofn.lpstrFilter = L"Video, audio o imagen\0*.mp4;*.mkv;*.avi;*.mov;*.mp3;*.flac;*.wav;*.ogg;*.aac;*.m4a;*.wma;*.opus;*.aiff;*.jpg;*.jpeg;*.png\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Songs)
@@ -794,7 +794,7 @@ void LibraryPanel::ImportFile()
             filter = "--file-filter=Videos | *.mp4 *.mkv *.avi *.mov";
             break;
         case LibraryCategory::Images:
-            filter = "--file-filter=Imagenes | *.jpg *.jpeg *.png";
+            filter = "--file-filter=Imágenes | *.jpg *.jpeg *.png";
             break;
         case LibraryCategory::Multimedia:
             filter = "--file-filter=Video, audio o imagen | *.mp4 *.mkv *.avi *.mov "
@@ -839,7 +839,7 @@ void LibraryPanel::ImportFile()
 
 // =============================================================================
 //  Render (conversor de formato) — migrado tal cual desde LibraryManagerPanel
-//  (seccion "Biblioteca" del workspace, retirada del todo: ver LibrarySideMode
+//  (sección "Biblioteca" del workspace, retirada del todo: ver LibrarySideMode
 //  ::Render en LibraryPanel.h y el grupo "Red"/"Reloj"/"Render" del sidebar en
 //  LibrarySidebar.cpp). Convierte Video/Audio ya importados a otro formato
 //  aprovechando ffmpeg (ver MediaConverter.h) — Video vive en assets/videos,
@@ -1040,7 +1040,7 @@ void LibraryPanel::RenderConverterSection()
         ImGui::Dummy(ImVec2(0.0f, 16.0f));
         DS::GlassSectionHeader("CODEC");
         static const char* kCodecLabels[] = {
-            "Automatico (sin recodificar)", "H.264", "H.265 (mas compresion)", "VP9", "AV1 (mas compresion, mas lento)"
+            "Automático (sin recodificar)", "H.264", "H.265 (mas compresion)", "VP9", "AV1 (mas compresion, mas lento)"
         };
         constexpr int kCodecCount = (int)(sizeof(kCodecLabels) / sizeof(kCodecLabels[0]));
         int codecIdx = (int)m_ConvertCodec;
@@ -1171,7 +1171,7 @@ void LibraryPanel::RenderConverterSection()
             outputPath = UI::PickSaveVideoPath(suggested);
             cancelled  = outputPath.empty();
         } else {
-            // Carpeta fija: mismo criterio de nombre unico "nunca pisa un
+            // Carpeta fija: mismo criterio de nombre único "nunca pisa un
             // archivo existente" que antes, pero resuelto contra esa
             // carpeta en vez de la carpeta de origen.
             fs::path    presetDir = U8Path(m_ConvertPresetFolder);
@@ -1209,4 +1209,4 @@ void LibraryPanel::RenderConverterSection()
     if (!haveSource) { ImGui::EndDisabled(); }
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

@@ -139,7 +139,7 @@ void SongView::RenderSongSettingsPopup(const std::string& songFilename)
     if (ImGui::BeginPopup("songSettingsPopup"))
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::TextUnformatted("Preset de esta cancion");
+        ImGui::TextUnformatted("Preset de esta canción");
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
@@ -264,7 +264,7 @@ void SongView::Render()
         ReloadTempoMeta(selection.title);
     }
 
-    // Cue "consumir una vez" de PresentationCore: una cancion recien creada
+    // Cue "consumir una vez" de PresentationCore: una canción recien creada
     // (ver Library::CreateNewSong) pide entrar directo al editor unificado,
     // sin popup, apenas la seleccion actual coincide con el archivo nuevo.
     {
@@ -383,9 +383,9 @@ void SongView::RenderBrowseGrid()
 
     // ── Barra superior: solo el slider de tamano + el nombre del archivo ────
     // Antes tenia un titulo (con un bug de idiomas que le hacia mostrar texto
-    // de la Biblia) y un boton "Limpiar pantalla" redundante con el que ya
+    // de la Biblia) y un botón "Limpiar pantalla" redundante con el que ya
     // existe en el panel Control. Se sacan los dos: el slider queda como
-    // unico control, arriba, simple. Estilo "HTML": track fino + thumb
+    // único control, arriba, simple. Estilo "HTML": track fino + thumb
     // circular animado (DS::ModernSlider) en vez del slider "pelado"/grueso
     // de ImGui por defecto; el label visible se cambia por un tooltip,
     // mismo patron que LPZoomSlider en Fondos/Overlays/Estilos.
@@ -427,7 +427,7 @@ void SongView::RenderBrowseGrid()
         ProyecThor::Library::SetSongMeta(selection.title, meta);
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Tempo (BPM) de la cancion. 0 = auto-avance desactivado.");
+        ImGui::SetTooltip("Tempo (BPM) de la canción. 0 = auto-avance desactivado.");
 
     ImGui::SameLine();
     bool canAutoAdvance = m_TempoBpm > 0 && !selection.contentData.empty();
@@ -452,7 +452,7 @@ void SongView::RenderBrowseGrid()
         }
     }
     if (!canAutoAdvance && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Configura un tempo (BPM) para poder reproducir automaticamente.");
+        ImGui::SetTooltip("Configura un tempo (BPM) para poder reproducir automáticamente.");
     ImGui::EndDisabled();
 
     ImGui::SameLine();
@@ -534,7 +534,7 @@ void SongView::RenderBrowseGrid()
 
     if (ImGui::BeginTable("StanzasGrid", columns, ImGuiTableFlags_SizingStretchSame))
     {
-        // ── Tarjeta 0: ajustes de la cancion (estilo "Intro" de ProPresenter,
+        // ── Tarjeta 0: ajustes de la canción (estilo "Intro" de ProPresenter,
         //    ver RenderSettingsCard) — reemplaza el estilo por defecto de
         //    categoria: cada cancion guarda su propio preset aca. ─────────────
         {
@@ -701,4 +701,4 @@ RenderStanzaColorBar(selection.title, (int)i, p_min, p_max, barH);
     }
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

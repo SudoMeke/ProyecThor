@@ -100,7 +100,7 @@ bool   m_AltComboFired  = false;
     ImVec2 m_FavoritesBtnPos  = {};
     ImVec2 m_FavoritesBtnSize = {};
 
-    // Buscador rapido tipo "quick nav" (overlay, letra por letra, con
+    // Buscador rápido tipo "quick nav" (overlay, letra por letra, con
     // previsualizacion en vivo de Libro / Capitulo / Versiculo)
     BibleQuickNav m_QuickNav;
     ImVec2        m_QuickNavBtnPos  = {};

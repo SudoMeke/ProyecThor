@@ -134,12 +134,12 @@ void MonitorQueueEngine::PlayIndex(int index)
         // operador reportaba tener que mutear/desmutear a mano para que
         // sonara. Invertir el orden hace que el permiso de audio ya este
         // vigente ANTES de cargar el clip, sin depender de una segunda
-        // pasada de "auto-correccion".
+        // pasada de "auto-corrección".
         core.SetProjecting(true);
 
         // FIX: la cola marcaba isProjecting=true pero nunca se aseguraba de
         // que el monitor destino estuviera configurado — eso solo pasaba si
-        // el operador ademas prendia a mano el punto "Publico" en Vista en
+        // el operador además prendia a mano el punto "Público" en Vista en
         // Vivo (ViewPanel::ToggleAudience). Ahora la cola se asegura de
         // tener el monitor destino fijado por su cuenta, igual que hace
         // ToggleAudience (que tampoco crea ya una ventana nativa propia —

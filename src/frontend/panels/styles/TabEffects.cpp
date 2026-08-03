@@ -80,7 +80,7 @@ void TabEffects::Render(StyleData& data, float colWidth) {
     RenderEffectCard("Sombra", CanvaPalette::Accent, colWidth,
                       fx.shadowEnabled, fx.shadowColor, &fx.shadowIntensity, "Distancia");
 
-    RenderEffectCard("Aberracion cromatica", CanvaPalette::Accent, colWidth,
+    RenderEffectCard("Aberración cromática", CanvaPalette::Accent, colWidth,
                       fx.chromaticAberrationEnabled, nullptr,
                       &fx.chromaticAberrationIntensity, "Intensidad");
 

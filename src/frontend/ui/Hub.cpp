@@ -58,7 +58,7 @@ static float HubHoverLerp(ImGuiID id, bool hovered, float speed = 12.0f) {
 // ── Registro de versiones y portadas ────────────────────────────────────────
 //  Cada entrada define su propia imagen de portada, de forma que agregar una
 //  nueva actualizacion con una foto distinta sea tan simple como anadir una
-//  linea aqui. "id" es el mismo valor que usa el modal (selectedUpdateVer).
+//  linea aquí. "id" es el mismo valor que usa el modal (selectedUpdateVer).
 // ─────────────────────────────────────────────────────────────────────────
 struct UpdateVersionInfo {
     int         id;         // Identificador interno (coincide con selectedUpdateVer)
@@ -86,11 +86,11 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         12, "0.5.1",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "ACTUALIZACIÓN", "ACTUALIZACIÓN",
         "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
         "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro de reloj dentro del "
         "editor de Overlays: lo posicionas y le das estilo una sola vez, y se reemplaza en vivo "
-        "por la hora/cronometro activo — la transmision a pantalla ahora depende de que overlay "
+        "por la hora/cronómetro activo — la transmisión a pantalla ahora depende de que overlay "
         "tengas activo, en vez de un modo aparte. Overlays con reordenar capas y overlays de "
         "reloj predeterminados listos para probar. Corregido un bug por el cual el cuadriculado "
         "de \"sin fondo\" del editor de Overlays podia quedar horneado como fondo opaco al "
@@ -98,76 +98,76 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         11, "0.5.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "GRAN ACTUALIZACIÓN", "GRAN ACTUALIZACIÓN",
         "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Ajustes reorganizado por completo: cada configuracion ahora es su propia pagina, con "
-        "buscador incluido, Proyeccion y Pantallas agrupadas juntas, y Red/Mobile/Streaming/OSC "
-        "viviendo dentro de Proyeccion. Nueva opcion \"Bucle falso\" para Fondos, que reproduce "
-        "hacia adelante y hacia atras en vez de cortar siempre al mismo frame. Nueva seccion de "
-        "Overlays: crea textos, formas e imagenes en un editor a pantalla completa y proyectalos "
+        "Ajustes reorganizado por completo: cada configuración ahora es su propia página, con "
+        "buscador incluido, Proyección y Pantallas agrupadas juntas, y Red/Mobile/Streaming/OSC "
+        "viviendo dentro de Proyección. Nueva opción \"Bucle falso\" para Fondos, que reproduce "
+        "hacia adelante y hacia atras en vez de cortar siempre al mismo frame. Nueva sección de "
+        "Overlays: crea textos, formas e imágenes en un editor a pantalla completa y proyectalos "
         "como una capa transparente encima del fondo y la letra (antes tapaban el fondo por "
-        "error). Vista en Vivo renovada: reproductor mas simple, Overlays/Chat/Pads/Reloj ahora "
+        "error). Vista en Vivo renovada: reproductor más simple, Overlays/Chat/Pads/Reloj ahora "
         "se abren dentro del mismo panel en vez de ventanas flotantes sueltas. Corregidos varios "
         "colores que quedaban fijos sin importar el tema elegido y los fondos de los paneles "
         "ahora son solidos en vez de verse transparentes."
     },
     {
         10, "0.4.3",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
+        "ACTUALIZACIÓN PREELIMINAR", "ACTUALIZACIÓN PREELIMINAR",
         "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
+        "Nueva sección Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
         "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
-        "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
-        "en Vivo mas compacto, editor de Estilos renovado, nuevo instalador para "
-        "Windows, Biblioteca con Biblias y cancion de bienvenida incluidas de entrada, "
-        "corregido el titulo de las canciones al guardarlas, y varias correcciones de "
+        "Biblia a pantalla completa, selector rápido (Alt+Espacio), Monitor de Vista "
+        "en Vivo más compacto, editor de Estilos renovado, nuevo instalador para "
+        "Windows, Biblioteca con Biblias y canción de bienvenida incluidas de entrada, "
+        "corregido el título de las canciones al guardarlas, y varias correcciones de "
         "estabilidad."
     },
     {
         9, "0.4.2",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
+        "ACTUALIZACIÓN PREELIMINAR", "ACTUALIZACIÓN PREELIMINAR",
         "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
         "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
         "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
         "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
         "fuentes en grilla y nuevos efectos de texto (fondo, borde, sombra, glow, neon, "
         "subrayado), y un monton de efectos nuevos en Shaders: NIS (NVIDIA), VHS, Cine, "
-        "Contraste, Luminosidad, Blur, Sharpen, Bloom, Aberracion cromatica y TAA."
+        "Contraste, Luminosidad, Blur, Sharpen, Bloom, Aberración cromática y TAA."
     },
     {
         8, "0.4.1",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "ACTUALIZACIÓN", "ACTUALIZACIÓN",
         "bg_splash3.png",
-        "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
+        "Nuevo panel de Shaders (FSR, CRT, grano, saturación, vinetado y "
         "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
-        "y vista en grilla/lista en Biblioteca > Videos, escenas rapidas "
+        "y vista en grilla/lista en Biblioteca > Videos, escenas rápidas "
         "guardadas para Captura, fuente de interfaz personalizable, un "
         "motor de renderizado alternativo (libvlc en ventana nativa) para "
         "videos, editor de canciones rediseñado por completo y menu "
-        "principal reorganizado, con una correccion importante de "
-        "sincronizacion de audio/video en equipos de bajos recursos."
+        "principal reorganizado, con una corrección importante de "
+        "sincronización de audio/video en equipos de bajos recursos."
     },
     {
         7, "0.4.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "GRAN ACTUALIZACIÓN", "GRAN ACTUALIZACIÓN",
         "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Cola de videos mucho mas estable, nueva seccion de Overlays, "
-        "Vista en Vivo con acciones rapidas, panel de Rendimiento y un "
-        "rediseño mas compacto de Fondos y Estilos."
+        "Cola de videos mucho más estable, nueva sección de Overlays, "
+        "Vista en Vivo con acciones rápidas, panel de Rendimiento y un "
+        "rediseño más compacto de Fondos y Estilos."
     },
     {
         6, "0.3.5",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
+        "ACTUALIZACIÓN PREELIMINAR", "ACTUALIZACIÓN PREELIMINAR",
         "splash_bg1.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
+        "Versión estable: Audio Rework completo, biblioteca renovada con sistema de "
         "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "
         "teclado globales y mejoras de estabilidad en toda la aplicacion."
     },
     {
         2, "0.3.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "GRAN ACTUALIZACIÓN", "GRAN ACTUALIZACIÓN",
         "splash_bg1.png",
-        "Nuevas herramientas de transmision, optimizaciones y estabilidad de red."
+        "Nuevas herramientas de transmisión, optimizaciones y estabilidad de red."
     },
 };
 
@@ -417,62 +417,53 @@ void Hub::UpdateAnimations(float dt) {
     }
 }
 
-// Encabezado de seccion con una linea sutil debajo (mismo estilo "Cat()" que
-// usa el modal de detalle), reusado tanto por el panel Novedades como por
-// "Resumen local" en la columna derecha.
-static void DrawSectionHeader(const char* title, float width) {
-    ImGui::SetWindowFontScale(1.2f);
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-    ImGui::Text("%s", title);
-    ImGui::PopStyleColor();
-    ImGui::SetWindowFontScale(1.0f);
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 2.0f), ImVec2(p.x + width, p.y + 2.0f), HT::BorderFaint);
-    ImGui::Dummy(ImVec2(0.0f, 13.0f));
-}
+// Carrusel de novedades — se muestra una vez por version nueva.
+void Hub::RenderWhatsNewIfNeeded() {
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) return;
 
-// Panel "Novedades" -- reemplaza al viejo carrusel de bienvenida que se
-// auto-abria una vez por version nueva. Ahora se abre solo a demanda (tecla
-// N o la tarjeta "Novedades" de la columna derecha), y consolida en un solo
-// lugar el parche mas reciente (vista grande tipo hero) y el historial
-// completo de versiones (misma tarjeta + modal de siempre, sin cambios).
-void Hub::RenderNovedadesPanel() {
-    const float target = m_NovedadesOpen ? 1.0f : 0.0f;
-    m_NovedadesAnim += (target - m_NovedadesAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
-    m_NovedadesAnim = std::clamp(m_NovedadesAnim, 0.0f, 1.0f);
-    if (m_NovedadesAnim < 0.001f) m_NovedadesAnim = 0.0f;
+    struct Slide { const char* title; const char* body; };
+    static const Slide kSlides[] = {
+        { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
+          "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
+        { "Ajustes reorganizado",
+          "Cada configuracion ahora es su propia pagina, con buscador incluido. Proyeccion y Pantallas quedaron agrupadas juntas, y Red, Mobile, Streaming y OSC pasaron a vivir dentro de Proyeccion en vez de tener su propia categoria aparte." },
+        { "Fondos: bucle falso",
+          "Nueva opcion en Ajustes > Proyeccion > Fondos: el video reproduce hacia adelante y despues \"hacia atras\" en vez de cortar siempre al mismo frame, dando sensacion de bucle continuo." },
+        { "Overlays",
+          "Crea textos, formas e imagenes en un editor a pantalla completa y proyectalos como una capa transparente encima del fondo y la letra, desde Biblioteca > Overlay o directo desde Vista en Vivo." },
+        { "Vista en Vivo renovada",
+          "Reproductor mas simple: Overlays, Chat, Pads y Reloj ahora se abren dentro del mismo panel en vez de ventanas flotantes sueltas." },
+        { "Nueva seccion: Pantallas",
+          "La configuracion de Stage ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyeccion." },
+        { "Correcciones de tema y apariencia",
+          "Varios menus y ventanas que ignoraban el tema elegido ahora lo respetan, y los fondos de los paneles son solidos en vez de verse transparentes." },
+    };
+    constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
 
-    if (!m_NovedadesOpen && m_NovedadesAnim <= 0.0f) return;
+    static int  s_Index         = 0;
+    static bool s_OpenedOnce    = false;
+    // Desmarcado por default: si el operador cierra sin marcarlo, el
+    // carrusel vuelve a aparecer en el proximo arranque (dismissedChangelog
+    // NO se persiste). Solo marcando la casilla se guarda la version actual
+    // en dismissedChangelog y deja de mostrarse.
+    static bool s_DontShowAgain = false;
+    if (!s_OpenedOnce) {
+        ImGui::OpenPopup("##WhatsNewCarousel");
+        s_OpenedOnce     = true;
+        s_Index          = 0;
+        s_DontShowAgain  = false;
+    }
 
-    ImGuiViewport* vp    = ImGui::GetMainViewport();
-    const float    fadeA = EaseOut(m_NovedadesAnim);
+    ImGuiViewport* vp      = ImGui::GetMainViewport();
+    const ImVec2   winSize = ImVec2(580.0f, 434.0f);
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
+                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
+    ImGui::SetNextWindowSize(winSize);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
-
-    // Fondo oscurecido detras del panel, mismo patron que el modal de detalle.
-    ImGui::SetNextWindowPos(vp->Pos);
-    ImGui::SetNextWindowSize(vp->Size);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 170));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::Begin("##NovedadesDim", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
-        ImGuiWindowFlags_NoBringToFrontOnFocus);
-    ImGui::End();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
-
-    const float scale  = 0.96f + 0.04f * fadeA;
-    const float panelW = 720.0f * scale, panelH = 680.0f * scale;
-
-    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(panelW, panelH), ImGuiCond_Always);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ColA(HT::Card, 255));
-    ImGui::PushStyleColor(ImGuiCol_Border,   HT::Divider);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   HT::RadiusLg);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(28.0f, 24.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(30.0f, 28.0f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.055f, 0.060f, 0.085f, 0.99f));
 
     bool vis = ImGui::Begin("##NovedadesPanel", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
@@ -489,148 +480,69 @@ void Hub::RenderNovedadesPanel() {
         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
         ImGui::TextUnformatted("Novedades");
         ImGui::PopStyleColor();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        const Slide& slide = kSlides[s_Index];
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97f, 1.0f));
+        ImGui::SetWindowFontScale(1.18f);
+        ImGui::TextWrapped("%s", slide.title);
         ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
 
-        ImGui::SameLine(headerW - 64.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-        ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-        if (ImGui::Button("Cerrar##novedades", ImVec2(64.0f, 28.0f)))
-            m_NovedadesOpen = false;
-        ImGui::PopStyleColor(4);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.74f, 0.85f, 1.0f));
+        ImGui::TextWrapped("%s", slide.body);
+        ImGui::PopStyleColor();
 
-        ImGui::Dummy(ImVec2(0.0f, 14.0f));
-
-        // ── Hero: el parche mas reciente (kUpdateRegistry[0]) ───────────────
-        const UpdateVersionInfo* latest = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
-        if (latest) {
-            const GLTextureInfo heroCover = GetCoverTexture(latest->coverFile);
-            const float heroW = headerW, heroH = 230.0f;
-
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusLg);
-            ImGui::BeginChild("##NovedadesHero", ImVec2(heroW, heroH), false, ImGuiWindowFlags_NoScrollbar);
-
-            ImDrawList* hdl  = ImGui::GetWindowDrawList();
-            const ImVec2 hMin = ImGui::GetWindowPos();
-            const ImVec2 hMax = ImVec2(hMin.x + heroW, hMin.y + heroH);
-            const bool heroHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-
-            if (heroCover.id != 0) {
-                DrawCoverImageCover(hdl, heroCover.id, heroCover.width, heroCover.height,
-                    hMin, hMax, HT::RadiusLg, ImDrawFlags_RoundCornersAll,
-                    "novedades_hero", ImGui::GetIO().DeltaTime, heroHovered, 1.08f);
-            } else {
-                hdl->AddRectFilled(hMin, hMax, ColA(HT::CardAlt, 255), HT::RadiusLg);
-            }
-
-            // Degradado oscuro en la mitad inferior para que el texto se lea
-            // bien encima de la foto de portada.
-            hdl->AddRectFilledMultiColor(
-                ImVec2(hMin.x, hMin.y + heroH * 0.32f), hMax,
-                IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 215), IM_COL32(0, 0, 0, 215));
-
-            ImGui::SetCursorPos(ImVec2(22.0f, heroH - 104.0f));
-            ImGui::BeginGroup();
-
-            // Badge tipo "pill" -- mismo criterio de medir texto real que
-            // DrawPillBadge del modal de detalle (no se comparte por vivir en
-            // ambitos de compilacion distintos: aca es un metodo de Hub, alla
-            // una lambda local del modal).
-            auto Pill = [&](const char* text, ImU32 bg, ImU32 fg) {
-                ImGui::SetWindowFontScale(0.78f);
-                const ImVec2 bs = ImGui::CalcTextSize(text);
-                ImGui::SetWindowFontScale(1.0f);
-                const ImVec2 pad(8.0f, 3.0f);
-                const ImVec2 bp = ImGui::GetCursorScreenPos();
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    ImVec2(bp.x - pad.x, bp.y - pad.y), ImVec2(bp.x + bs.x + pad.x, bp.y + bs.y + pad.y),
-                    bg, HT::RadiusSm);
-                ImGui::Dummy(ImVec2(pad.x, 0.0f));
-                ImGui::SameLine(0.0f, 0.0f);
-                ImGui::PushStyleColor(ImGuiCol_Text, fg);
-                ImGui::SetWindowFontScale(0.78f); ImGui::Text("%s", text); ImGui::SetWindowFontScale(1.0f);
-                ImGui::PopStyleColor();
-                ImGui::SameLine(0.0f, pad.x);
-            };
-            Pill(latest->modalBadge, HT::AccentBlue, HT::OnAccent);
-            // Aviso de que la GRAN actualizacion sigue en curso -- tono de
-            // advertencia (Danger), no Success (ese ya se usa para "estable").
-            Pill("AUN EN BETA / EN CONSTRUCCION", HT::Danger, HT::OnAccent);
-            ImGui::NewLine();
-
-            ImGui::SetWindowFontScale(1.5f);
-            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-            ImGui::Text("Version v%s", latest->version);
-            ImGui::PopStyleColor();
-            ImGui::SetWindowFontScale(1.0f);
-
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + heroW - 44.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 210));
-            ImGui::TextWrapped("%s", latest->summary);
-            ImGui::PopStyleColor();
-            ImGui::PopTextWrapPos();
-
-            ImGui::EndGroup();
-
-            ImGui::SetCursorPos(ImVec2(heroW - 194.0f, 18.0f));
-            ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::AccentBlue);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::AccentBlue);
-            ImGui::PushStyleColor(ImGuiCol_Text,          HT::OnAccent);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
-            if (ImGui::Button("Ver todo el detalle", ImVec2(174.0f, 32.0f))) {
-                m_SelectedUpdateVer = latest->id;
-                m_IsUpdateModalOpen = true;
-            }
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor(4);
-
-            ImGui::EndChild();
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor();
+        ImGui::SetCursorPosY(winSize.y - 130.0f);
+        float dotsW = kSlideCount * 16.0f;
+        ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2      dp = ImGui::GetCursorScreenPos();
+        for (int i = 0; i < kSlideCount; i++) {
+            ImU32 col = (i == s_Index) ? IM_COL32(120, 150, 255, 255) : IM_COL32(70, 72, 90, 255);
+            dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y + 5.0f), 5.0f, col);
         }
+        ImGui::Dummy(ImVec2(dotsW, 14.0f));
 
-        ImGui::Dummy(ImVec2(0.0f, 18.0f));
-        DrawSectionHeader("Historial de versiones", headerW);
+        ImGui::SetCursorPosY(winSize.y - 96.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.64f, 0.76f, 1.0f));
+        ImGui::Checkbox("No volver a mostrar", &s_DontShowAgain);
+        ImGui::PopStyleColor();
 
-        // ── Lista completa de versiones (misma tarjeta de siempre) ──────────
-        auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
-            const GLTextureInfo cardCover = GetCoverTexture(info.coverFile);
+        ImGui::SetCursorPosY(winSize.y - 60.0f);
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-            ImGui::BeginChild(info.version, ImVec2(headerW, 140.0f), false, ImGuiWindowFlags_NoScrollbar);
+        if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Proximamente");
 
-            ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
-            ImVec2 cardEndPos   = ImVec2(cardStartPos.x + headerW, cardStartPos.y + 140.0f);
-            const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartPos, cardEndPos);
-            const float hoverT = HubHoverLerp(ImGui::GetID(info.version), cardHovered);
+        ImGui::SameLine();
+        if (s_Index == 0) ImGui::BeginDisabled();
+        if (ImGui::Button("< Anterior", ImVec2(100, 34))) s_Index--;
+        if (s_Index == 0) ImGui::EndDisabled();
 
-            ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
-            ImGui::BeginGroup();
-
-            const float thumbW = 180.0f, thumbH = 120.0f;
-            if (cardCover.id != 0) {
-                const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
-                const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbMin.y + thumbH);
-
-                char stateKey[96];
-                snprintf(stateKey, sizeof(stateKey), "card_%s", info.version);
-
-                DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.id, cardCover.width, cardCover.height,
-                    thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCornersAll,
-                    stateKey, ImGui::GetIO().DeltaTime, cardHovered, 1.10f);
-
-                ImGui::Dummy(ImVec2(thumbW, thumbH));
-                ImGui::SameLine(0.0f, 15.0f);
+        ImGui::SameLine();
+        // "No volver a mostrar" sin marcar (default): dismissedChangelog NO
+        // se toca, asi que el carrusel vuelve a aparecer en el proximo
+        // arranque -- cerrar (con cualquiera de los dos botones) solo lo
+        // saca de la vista por esta sesion.
+        auto closeCarousel = [&]() {
+            if (s_DontShowAgain) {
+                general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
+                ProyecThor::Settings::SettingsManager::Get().Save();
             }
+            ImGui::CloseCurrentPopup();
+        };
 
-            ImGui::BeginGroup();
-            ImGui::Dummy(ImVec2(0.0f, 5.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-            ImGui::Text("%s", info.cardBadge);
+        if (s_Index == kSlideCount - 1) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
+            if (ImGui::Button("Entendido", ImVec2(110, 34)))
+                closeCarousel();
             ImGui::PopStyleColor();
             ImGui::SetWindowFontScale(1.1f);
             ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
@@ -856,88 +768,45 @@ void Hub::RenderContent(float w, float h) {
         ImGui::PopStyleColor();
     }
 
-    ImGui::Dummy(ImVec2(0.0f, 14.0f));
+    ImGui::Dummy(ImVec2(0.0f, 32.0f));
 
-    // ── Hero: "Empezar a proyectar" -- panel dominante, ancho completo ───
-    {
-        const float cardW = contentW;
-        const float cardH = 130.0f;
+    dl->AddLine(
+        ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
+        ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
+        HT::Divider, 1.0f);
 
-        ImGui::SetCursorPosX(contentX);
-        const ImVec2 cardMin = ImGui::GetCursorScreenPos();
-        const ImVec2 cardMax = ImVec2(cardMin.x + cardW, cardMin.y + cardH);
+    ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
-        // El InvisibleButton va primero para tener el estado de hover/click
-        // antes de dibujar -- los elementos visuales de mas abajo se dibujan
-        // encima (mismo drawlist) sin afectar el hit-test, ya resuelto aca.
-        ImGui::InvisibleButton("##heroBtn", ImVec2(cardW, cardH));
-        const bool hovered = ImGui::IsItemHovered();
-        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        if (ImGui::IsItemClicked())
-            m_LaunchRequested = true;
-        const float hoverT = HubHoverLerp(ImGui::GetID("##heroBtn"), hovered);
+    ImGui::SetCursorPosX(30.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertFloat4ToU32(
+        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x + 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y + 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z + 0.08f, 1.0f)));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertFloat4ToU32(
+        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x - 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y - 0.08f,
+               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z - 0.08f, 1.0f)));
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::OnAccent);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
 
-        // Halo/glow detras de la tarjeta, se agranda levemente con el hover.
-        for (int i = 6; i >= 1; i--) {
-            const float t     = static_cast<float>(i) / 6.0f;
-            const float pad   = 8.0f + t * 22.0f * (1.0f + hoverT * 0.4f);
-            const float alpha = 0.045f * (1.0f - t) * (0.6f + hoverT * 0.6f);
-            dl->AddRectFilled(ImVec2(cardMin.x - pad, cardMin.y - pad), ImVec2(cardMax.x + pad, cardMax.y + pad),
-                ColAf(HT::AccentBlue, alpha), HT::RadiusLg + pad * 0.3f);
-        }
+    if (ImGui::Button("Empezar a proyectar", ImVec2(w - 60.0f, 45.0f)))
+        m_LaunchRequested = true;
 
-        dl->AddRectFilled(cardMin, cardMax, ColAf(HT::Card, 0.92f), HT::RadiusLg);
-        dl->AddRect(cardMin, cardMax, ColAf(HT::AccentBlue, 0.35f + hoverT * 0.35f), HT::RadiusLg, 0, 1.5f + hoverT);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
 
-        // Icono de "play" dibujado a mano (triangulo), no depende de que la
-        // fuente activa de la UI tenga un glifo de reproduccion. Ahora a la
-        // izquierda de la tarjeta (panel ancho) en vez de arriba centrado.
-        const float   iconR       = 30.0f;
-        const ImVec2  iconCenter  = ImVec2(cardMin.x + 70.0f, (cardMin.y + cardMax.y) * 0.5f);
-        dl->AddCircleFilled(iconCenter, iconR + 12.0f, ColAf(HT::AccentBlue, 0.16f + hoverT * 0.12f), 40);
-        dl->AddCircleFilled(iconCenter, iconR, HT::AccentBlue, 40);
-        const float triW = iconR * 0.85f, triH = iconR * 0.95f;
-        dl->AddTriangleFilled(
-            ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y - triH * 0.5f),
-            ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y + triH * 0.5f),
-            ImVec2(iconCenter.x + triW * 0.58f, iconCenter.y),
-            HT::OnAccent);
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-        const float textX = iconCenter.x + iconR + 28.0f;
-        ImGui::SetCursorScreenPos(ImVec2(textX, cardMin.y + cardH * 0.5f - 34.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-        ImGui::SetWindowFontScale(1.5f);
-        ImGui::TextUnformatted("Empezar a proyectar");
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
+    ImGui::SetCursorPosX(30.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
+    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
 
-        ImGui::SetCursorScreenPos(ImVec2(textX, cardMin.y + cardH * 0.5f + 6.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::TextUnformatted("Letra, Biblia, video y overlays en tiempo real");
-        ImGui::PopStyleColor();
-
-        ImGui::SetCursorScreenPos(ImVec2(cardMin.x, cardMax.y));
-        ImGui::Dummy(ImVec2(0.0f, 0.0f)); // registra el limite real del panel (evita el aviso de ImGui)
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, 14.0f));
-
-    // ── Tarjeta "Abrir configuracion" -- debajo de "Empezar a proyectar",
-    // con la textura del usuario como fondo (bin/assets/ui/textures) e
-    // inclinacion 3D solo al pasar el mouse (ver DrawTiltTextureCard).
-    {
-        const float cfgH = 64.0f;
-
-        ImGui::SetCursorPosX(contentX);
-        const ImVec2 cfgMin = ImGui::GetCursorScreenPos();
-        const ImVec2 cfgMax = ImVec2(cfgMin.x + contentW, cfgMin.y + cfgH);
-
-        const GLTextureInfo cfgTex = GetCoverTexture(kConfigCardTextureFile);
-        bool cfgHovered = false, cfgClicked = false;
-        DrawTiltTextureCard(dl, cfgTex.id, cfgTex.width, cfgTex.height, cfgMin, cfgMax,
-            ImGui::GetID("##cfgCard"), &cfgHovered, &cfgClicked);
-        if (cfgClicked)
-            m_OpenSettingsRequested = true;
+    if (ImGui::Button("Abrir configuracion", ImVec2(w - 60.0f, 36.0f)))
+        m_OpenSettingsRequested = true;
 
         // Degradado oscuro abajo (mismo recurso que el hero de Novedades)
         // para que el texto se lea encima de la foto.
@@ -1028,18 +897,10 @@ void Hub::RenderContent(float w, float h) {
 
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-    // ── Accesos rapidos -- panel con fila de botones a Ajustes ───────────
-    {
-        ImGui::SetCursorPosX(contentX);
-        const ImVec2 qMin = ImGui::GetCursorScreenPos();
-        const float  qH   = 64.0f;
-        const ImVec2 qMax = ImVec2(qMin.x + contentW, qMin.y + qH);
-        dl->AddRectFilled(qMin, qMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusLg);
-
-        ImGui::SetCursorScreenPos(ImVec2(qMin.x + 18.0f, qMin.y + 8.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::TextUnformatted("Accesos rapidos");
-        ImGui::PopStyleColor();
+    ImGui::SetCursorPosX(30.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+    ImGui::TextUnformatted("Accesos rapidos");
+    ImGui::PopStyleColor();
 
         // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia,
         // 1=Proyeccion, 2=Stage, 3=Audio, 4=Canciones, 5=Teclas, 6=Idioma,
@@ -1207,7 +1068,7 @@ void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
         }
     }
 
-    // Lineas de conexion tipo "red/constelacion": se sacan en Galaxia (se ve
+    // Lineas de conexión tipo "red/constelación": se sacan en Galaxia (se ve
     // mas a cableado de red que a cielo estrellado sin ellas).
     if (!isGalaxy) {
         for (int i = 0; i < BG_PARTICLE_COUNT; i++) {
@@ -1229,35 +1090,132 @@ void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
     }
 }
 
-// "Resumen local" -- metricas + top canciones, llamado por RenderContent
-// como la ultima seccion del flujo de paneles. w es el ancho de contenido
-// completo (contentW), no una columna angosta: las dos metric cards ahora
-// van lado a lado en vez de apiladas.
-// Panel unico y compacto (pedido explicito: nada de tarjetas +
-// sparkline + lista de canciones expandidas de una) -- tres numeros clave
-// en una sola fila, mismo lenguaje visual que las tarjetas de
-// Biblioteca/Novedades.
-void Hub::RenderResumenLocalSection(float w) {
-    const int  totalProjections = ProyecThor::UI::GetTotalSongProjections();
-    const auto perfSummary      = ProyecThor::UI::GetPerformanceSummary();
-    const auto topSongs         = ProyecThor::UI::GetTopSongPlayStats(1);
+void Hub::RenderMainContent(float w, float h) {
+    static GLuint bgTex             = 0;
+    static bool   texLoaded         = false;
+    static bool   isUpdateModalOpen = false;
+    static int    selectedUpdateVer = 12; // id de kUpdateRegistry (12 = v0.5.1, la mas reciente)
 
-    const float panelH = 78.0f;
-    ImDrawList* dl   = ImGui::GetWindowDrawList();
-    const ImVec2 pMin = ImGui::GetCursorScreenPos();
-    const ImVec2 pMax = ImVec2(pMin.x + w, pMin.y + panelH);
-    dl->AddRectFilled(pMin, pMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusLg);
+    if (!texLoaded) {
+        bgTex     = LoadTextureFromFile("splash_bg2.png");
+        texLoaded = true;
+    }
 
-    ImGui::SetCursorScreenPos(ImVec2(pMin.x + 18.0f, pMin.y + 8.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-    ImGui::TextUnformatted("Resumen local");
-    ImGui::PopStyleColor();
+    if (!m_BgParticlesInit)
+        InitBgParticles(w, h);
 
-    auto Stat = [&](float x, const char* label, const std::string& value, ImU32 color) {
-        ImGui::SetCursorScreenPos(ImVec2(x, pMin.y + 30.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, color);
-        ImGui::SetWindowFontScale(1.12f);
-        ImGui::TextUnformatted(value.c_str());
+    // dt propio para las animaciones de parallax de esta funcion (no depende
+    // de m_Time para poder reutilizar el helper de forma autonoma).
+    float parallaxDt;
+    {
+        static std::chrono::steady_clock::time_point s_LastParallaxT = std::chrono::steady_clock::now();
+        const auto now = std::chrono::steady_clock::now();
+        parallaxDt = std::chrono::duration<float>(now - s_LastParallaxT).count();
+        s_LastParallaxT = now;
+        parallaxDt = std::clamp(parallaxDt, 0.0f, 0.05f);
+    }
+
+    ImGui::BeginChild("##MainContent", ImVec2(w, h), false);
+
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2      wp = ImGui::GetWindowPos();
+        RenderBgCanvas(dl, wp, w, h);
+        if (bgTex != 0)
+            dl->AddImage((ImTextureID)(intptr_t)bgTex, wp, ImVec2(wp.x + w, wp.y + h),
+                ImVec2(0,0), ImVec2(1,1), ColAf(IM_COL32_WHITE, HT::BgImageAlpha));
+    }
+
+    const float marginX       = 50.0f;
+    const float marginTop     = 40.0f;
+    const float spacingX      = 40.0f;
+    const float totalWidth    = w - (marginX * 2.0f);
+    const float leftColWidth  = totalWidth * 0.55f;
+    const float rightColWidth = totalWidth * 0.45f - spacingX;
+
+    ImGui::SetCursorPos(ImVec2(marginX, marginTop));
+
+    // Encabezado de seccion con una linea sutil debajo (mismo estilo "Cat()"
+    // que ya usa el modal de actualizacion), para dar jerarquia visual
+    // consistente entre ambas columnas.
+    auto SectionHeader = [&](const char* title, float width) {
+        ImGui::SetWindowFontScale(1.3f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::Text("%s", title);
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.0f);
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 2.0f), ImVec2(p.x + width, p.y + 2.0f), HT::BorderFaint);
+        ImGui::Dummy(ImVec2(0.0f, 13.0f));
+    };
+
+    // ── Columna izquierda ─────────────────────────────────────────────────────
+    ImGui::BeginGroup();
+
+    SectionHeader("Actualizaciones", leftColWidth);
+
+    // Altura del bloque de acciones que va debajo de la lista (boton "Buscar
+    // actualizaciones" + "Foro / Soporte"), para poder descontarla del calculo
+    // del scroll y que este siempre termine justo antes de dichos botones.
+    const float actionsRowH   = 36.0f;
+    const float gapBeforeList = ImGui::GetCursorPosY(); // lo ya consumido: titulo + dummy
+    const float gapAfterList  = 15.0f;                  // Dummy entre la lista y los botones
+    const float bottomMargin  = 55.0f;                  // espacio final, grande, tras los botones
+
+    // Alto restante disponible para la lista scrolleable: ocupa todo lo que
+    // sobra hasta el final del panel, dejando lugar para los botones de abajo
+    // y un margen inferior comodo.
+    const float updatesListH = std::max(
+        220.0f,
+        h - marginTop - gapBeforeList - gapAfterList - actionsRowH - bottomMargin
+    );
+
+    // Contenedor scrolleable para la lista de actualizaciones
+    ImGui::BeginChild("##UpdatesList", ImVec2(leftColWidth, updatesListH), false);
+
+    // Función auxiliar para dibujar tarjetas de actualización.
+    // Cada tarjeta usa la portada especifica de su propia entrada en el registro,
+    // con recorte tipo "cover" + parallax al hover y esquinas redondeadas.
+    auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
+        const GLTextureInfo cardCover = GetCoverTexture(info.coverFile);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
+        ImGui::BeginChild(info.version, ImVec2(leftColWidth, 140.0f), false, ImGuiWindowFlags_NoScrollbar);
+
+        ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
+        ImVec2 cardEndPos   = ImVec2(cardStartPos.x + leftColWidth, cardStartPos.y + 140.0f);
+        const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartPos, cardEndPos);
+        const float hoverT = HubHoverLerp(ImGui::GetID(info.version), cardHovered);
+
+        ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
+        ImGui::BeginGroup();
+
+        const float thumbW = 180.0f, thumbH = 120.0f;
+        if (cardCover.id != 0) {
+            const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
+            const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbMin.y + thumbH);
+
+            char stateKey[96];
+            snprintf(stateKey, sizeof(stateKey), "card_%s", info.version);
+
+            DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.id, cardCover.width, cardCover.height,
+                thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCornersAll,
+                stateKey, parallaxDt, cardHovered, 1.10f);
+
+            ImGui::Dummy(ImVec2(thumbW, thumbH));
+            ImGui::SameLine(0.0f, 15.0f);
+        }
+
+        ImGui::BeginGroup();
+        ImGui::Dummy(ImVec2(0.0f, 5.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::Text("%s", info.cardBadge);
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.1f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::Text("Version v%s", info.version);
+        ImGui::PopStyleColor();
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos(ImVec2(x, pMin.y + 52.0f));
@@ -1561,7 +1519,7 @@ void Hub::RenderUpdateDetailModal() {
 
             // Badge tipo "pill": mide el texto real y dibuja el padding con
             // el rect, en vez del hack anterior de espacios embebidos en el
-            // string (" ACTUALIZACION MAYOR ") para simular relleno.
+            // string (" ACTUALIZACIÓN MAYOR ") para simular relleno.
             auto DrawPillBadge = [&](const char* text) {
                 ImGui::SetWindowFontScale(0.8f);
                 const ImVec2 bs = ImGui::CalcTextSize(text);
@@ -1578,7 +1536,7 @@ void Hub::RenderUpdateDetailModal() {
                 ImGui::PopStyleColor();
                 ImGui::SameLine(0.0f, pad.x);
             };
-            DrawPillBadge(selInfo ? selInfo->modalBadge : "ACTUALIZACION");
+            DrawPillBadge(selInfo ? selInfo->modalBadge : "ACTUALIZACIÓN");
             ImGui::SameLine(0, 40);
 
             ImGui::SetWindowFontScale(0.8f);
@@ -1590,7 +1548,7 @@ void Hub::RenderUpdateDetailModal() {
 
             ImGui::SetWindowFontScale(1.7f);
             ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-            ImGui::Text("Actualizacion v%s", selInfo ? selInfo->version : "?");
+            ImGui::Text("Actualización v%s", selInfo ? selInfo->version : "?");
             ImGui::PopStyleColor();
             ImGui::SetWindowFontScale(1.0f);
             ImGui::Dummy(ImVec2(0,20));
@@ -1645,112 +1603,112 @@ void Hub::RenderUpdateDetailModal() {
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 12) { // v0.5.1
                 Cat("Contadores (antes \"Reloj y Contadores\")");
-                Bul("Se acorto el nombre de la seccion a secas \"Contadores\" en el sidebar de Home.");
+                Bul("Se acorto el nombre de la sección a secas \"Contadores\" en el sidebar de Home.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Reloj dentro de Overlays");
-                Bul("Nuevo cuadro de Reloj en el editor de Overlays (boton junto a Texto/Forma/Imagen): lo arrastras, le das tamaño y estilo de texto (fuente, color, sombra, contorno, fondo) una sola vez, como una capa mas.");
-                Bul("Ese cuadro es solo un marcador de posicion: al proyectar el overlay que lo contiene, se reemplaza en vivo por la hora o el cronometro activo — nunca queda \"horneado\" como texto fijo en el overlay guardado.");
-                Bul("La transmision a pantalla del reloj ya no es un modo aparte a elegir: aparece automaticamente si el overlay que tenes activo incluye un cuadro de Reloj. El panel de Contadores muestra un aviso si el overlay activo no tiene uno.");
-                Bul("La transmision a dispositivos en red (LAN) sigue siendo un interruptor propio (Apagado / Solo LAN), independiente del overlay.");
+                Bul("Nuevo cuadro de Reloj en el editor de Overlays (botón junto a Texto/Forma/Imagen): lo arrastras, le das tamaño y estilo de texto (fuente, color, sombra, contorno, fondo) una sola vez, como una capa más.");
+                Bul("Ese cuadro es solo un marcador de posición: al proyectar el overlay que lo contiene, se reemplaza en vivo por la hora o el cronómetro activo — nunca queda \"horneado\" como texto fijo en el overlay guardado.");
+                Bul("La transmisión a pantalla del reloj ya no es un modo aparte a elegir: aparece automáticamente si el overlay que tenes activo incluye un cuadro de Reloj. El panel de Contadores muestra un aviso si el overlay activo no tiene uno.");
+                Bul("La transmisión a dispositivos en red (LAN) sigue siendo un interruptor propio (Apagado / Solo LAN), independiente del overlay.");
                 Bul("Se agregaron overlays de reloj predeterminados (barra inferior, esquina y centrado) listos para probar de una, sin tener que armar uno desde cero.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Editor de Overlays");
                 Bul("Las capas ahora se pueden reordenar (subir/bajar) desde la lista lateral, para elegir cual queda encima de cual.");
-                Bul("Encabezado del editor mas plano y compacto (se saco el degradado de color) y menos relleno en los margenes, para un look mas minimalista.");
+                Bul("Encabezado del editor más plano y compacto (se saco el degradado de color) y menos relleno en los margenes, para un look más minimalista.");
                 Bul("Corregido: el cuadriculado que indica \"sin fondo\" en el editor podia terminar guardado como fondo opaco (gris/negro) en el PNG del overlay en vez de quedarse transparente, sobre todo en overlays sin capas de imagen.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Correcciones en Contadores");
                 Bul("El aviso de \"overlay activo sin cuadro de reloj\" y otros textos largos ya no se cortaban contra el borde del panel: ahora se ajustan en varias lineas.");
-                Bul("Corregido un icono roto en el boton \"Avanzar\" del titulo/mensaje del reloj.");
+                Bul("Corregido un icono roto en el botón \"Avanzar\" del título/mensaje del reloj.");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 11) { // v0.5.0
                 Cat("Ajustes reorganizado");
-                Bul("Cada configuracion ahora es su propia pagina: al elegir una subcategoria en el menu de la izquierda, se ve sola en vez de tener que scrollear una lista larga con todo junto.");
-                Bul("Nuevo buscador arriba del menu de Ajustes, para encontrar una configuracion por nombre sin tener que navegar categoria por categoria.");
-                Bul("Proyeccion y Pantallas ahora estan agrupadas juntas en el menu, y Red, Mobile, Streaming y OSC pasaron a vivir DENTRO de Proyeccion en vez de tener su propia categoria aparte.");
-                Bul("Se saco la categoria General (Inicio, Guardado automatico, Carpetas por defecto): no se usaba.");
+                Bul("Cada configuración ahora es su propia página: al elegir una subcategoria en el menu de la izquierda, se ve sola en vez de tener que scrollear una lista larga con todo junto.");
+                Bul("Nuevo buscador arriba del menu de Ajustes, para encontrar una configuración por nombre sin tener que navegar categoría por categoría.");
+                Bul("Proyección y Pantallas ahora estan agrupadas juntas en el menu, y Red, Mobile, Streaming y OSC pasaron a vivir DENTRO de Proyección en vez de tener su propia categoría aparte.");
+                Bul("Se saco la categoría General (Inicio, Guardado automático, Carpetas por defecto): no se usaba.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Fondos: bucle falso");
-                Bul("Nueva opcion en Ajustes > Proyeccion > Fondos: en vez de cortar siempre al mismo frame inicial al repetir, el fondo reproduce hacia adelante y despues \"hacia atras\", dando sensacion de bucle continuo sin el salto de siempre.");
+                Bul("Nueva opción en Ajustes > Proyección > Fondos: en vez de cortar siempre al mismo frame inicial al repetir, el fondo reproduce hacia adelante y despues \"hacia atras\", dando sensacion de bucle continuo sin el salto de siempre.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca > Render");
-                Bul("El conversor de formato tiene un diseño mas moderno, con el texto que antes se cortaba contra el borde del panel ahora bien acomodado.");
-                Bul("Se saco el boton de Reloj del sidebar de Biblioteca: ya estaba disponible en la barra inferior de Vista en Vivo, quedaba duplicado.");
+                Bul("El conversor de formato tiene un diseño más moderno, con el texto que antes se cortaba contra el borde del panel ahora bien acomodado.");
+                Bul("Se saco el botón de Reloj del sidebar de Biblioteca: ya estaba disponible en la barra inferior de Vista en Vivo, quedaba duplicado.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Nueva seccion: Overlays");
-                Bul("Crea overlays (textos, formas e imagenes) en un editor nuevo a pantalla completa, desde Biblioteca > Overlay.");
-                Bul("Un overlay se guarda como imagen PNG con transparencia real: al mostrarlo, se proyecta como una capa aparte ENCIMA del fondo y la letra, dejando ver lo que haya debajo — antes, por error, lo reemplazaba todo como si fuera un fondo mas.");
-                Bul("El editor tiene una barra flotante para agregar texto, formas o imagenes, lista de capas, y boton de Eliminar para la capa seleccionada.");
-                Bul("Acceso rapido tambien desde Vista en Vivo (boton Overlays de la barra inferior), con galeria de miniaturas para aplicar uno sin salir de la pantalla.");
+                Cat("Nueva sección: Overlays");
+                Bul("Crea overlays (textos, formas e imágenes) en un editor nuevo a pantalla completa, desde Biblioteca > Overlay.");
+                Bul("Un overlay se guarda como imagen PNG con transparencia real: al mostrarlo, se proyecta como una capa aparte ENCIMA del fondo y la letra, dejando ver lo que haya debajo — antes, por error, lo reemplazaba todo como si fuera un fondo más.");
+                Bul("El editor tiene una barra flotante para agregar texto, formas o imágenes, lista de capas, y botón de Eliminar para la capa seleccionada.");
+                Bul("Acceso rápido tambien desde Vista en Vivo (botón Overlays de la barra inferior), con galeria de miniaturas para aplicar uno sin salir de la pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Vista en Vivo renovada");
-                Bul("Reproductor mas simple: se saco el encabezado \"PROGRAM - ON AIR\" y los botones de transporte pasaron a iconos chicos y planos, mas parecidos al resto de apps de proyeccion.");
-                Bul("Overlays, Chat, Pads y Reloj ahora se abren DENTRO del mismo panel de Vista en Vivo (con scroll propio si hay mucho contenido), en vez de ventanas flotantes sueltas que quedaban desconectadas del boton que las abria.");
-                Bul("La barra de botones de abajo quedo pegada justo debajo del reproductor, sin espacio vacio en el medio, y con los botones mas parejos entre si.");
-                Bul("Se saco la tira de Stage que aparecia arriba del video: quedaba duplicada con el boton que ya permite alternar toda la vista entre Publico y Stage.");
+                Bul("Reproductor más simple: se saco el encabezado \"PROGRAM - ON AIR\" y los botones de transporte pasaron a iconos chicos y planos, más parecidos al resto de apps de proyección.");
+                Bul("Overlays, Chat, Pads y Reloj ahora se abren DENTRO del mismo panel de Vista en Vivo (con scroll propio si hay mucho contenido), en vez de ventanas flotantes sueltas que quedaban desconectadas del botón que las abria.");
+                Bul("La barra de botones de abajo quedo pegada justo debajo del reproductor, sin espacio vacio en el medio, y con los botones más parejos entre si.");
+                Bul("Se saco la tira de Stage que aparecia arriba del video: quedaba duplicada con el botón que ya permite alternar toda la vista entre Público y Stage.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Nueva seccion: Pantallas");
-                Bul("La configuracion de Stage (que monitor usa, si es por red, que muestra cada pantalla) ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyeccion.");
+                Cat("Nueva sección: Pantallas");
+                Bul("La configuración de Stage (que monitor usa, si es por red, que muestra cada pantalla) ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyección.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Correcciones de tema y apariencia");
-                Bul("Varias ventanas y menus (el menu superior, los popups de Estilos y el selector rapido Alt+Espacio, el Monitor de Control) ignoraban el tema elegido en Ajustes > Apariencia y se quedaban siempre con los mismos colores fijos — ahora todos respetan el tema.");
+                Bul("Varias ventanas y menus (el menu superior, los popups de Estilos y el selector rápido Alt+Espacio, el Monitor de Control) ignoraban el tema elegido en Ajustes > Apariencia y se quedaban siempre con los mismos colores fijos — ahora todos respetan el tema.");
                 Bul("Los fondos de los paneles eran levemente transparentes y dejaban ver lo que hubiera atras, dando un aspecto \"lavado\" o inconsistente segun el tema — ahora son solidos.");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 10) { // v0.4.3
-                Cat("Nueva seccion: Conexiones");
+                Cat("Nueva sección: Conexiones");
                 Bul("Toolbar nueva arriba de todo (Hub / Proyector / Conexiones / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
-                Bul("OSC: enviar mensajes a luces/controladores externos con direccion IP y puerto configurables, mas \"Aprender\" (OSC Learn) para vincular un fader externo a parametros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");
-                Bul("Red y Chat, disponibles ahora en dos lugares a la vez (Conexiones y su ubicacion original en Biblioteca/Herramientas): es la misma conexion y el mismo chat, no hay que elegir uno.");
+                Bul("OSC: enviar mensajes a luces/controladores externos con dirección IP y puerto configurables, más \"Aprender\" (OSC Learn) para vincular un fader externo a parámetros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");
+                Bul("Red y Chat, disponibles ahora en dos lugares a la vez (Conexiones y su ubicacion original en Biblioteca/Herramientas): es la misma conexión y el mismo chat, no hay que elegir uno.");
                 Bul("Streaming en vivo real por RTMP (Twitch, YouTube, Facebook, etc.), con captura de camara/pantalla, preview y control de capas tipo OBS, todo integrado en el mismo rail.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Nueva seccion: Biblioteca");
+                Cat("Nueva sección: Biblioteca");
                 Bul("Ver, renombrar y borrar tus archivos de Video, Imagen y Audio ya importados, separado de Vista en Vivo para no arriesgar nada de lo que este proyectando.");
                 Bul("Nuevo panel \"Render\": convierte tus videos y audios a otros formatos aprovechando ffmpeg, sin instalar nada aparte.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblia a pantalla completa");
-                Bul("El mismo buscador de Biblia de siempre, ahora tambien como su propia seccion a pantalla completa: libros/capitulos a la izquierda, texto grande a la derecha.");
+                Bul("El mismo buscador de Biblia de siempre, ahora tambien como su propia sección a pantalla completa: libros/capítulos a la izquierda, texto grande a la derecha.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Selector rapido y novedades");
+                Cat("Selector rápido y novedades");
                 Bul("Alt+Espacio abre un selector para saltar entre Hub, Conexiones, Biblioteca y Biblia con el teclado, sin tocar el mouse.");
-                Bul("Al abrir una version nueva de ProyecThor aparece un carrusel de novedades en el Hub, en vez de tener que buscarlas en esta misma pantalla.");
+                Bul("Al abrir una versión nueva de ProyecThor aparece un carrusel de novedades en el Hub, en vez de tener que buscarlas en esta misma pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Monitor de Vista en Vivo, mas compacto");
-                Bul("El panel de Preview del Monitor ocupaba mucho mas alto del que en realidad necesitaba: se redujo para darle bastante mas espacio al video.");
-                Bul("El boton de Play/Pausa se integro en la misma fila que Inicio / -10s / +10s / Detener, en vez de tener su propia fila completa aparte.");
-                Bul("Botones e iconos del Preview mas chicos y prolijos; la columna central (Transmitir/Loop) ahora se achica sola si el espacio disponible es menor al habitual, en vez de cortarse.");
-                Bul("Sacado el boton de Contener/Estirar de esa columna: ya estaba disponible a la derecha de Vista en Vivo, no hacia falta duplicarlo.");
+                Cat("Monitor de Vista en Vivo, más compacto");
+                Bul("El panel de Preview del Monitor ocupaba mucho más alto del que en realidad necesitaba: se redujo para darle bastante más espacio al video.");
+                Bul("El botón de Play/Pausa se integro en la misma fila que Inicio / -10s / +10s / Detener, en vez de tener su propia fila completa aparte.");
+                Bul("Botones e iconos del Preview más chicos y prolijos; la columna central (Transmitir/Loop) ahora se achica sola si el espacio disponible es menor al habitual, en vez de cortarse.");
+                Bul("Sacado el botón de Contener/Estirar de esa columna: ya estaba disponible a la derecha de Vista en Vivo, no hacia falta duplicarlo.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Editor de Estilos renovado");
                 Bul("Se le bajo el tono \"arcoiris\" que tenia (cada pestaña/tarjeta con un color distinto) a favor de un solo acento consistente con el resto de la app.");
-                Bul("Encabezado, bordes y esquinas mas sobrios y rectos, en linea con el resto de los paneles en vez de un look aparte tipo Canva.");
+                Bul("Encabezado, bordes y esquinas más sobrios y rectos, en linea con el resto de los paneles en vez de un look aparte tipo Canva.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Nuevo instalador para Windows");
-                Bul("ProyecThor ahora se instala con un instalador moderno: mas rapido, mas prolijo y con menos falsos positivos de antivirus.");
-                Bul("Si ya tenias ProyecThor instalado con una version anterior (aunque sea de un instalador viejo), no hace falta que la desinstales a mano: el instalador nuevo la detecta y la reemplaza solo, sin dejar archivos sueltos de la version vieja.");
+                Bul("ProyecThor ahora se instala con un instalador moderno: más rápido, más prolijo y con menos falsos positivos de antivirus.");
+                Bul("Si ya tenias ProyecThor instalado con una versión anterior (aunque sea de un instalador viejo), no hace falta que la desinstales a mano: el instalador nuevo la detecta y la reemplaza solo, sin dejar archivos sueltos de la versión vieja.");
                 Bul("Corregido: el icono de la aplicacion no se veia bien (aparecia en blanco) en el acceso directo y en el instalador.");
-                Bul("Las actualizaciones automaticas de esta pantalla tambien se actualizaron para descargar el instalador nuevo correctamente.");
-                Bul("Nuevo aviso en Ajustes > Actualizaciones, con un icono de informacion que te recuerda revisar \"Agregar o quitar programas\" si sospechas que quedo mas de una version instalada.");
+                Bul("Las actualizaciones automáticas de esta pantalla tambien se actualizaron para descargar el instalador nuevo correctamente.");
+                Bul("Nuevo aviso en Ajustes > Actualizaciones, con un icono de información que te recuerda revisar \"Agregar o quitar programas\" si sospechas que quedo más de una versión instalada.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca con contenido de entrada");
-                Bul("Canciones y Biblias ya no arrancan vacias en una instalacion nueva: se cargan solas una cancion de bienvenida y varias Biblias (español, ingles y portugues) para tener algo con que probar de una.");
-                Bul("Corregido: al ponerle Titulo a una cancion nueva (o cambiarselo a una ya existente) desde el editor, ahora se ve reflejado en la lista, el buscador y las playlists — antes quedaba guardado por dentro pero la Biblioteca seguia mostrando el nombre viejo (\"Nueva cancion\").");
-                Bul("Corregido: renombrar una cancion desde el menu contextual ya no le hace perder el autor, las etiquetas, el estilo/fondo preferido ni las playlists en las que estaba.");
+                Bul("Canciones y Biblias ya no arrancan vacias en una instalación nueva: se cargan solas una canción de bienvenida y varias Biblias (español, inglés y portugués) para tener algo con que probar de una.");
+                Bul("Corregido: al ponerle Título a una canción nueva (o cambiarselo a una ya existente) desde el editor, ahora se ve reflejado en la lista, el buscador y las playlists — antes quedaba guardado por dentro pero la Biblioteca seguia mostrando el nombre viejo (\"Nueva canción\").");
+                Bul("Corregido: renombrar una canción desde el menu contextual ya no le hace perder el autor, las etiquetas, el estilo/fondo preferido ni las playlists en las que estaba.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Correcciones de estabilidad");
@@ -1758,171 +1716,171 @@ void Hub::RenderUpdateDetailModal() {
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 9) { // v0.4.2
                 Cat("Pads de Vista en Vivo");
-                Bul("Corregido el problema por el cual guardar un pad (click derecho > Guardar aqui) podia no aplicar nada al presionarlo despues: ahora siempre captura estilo, fondo y captura de pantalla tal cual estan en pantalla.");
-                Bul("El panel de Pads se reorganizo en dos secciones: \"General\" (los pads de siempre) y \"Captura\", que ahora muestra las mismas escenas rapidas del panel Captura, sincronizadas — guardar o aplicar una desde cualquiera de los dos lados es lo mismo.");
-                Bul("El texto de ayuda de \"Escenas rapidas\" se reemplazo por un icono de informacion, para no saturar el panel de letra.");
+                Bul("Corregido el problema por el cual guardar un pad (click derecho > Guardar aquí) podia no aplicar nada al presionarlo despues: ahora siempre captura estilo, fondo y captura de pantalla tal cual estan en pantalla.");
+                Bul("El panel de Pads se reorganizo en dos secciones: \"General\" (los pads de siempre) y \"Captura\", que ahora muestra las mismas escenas rápidas del panel Captura, sincronizadas — guardar o aplicar una desde cualquiera de los dos lados es lo mismo.");
+                Bul("El texto de ayuda de \"Escenas rápidas\" se reemplazo por un icono de información, para no saturar el panel de letra.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Transporte y volumen de Vista en Vivo");
-                Bul("Los botones de Play/Pausa, Retroceder, Avanzar y Detener ahora son pads de colores tipo controlador MIDI, con el boton de reproduccion iluminado en rojo mientras esta en vivo.");
+                Bul("Los botones de Play/Pausa, Retroceder, Avanzar y Detener ahora son pads de colores tipo controlador MIDI, con el botón de reproducción iluminado en rojo mientras esta en vivo.");
                 Bul("El control de volumen pasa a ser un fader horizontal estilo consola de sonido en vez del slider de siempre.");
-                Bul("Corregido un icono roto en el boton de silenciar (mute) de Vista en Vivo.");
+                Bul("Corregido un icono roto en el botón de silenciar (mute) de Vista en Vivo.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblia: buscador por palabras");
-                Bul("Nuevo boton (lupa + \"Aa\") junto al buscador rapido: permite escribir una o mas palabras y muestra todos los versiculos de la Biblia activa que las contienen, para cuando no te acordas la cita exacta.");
+                Bul("Nuevo botón (lupa + \"Aa\") junto al buscador rápido: permite escribir una o más palabras y muestra todos los versiculos de la Biblia activa que las contienen, para cuando no te acordas la cita exacta.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Editor de Estilos renovado");
-                Bul("El editor de un estilo ya no abre una ventana flotante encima de todo: ahora se muestra acoplado dentro de Home, ocupando todo ese espacio, como una seccion mas de la Biblioteca.");
+                Bul("El editor de un estilo ya no abre una ventana flotante encima de todo: ahora se muestra acoplado dentro de Home, ocupando todo ese espacio, como una sección más de la Biblioteca.");
                 Bul("El selector de fuente pasa de una lista de texto a una grilla con la vista previa real de cada tipografia.");
-                Bul("Nueva pestaña \"Efectos\": fondo, borde, sombra, aberracion cromatica, glow (bloom), neon y subrayado, todo configurable por separado para el texto proyectado.");
+                Bul("Nueva pestaña \"Efectos\": fondo, borde, sombra, aberración cromática, glow (bloom), neon y subrayado, todo configurable por separado para el texto proyectado.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Shaders: muchos efectos nuevos");
-                Bul("NIS: escalador alternativo a FSR, exclusivo para placas NVIDIA (se detecta automaticamente).");
+                Bul("NIS: escalador alternativo a FSR, exclusivo para placas NVIDIA (se detecta automáticamente).");
                 Bul("VHS: sangrado de color, scanlines, bamboleo y ruido de estatica, como una cinta de video vieja.");
                 Bul("Cine: gradacion de color tipo cine, con tinte a elegir entre rojo, verde o azul.");
                 Bul("Contraste y Luminosidad: ajuste directo de contraste y brillo de la salida en vivo.");
-                Bul("Blur, Sharpen, Bloom y Aberracion cromatica: desenfoque, nitidez, resplandor de brillos y desfase de color, respectivamente.");
+                Bul("Blur, Sharpen, Bloom y Aberración cromática: desenfoque, nitidez, resplandor de brillos y desfase de color, respectivamente.");
                 Bul("TAA (antialiasing temporal): suaviza bordes mezclando con el frame anterior, a costa de un poco de desenfoque de movimiento.");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 8) { // v0.4.1
                 Cat("Editor de canciones (rediseño total)");
-                Bul("Editar una cancion ya no abre una ventana flotante encima: el mismo panel de Canciones pasa a modo edicion, con letra a la izquierda (mucho mas grande) y preview de las diapositivas a la derecha.");
-                Bul("Titulo y Autor quedan siempre a la vista; Nota, Derechos de autor y Extra se movieron detras de un boton de informacion para no restarle espacio a la letra.");
-                Bul("Todo se guarda solo mientras se escribe (sin boton Guardar), con indicador de estado y botones de Deshacer/Rehacer del ultimo cambio.");
+                Bul("Editar una canción ya no abre una ventana flotante encima: el mismo panel de Canciones pasa a modo edicion, con letra a la izquierda (mucho más grande) y preview de las diapositivas a la derecha.");
+                Bul("Título y Autor quedan siempre a la vista; Nota, Derechos de autor y Extra se movieron detras de un botón de información para no restarle espacio a la letra.");
+                Bul("Todo se guarda solo mientras se escribe (sin botón Guardar), con indicador de estado y botones de Deshacer/Rehacer del último cambio.");
                 Bul("Nuevo filtro de \"Lineas por diapositiva\" (1/2/3): separa la letra de verdad, insertando lineas en blanco reales dentro de cada estrofa, para que la division se vea en el propio texto y no solo en el preview.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Menu principal reorganizado");
                 Bul("Nuevo menu \"ProyecThor\" (primero, a la izquierda) con Preferencias y Salir.");
-                Bul("Archivo ahora es la categoria Importar, con una opcion nueva: \"Importar cancion desde portapapeles\" (crea la cancion y pega el contenido del portapapeles de una).");
+                Bul("Archivo ahora es la categoría Importar, con una opción nueva: \"Importar canción desde portapapeles\" (crea la canción y pega el contenido del portapapeles de una).");
                 Bul("\"Base de datos\" y \"Wiki\" se movieron al menu Ayuda.");
                 Bul("Nuevo menu \"Ventana\" con Pantalla completa (tambien con la tecla F11).");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Efectos de video (rediseñado + nuevos)");
                 Bul("El panel de Shaders (al lado de Overlays, en Diseño) ahora se ve como tarjetas con icono, descripcion y control de intensidad propio para cada efecto, en vez de una lista de switches.");
-                Bul("Dos efectos nuevos: Saturacion (colores mas vivos o hasta blanco y negro) y Vinetado (oscurece los bordes para enfocar el centro), sumados a FSR, CRT, grano de pelicula y FXAA.");
+                Bul("Dos efectos nuevos: Saturación (colores más vivos o hasta blanco y negro) y Vinetado (oscurece los bordes para enfocar el centro), sumados a FSR, CRT, grano de pelicula y FXAA.");
                 Bul("Nuevo efecto \"Rellenado\" (recomendado): llena las barras negras de letterbox/pillarbox con el mismo fondo, estirado y muy desenfocado, en vez de dejarlas negras — el efecto tipo Spotify Canvas / Smart TV.");
                 Bul("Cada efecto se prende o apaga por separado y se ve reflejado al instante en la salida en vivo.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca > Videos");
                 Bul("Los videos ahora muestran una miniatura real (un frame del video), igual que ya pasaba con los Fondos.");
-                Bul("Nuevo boton para alternar entre vista en lista y vista en grilla con miniaturas grandes, mas un control para agrandar o achicar las miniaturas.");
+                Bul("Nuevo botón para alternar entre vista en lista y vista en grilla con miniaturas grandes, más un control para agrandar o achicar las miniaturas.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca > Playlists");
-                Bul("El panel de \"Agregar canciones\" a una playlist es mas grande y las canciones se listan en orden alfabetico, con un boton \"+\" bien visible para agregar y una insignia verde \"Agregada\" para las que ya estan.");
+                Bul("El panel de \"Agregar canciones\" a una playlist es más grande y las canciones se listan en orden alfabetico, con un botón \"+\" bien visible para agregar y una insignia verde \"Agregada\" para las que ya estan.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Captura (camara / pantalla)");
-                Bul("Nuevas \"Escenas rapidas\": 8 botones de color donde guardar una fuente + recuadro + opacidad ya armados, para saltar entre encuadres con un solo click durante el evento.");
-                Bul("Click derecho sobre un boton para guardar la posicion libre actual ahi o borrarla; quedan guardadas entre sesiones.");
+                Bul("Nuevas \"Escenas rápidas\": 8 botones de color donde guardar una fuente + recuadro + opacidad ya armados, para saltar entre encuadres con un solo click durante el evento.");
+                Bul("Click derecho sobre un botón para guardar la posición libre actual ahi o borrarla; quedan guardadas entre sesiones.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Ajustes > Apariencia");
-                Bul("Nueva fuente de interfaz personalizable: se puede importar una tipografia propia (.ttf/.otf/.ttc) ademas de elegir entre las que ya trae la app, con reinicio guiado para aplicarla.");
-                Bul("El menu de Ajustes se reordeno con iconos por categoria y subcategorias navegables, para ubicar cada opcion mas rapido.");
+                Bul("Nueva fuente de interfaz personalizable: se puede importar una tipografia propia (.ttf/.otf/.ttc) además de elegir entre las que ya trae la app, con reinicio guiado para aplicarla.");
+                Bul("El menu de Ajustes se reordeno con iconos por categoría y subcategorías navegables, para ubicar cada opción más rápido.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Nuevo motor de video (experimental)");
-                Bul("En Ajustes > Proyeccion, opcion para elegir el motor con el que se reproducen los Videos: el de siempre (OpenGL) o uno nuevo (libvlc) que usa una ventana propia con reproduccion acelerada.");
+                Bul("En Ajustes > Proyección, opción para elegir el motor con el que se reproducen los Videos: el de siempre (OpenGL) o uno nuevo (libvlc) que usa una ventana propia con reproducción acelerada.");
                 Bul("Pensado para equipos con poca placa de video — los Fondos (loops decorativos) siempre siguen mostrandose como hasta ahora, con overlays y texto encima.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Estabilidad");
-                Bul("Corregido un problema por el cual el video de fondo podia irse desincronizando del audio con el correr de los minutos en computadoras mas lentas.");
-                Bul("Corregido: el control de FSR en Ajustes > Proyeccion y el del panel de Shaders podian mostrar y guardar valores distintos entre si.");
+                Bul("Corregido un problema por el cual el video de fondo podia irse desincronizando del audio con el correr de los minutos en computadoras más lentas.");
+                Bul("Corregido: el control de FSR en Ajustes > Proyección y el del panel de Shaders podian mostrar y guardar valores distintos entre si.");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 7) { // v0.4.0
                 Cat("Cola de videos y video en vivo");
-                Bul("La cola de videos es mucho mas confiable: los clips pasan de uno a otro sin cortes ni pantallas de carga de por medio.");
+                Bul("La cola de videos es mucho más confiable: los clips pasan de uno a otro sin cortes ni pantallas de carga de por medio.");
                 Bul("Corregido: la app ya no se traba si hacias clic varias veces seguidas sobre el mismo video.");
                 Bul("Los videos de la cola ahora siempre arrancan desde el principio, nunca aparecen a mitad de camino.");
                 Bul("Corregido un cierre inesperado de la app en Windows al usar la Vista Previa mientras habia algo en vivo.");
-                Bul("La Vista Previa de la Biblioteca ya no puede trabar ni afectar al video que esta en vivo para el publico.");
+                Bul("La Vista Previa de la Biblioteca ya no puede trabar ni afectar al video que esta en vivo para el público.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Nuevo panel de Rendimiento");
-                Bul("Panel opcional (menu Vista > Rendimiento) que muestra en vivo el uso de CPU, memoria RAM y los FPS de la app — util para saber si la computadora esta exigida durante un evento.");
+                Bul("Panel opcional (menu Vista > Rendimiento) que muestra en vivo el uso de CPU, memoria RAM y los FPS de la app — útil para saber si la computadora esta exigida durante un evento.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Overlays (nuevo)");
-                Bul("Nueva seccion para crear tus propios overlays: imagenes con texto que podes acomodar libremente arrastrandolo por la pantalla.");
+                Bul("Nueva sección para crear tus propios overlays: imágenes con texto que podes acomodar libremente arrastrandolo por la pantalla.");
                 Bul("Guardá tus overlays y usalos despues con un solo clic, igual que un fondo.");
-                Bul("Podes editar o borrar los overlays guardados desde un menu rapido.");
+                Bul("Podes editar o borrar los overlays guardados desde un menu rápido.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Vista en Vivo");
-                Bul("Nuevos botones rapidos al costado de Vista en Vivo para limpiar el texto, quitar el fondo, ajustar la proporcion o silenciar el audio sin buscar en menus.");
-                Bul("El panel de Control quedo mas simple: solo iniciar/detener la proyeccion y elegir la pantalla.");
+                Bul("Nuevos botones rápidos al costado de Vista en Vivo para limpiar el texto, quitar el fondo, ajustar la proporcion o silenciar el audio sin buscar en menus.");
+                Bul("El panel de Control quedo más simple: solo iniciar/detener la proyección y elegir la pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Fondos y Estilos");
-                Bul("Los Fondos ahora se organizan en carpetas, mas faciles de navegar.");
-                Bul("Nuevo control para agrandar o achicar las miniaturas y ver mas fondos o estilos a la vez.");
-                Bul("Animaciones mas suaves al pasar el mouse y cambiar de seccion.");
+                Bul("Los Fondos ahora se organizan en carpetas, más fáciles de navegar.");
+                Bul("Nuevo control para agrandar o achicar las miniaturas y ver más fondos o estilos a la vez.");
+                Bul("Animaciones más suaves al pasar el mouse y cambiar de sección.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Interfaz general");
-                Bul("Los 4 menus de iconos (Biblioteca, Control, Home y Diseño) se ven mas prolijos y del mismo tamaño entre si.");
+                Bul("Los 4 menus de iconos (Biblioteca, Control, Home y Diseño) se ven más prolijos y del mismo tamaño entre si.");
                 Bul("Podes ocultar los titulos debajo de los iconos (menu Vista) para ganar espacio en pantalla.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca y fuentes");
                 Bul("Corregido: al importar una fuente nueva la app se ponia en negro y habia que reiniciarla para que se viera.");
-                Bul("Al cambiar de categoria en la Biblioteca (Letra, Video, Biblia, etc.) la busqueda se limpia sola, para que un resultado vacio no se confunda con contenido que desaparecio.");
-                Bul("El fondo de cada cancion ahora se elige de tu biblioteca de Fondos en vez de buscar un archivo suelto en la computadora.");
+                Bul("Al cambiar de categoría en la Biblioteca (Letra, Video, Biblia, etc.) la busqueda se limpia sola, para que un resultado vacio no se confunda con contenido que desaparecio.");
+                Bul("El fondo de cada canción ahora se elige de tu biblioteca de Fondos en vez de buscar un archivo suelto en la computadora.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Monitor de Control (Stage)");
-                Bul("Nuevo boton en Vista en Vivo para alternar la previsualizacion entre Publico y Stage, y tener a la vista ambas salidas sin un segundo monitor.");
-                Bul("[Experimental] Opcion para que el Monitor de Control muestre exactamente lo mismo que ve el operador en Vista en Vivo, en vez de la grilla de reloj/texto.");
+                Bul("Nuevo botón en Vista en Vivo para alternar la previsualizacion entre Público y Stage, y tener a la vista ambas salidas sin un segundo monitor.");
+                Bul("[Experimental] Opción para que el Monitor de Control muestre exactamente lo mismo que ve el operador en Vista en Vivo, en vez de la grilla de reloj/texto.");
                 ImGui::Dummy(ImVec2(0,12));
             } else if (selectedUpdateVer == 6) { // v0.3.5 — version estable, changelog consolidado
                 Cat("Audio");
-                Bul("Sonido renovado: nueva pantalla de audio, portada por cancion, ecualizador y control de volumen.");
+                Bul("Sonido renovado: nueva pantalla de audio, portada por canción, ecualizador y control de volumen.");
                 Bul("Ahora podes asignar autores a las canciones.");
-                Bul("Cambiar de cancion es mas rapido y con menos cortes de audio.");
+                Bul("Cambiar de canción es más rápido y con menos cortes de audio.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Reproduccion y previsualizacion");
+                Cat("Reproducción y previsualizacion");
                 Bul("La Vista Previa y el video en vivo ahora son totalmente independientes: uno ya no afecta al otro.");
                 Bul("Corregidas las pantallas negras en el segundo monitor y videos con la proporcion incorrecta.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Cola de reproduccion");
-                Bul("La cola avanza de forma mas confiable entre videos, incluso si hay algun archivo eliminado o roto.");
+                Cat("Cola de reproducción");
+                Bul("La cola avanza de forma más confiable entre videos, incluso si hay algun archivo eliminado o roto.");
                 Bul("Corregidos casos donde la cola podia desincronizarse de lo que realmente se estaba mostrando.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblioteca");
-                Bul("Biblioteca renovada, con listas y playlists mas faciles de usar.");
+                Bul("Biblioteca renovada, con listas y playlists más fáciles de usar.");
                 Bul("Nuevo sistema de etiquetas de colores para organizar tus canciones.");
-                Bul("Busqueda mejorada y navegacion con las flechas del teclado mas prolija.");
+                Bul("Busqueda mejorada y navegación con las flechas del teclado más prolija.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Biblia");
-                Bul("Nuevos atajos de teclado para buscar libro, capitulo o versiculo mas rapido (Ctrl+F, Ctrl y Alt).");
-                Bul("Nueva seccion en Ajustes con todos los atajos disponibles.");
+                Bul("Nuevos atajos de teclado para buscar libro, capítulo o versiculo más rápido (Ctrl+F, Ctrl y Alt).");
+                Bul("Nueva sección en Ajustes con todos los atajos disponibles.");
                 ImGui::Dummy(ImVec2(0,12));
 
-                Cat("Control de proyeccion");
+                Cat("Control de proyección");
                 Bul("Mejor soporte para varios monitores (proyector y stage).");
-                Bul("Panel de control mas simple, todo en una sola fila de botones.");
+                Bul("Panel de control más simple, todo en una sola fila de botones.");
                 Bul("El mute y el volumen ahora se mantienen sincronizados entre el control y el monitor.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Red local y streaming");
-                Bul("Transmision por red local (LAN) mas estable, con menos cortes.");
-                Bul("Corregidos errores de imagen y de marca de agua en la transmision.");
+                Bul("Transmisión por red local (LAN) más estable, con menos cortes.");
+                Bul("Corregidos errores de imagen y de marca de agua en la transmisión.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Estadisticas locales");
-                Bul("Nuevo resumen en el Hub con el total de proyecciones y las canciones mas usadas.");
+                Bul("Nuevo resumen en el Hub con el total de proyecciones y las canciones más usadas.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Soporte para Linux");
@@ -1935,7 +1893,7 @@ void Hub::RenderUpdateDetailModal() {
 
                 Cat("Interfaz y experiencia");
                 Bul("Nuevo logo y mejoras visuales en varias secciones de la app.");
-                Bul("Animaciones mas fluidas en el Hub principal.");
+                Bul("Animaciones más fluidas en el Hub principal.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Sistema y ajustes");
@@ -1948,26 +1906,26 @@ void Hub::RenderUpdateDetailModal() {
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Soporte y comunidad");
-                Bul("Canal oficial de comunicacion y soporte en WhatsApp y Discord.");
+                Bul("Canal oficial de comunicación y soporte en WhatsApp y Discord.");
             } else { // v0.3.0
                 Cat("General");
                 Bul("Nuevo Hub central para administrar la app.");
-                Bul("Codigo QR automatico para ver la transmision desde el celular.");
+                Bul("Código QR automático para ver la transmisión desde el celular.");
                 Bul("Nuevas pantallas de bienvenida al iniciar la app.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Multimedia y Streaming");
-                Bul("Mejoras en la transmision LAN y en la conexion de dispositivos.");
+                Bul("Mejoras en la transmisión LAN y en la conexión de dispositivos.");
                 Bul("Estilos de letras predeterminados segun el tipo de lista.");
-                Bul("Reproduccion de video mas fluida.");
-                Bul("Nueva opcion para transmitir fondos con la orientacion correcta.");
+                Bul("Reproducción de video más fluida.");
+                Bul("Nueva opción para transmitir fondos con la orientacion correcta.");
                 Bul("Mejor rendimiento en la biblioteca y la vista previa.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Soporte y Estabilidad");
-                Bul("Mejor manejo de archivos y mas estabilidad general.");
+                Bul("Mejor manejo de archivos y más estabilidad general.");
                 Bul("Podes editar canciones sin perder el foco en pantalla.");
-                Bul("Correcciones en la cola de reproduccion y en las transiciones.");
+                Bul("Correcciones en la cola de reproducción y en las transiciones.");
                 Bul("Varias correcciones para evitar que la app se cuelgue.");
             }
 

@@ -41,7 +41,7 @@ void StylesHubPanel::RenderTransitionQuickBar()
 
     float rowY = ImGui::GetCursorPosY();
 
-    if (DS::GlassIconButton("##transNone", "", "—", "Sin transicion", { kBtnSz, kBtnSz },
+    if (DS::GlassIconButton("##transNone", "", "—", "Sin transición", { kBtnSz, kBtnSz },
                             current == TransitionType::None ? kAccentV : kMutedV))
         m_TransitionsRef->SetType(TransitionType::None);
     ImGui::SameLine(0.0f, kGap);

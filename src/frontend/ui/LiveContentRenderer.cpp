@@ -28,7 +28,7 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     {
         dl->AddRectFilled(p0, p1, ImGui::GetColorU32(MT::k_Bg3));
 
-        const char* msg     = "Sin proyeccion activa";
+        const char* msg     = "Sin proyección activa";
         ImVec2      msgSize = ImGui::CalcTextSize(msg);
         dl->AddText(
             ImVec2(p0.x + (drawW - msgSize.x) * 0.5f,

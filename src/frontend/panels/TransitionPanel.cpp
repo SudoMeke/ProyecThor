@@ -447,7 +447,7 @@ void TransitionPanel::RenderContent()
         }
 
         // Sin +gap al final: el gap va SOLO entre filas, no despues de la
-        // ultima. Antes "rows * (kCardH + gap)" reservaba un gap extra de
+        // última. Antes "rows * (kCardH + gap)" reservaba un gap extra de
         // mas (8px) que quedaba como hueco muerto entre la grilla y la
         // seccion de Duracion, sin ningun elemento que lo llenara.
         float gridH = rows * kCardH + std::max(0, rows - 1) * gap;
@@ -476,7 +476,7 @@ void TransitionPanel::RenderContent()
 
         // Barra de progreso dibujada a mano, pegada directo al slider (sin
         // Spacing() intermedio) para que se lea como una sola unidad
-        // "duracion + su barra", no como dos bloques separados.
+        // "duración + su barra", no como dos bloques separados.
         {
             float barH = 6.0f;
             float w    = ImGui::GetContentRegionAvail().x;
@@ -512,4 +512,4 @@ void TransitionPanel::RenderContent()
     ImGui::PopStyleColor();
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI
