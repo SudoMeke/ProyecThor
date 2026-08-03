@@ -562,12 +562,13 @@ int main()
         { "Escaneando biblioteca de video, audio e imagenes...", [](){
             ProyecThor::Library::RefreshMultimediaLists();
         }},
-
-        { "Listo", [](){} },
     };
 
+    constexpr int kFinalStep = 1;
+    const int     kTotalSteps = (int)steps.size() + kFinalStep;
+
     for (int i = 0; i < (int)steps.size(); ++i)
-        ProyecThor::Splash::RunStep(steps[i], i, (int)steps.size(), splashWindow, splashSize,
+        ProyecThor::Splash::RunStep(steps[i], i, kTotalSteps, splashWindow, splashSize,
             logoTex, bgTex, splashFonts, creditText, theme);
 
     if (!mainWindow)
@@ -582,6 +583,15 @@ int main()
         glfwTerminate();
         return -1;
     }
+
+    // Ultimo frame del splash, mostrado ANTES de armar la interfaz principal
+    // (UIManager + paneles) -- ese armado es sincronico y no puede volver a
+    // dibujar el splash (destruye su contexto de ImGui mas abajo), asi que
+    // sin este frame el splash quedaba "congelado" en el mensaje anterior
+    // durante ese tramo, dando la sensacion de una traba invisible.
+    glfwMakeContextCurrent(splashWindow);
+    ProyecThor::Splash::Render(splashWindow, splashSize, "Preparando interfaz y paneles...", 1.0f,
+        logoTex, bgTex, splashFonts, creditText, theme);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
