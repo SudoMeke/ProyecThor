@@ -1498,7 +1498,23 @@ void CreateNewSong(LibraryContext& ctx)
 // =============================================================================
 void CreateNewSongFromClipboard(const std::string& clipboardText)
 {
-    const std::string base = "Cancion pegada";
+    const std::string base = "Canción pegada";
+
+void CreateNewSongFromText(const std::string& suggestedTitle, const std::string& text)
+{
+    // Caracteres invalidos en nombres de archivo Windows (los mismos quedan
+    // afuera en Linux por prolijidad, aunque ahi solo '/' es realmente
+    // invalido) -- se reemplazan por espacio y se recorta el resultado.
+    std::string base = suggestedTitle;
+    for (char& c : base) {
+        if (std::string("\\/:*?\"<>|").find(c) != std::string::npos)
+            c = ' ';
+    }
+    while (!base.empty() && (base.front() == ' ' || base.front() == '.')) base.erase(base.begin());
+    while (!base.empty() && (base.back()  == ' ' || base.back()  == '.')) base.pop_back();
+    if (base.empty()) base = "Canción importada";
+    if (base.size() > 80) base.resize(80); // nombres de archivo demasiado largos rompen algunos filesystems
+
     std::string filename = base + ".txt";
     int suffix = 2;
     while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
