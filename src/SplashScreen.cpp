@@ -68,8 +68,8 @@ void Render(GLFWwindow* window, ImVec2 size, const std::string& status, float pr
             GLuint logoTexture, GLuint bgTexture, const Fonts& fonts,
             const std::string& creditText, const ProyecThor::Settings::ThemeSettings& theme)
 {
-    static const double s_StartTime = glfwGetTime();
-    const float appear = EaseOutQuad((float)(glfwGetTime() - s_StartTime) / 0.30f);
+    const float elapsed = (float)glfwGetTime();
+    const float appear  = EaseOutQuad(std::max(progress, 0.34f));
 
     glfwMakeContextCurrent(window);
     glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
@@ -92,30 +92,23 @@ void Render(GLFWwindow* window, ImVec2 size, const std::string& status, float pr
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float scaleY = size.y / 380.0f;
 
-    const float margin   = 4.0f;
-    const float rounding = 18.0f;
-    const ImVec2 cardMin(margin, margin);
-    const ImVec2 cardMax(size.x - margin, size.y - margin);
-
-    for (int i = 5; i >= 1; i--) {
-        const float t   = (float)i / 5.0f;
-        const float pad = t * 10.0f;
-        const float a   = 0.05f * (1.0f - t) * appear;
-        dl->AddRectFilled(ImVec2(cardMin.x - pad, cardMin.y - pad), ImVec2(cardMax.x + pad, cardMax.y + pad),
-            ThemeColorU32(theme.accent, a), rounding + pad * 0.5f);
-    }
-
-    dl->AddRectFilled(cardMin, cardMax, ThemeColorU32(theme.surface0), rounding);
     if (bgTexture != 0)
-        dl->AddImageRounded((void*)(intptr_t)bgTexture, cardMin, cardMax,
-            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32_WHITE, rounding);
+        dl->AddImage((void*)(intptr_t)bgTexture, ImVec2(0.0f, 0.0f), size);
+    else
+        dl->AddRectFilled(ImVec2(0.0f, 0.0f), size, ThemeColorU32(theme.surface0));
 
-    dl->AddRectFilled(cardMin, cardMax, ThemeColorU32(theme.base, 90.0f / 255.0f), rounding);
-    dl->AddRect(cardMin, cardMax, ThemeColorU32(theme.accent, (60.0f / 255.0f) * appear), rounding, 0, 1.5f);
+    dl->AddRectFilledMultiColor(ImVec2(0.0f, 0.0f), size,
+        ThemeColorU32(theme.base, 245.0f / 255.0f), ThemeColorU32(theme.base, 130.0f / 255.0f),
+        ThemeColorU32(theme.base, 130.0f / 255.0f), ThemeColorU32(theme.base, 245.0f / 255.0f));
 
     const float padX     = 50.0f;
     const float logoSize = 88.0f * scaleY;
     const float logoY    = 58.0f * scaleY;
+    const ImVec2 logoCenter(padX + logoSize * 0.5f, logoY + logoSize * 0.5f);
+
+    const float pulse = 0.5f + 0.5f * sinf(elapsed * 1.8f);
+    dl->AddCircleFilled(logoCenter, logoSize * 0.72f + pulse * 5.0f,
+        ThemeColorU32(theme.accent, (0.05f + pulse * 0.05f) * appear), 40);
 
     if (logoTexture != 0)
         dl->AddImage((void*)(intptr_t)logoTexture, ImVec2(padX, logoY), ImVec2(padX + logoSize, logoY + logoSize));
@@ -148,9 +141,8 @@ void Render(GLFWwindow* window, ImVec2 size, const std::string& status, float pr
     ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", creditText.c_str());
     if (fonts.small) ImGui::PopFont();
 
-    dl->AddRectFilled(ImVec2(margin, footerY), cardMax, ThemeColorU32(theme.base, 218.0f / 255.0f),
-        rounding, ImDrawFlags_RoundCornersBottom);
-    dl->AddLine(ImVec2(margin, footerY), ImVec2(cardMax.x, footerY), ThemeColorU32(theme.borderFaint, 18.0f / 255.0f), 1.0f);
+    dl->AddRectFilled(ImVec2(0.0f, footerY), size, ThemeColorU32(theme.base, 218.0f / 255.0f));
+    dl->AddLine(ImVec2(0.0f, footerY), ImVec2(size.x, footerY), ThemeColorU32(theme.borderFaint, 18.0f / 255.0f), 1.0f);
 
     ImGui::SetCursorPos(ImVec2(padX, footerY + 28.0f * scaleY));
     if (fonts.small) ImGui::PushFont(fonts.small);
@@ -170,16 +162,21 @@ void Render(GLFWwindow* window, ImVec2 size, const std::string& status, float pr
     if (fonts.small) ImGui::PopFont();
 
     const float barH   = 4.0f;
-    const float barEnd = margin + (size.x - margin * 2.0f) * progress;
+    const float barEnd = size.x * progress;
 
-    dl->AddRectFilled(ImVec2(margin, cardMax.y - barH), cardMax, ThemeColorU32(theme.surface0),
-        rounding, ImDrawFlags_RoundCornersBottom);
+    dl->AddRectFilled(ImVec2(0.0f, size.y - barH), size, ThemeColorU32(theme.surface0));
 
-    if (barEnd > margin + 2.0f) {
-        dl->AddRectFilled(ImVec2(margin, cardMax.y - barH - 6.0f), ImVec2(barEnd, cardMax.y),
-            ThemeColorU32(theme.accent, 45.0f / 255.0f));
-        dl->AddRectFilled(ImVec2(margin, cardMax.y - barH), ImVec2(barEnd, cardMax.y),
-            ThemeColorU32(theme.accent), rounding, ImDrawFlags_RoundCornersBottomLeft);
+    if (barEnd > 2.0f) {
+        dl->AddRectFilled(ImVec2(0.0f, size.y - barH - 6.0f), ImVec2(barEnd, size.y),
+            ThemeColorU32(theme.accent, 35.0f / 255.0f));
+        dl->AddRectFilled(ImVec2(0.0f, size.y - barH - 2.0f), ImVec2(barEnd, size.y),
+            ThemeColorU32(theme.accent, 70.0f / 255.0f));
+        dl->AddRectFilled(ImVec2(0.0f, size.y - barH), ImVec2(barEnd, size.y), ThemeColorU32(theme.accent));
+
+        if (barEnd > 8.0f) {
+            dl->AddRectFilled(ImVec2(barEnd - 8.0f, size.y - barH), ImVec2(barEnd, size.y),
+                ThemeColorU32(theme.accentLight));
+        }
     }
 
     ImGui::End();

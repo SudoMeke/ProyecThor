@@ -33,6 +33,7 @@
 #include "SystemStats.h"
 #include "ui/UIManager.h"
 #include "frontend/panels/LibraryPanel.h"
+#include "frontend/panels/biblio/LibraryMultimedia.h"
 #include "frontend/panels/overlay/OverlayExportService.h"
 #include "frontend/panels/HomePanel.h"
 #include "frontend/ui/Hub.h"
@@ -556,6 +557,10 @@ int main()
             if (!mainWindow) return;
             glfwMakeContextCurrent(mainWindow);
             LoadUIIcons();
+        }},
+
+        { "Escaneando biblioteca de video, audio e imagenes...", [](){
+            ProyecThor::Library::RefreshMultimediaLists();
         }},
 
         { "Listo", [](){} },
