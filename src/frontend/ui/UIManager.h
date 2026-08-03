@@ -168,6 +168,14 @@ private:
     Hub           m_Hub;
     WorkspaceMode m_Mode = WorkspaceMode::Hub;
 
+    // Acceso rapido "Biblioteca" desde el Hub (ver Hub::LibraryOnlyRequested):
+    // sigue siendo WorkspaceMode::Projector, pero RenderAll() solo somete el
+    // panel de Biblioteca (el resto de m_Panels no se renderiza ese frame) y
+    // BeginDockspace() lo dockea a pantalla completa en vez del layout de
+    // 4 zonas de siempre. Se resetea a false al volver al Hub o al cambiar
+    // de modo a mano (rail/RenderModeToolbar, quick switcher).
+    bool m_LibraryOnlyMode = false;
+
     // Selector rapido (Alt+Espacio) — ver RenderQuickSwitcher.
     bool m_QuickSwitchOpen  = false;
     int  m_QuickSwitchIndex = 0;

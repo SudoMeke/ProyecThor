@@ -532,6 +532,13 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
 }
 
     glfwMakeContextCurrent(splashWindow);
+    // El intervalo de swap es un estado por CONTEXTO, no global: el
+    // glfwSwapInterval(1) de mas abajo (linea ~680) se llama con mainWindow
+    // como contexto activo y nunca aplico a splashWindow. Sin esto, el splash
+    // renderizaba sin vsync -- el while(true) de RunStep() re-dibuja en cada
+    // vuelta tan rapido como puede, así que sin limite quedaba con tearing y
+    // se sentia "pegado"/entrecortado en vez de fluido.
+    glfwSwapInterval(1);
     glewExperimental = GL_TRUE;
     GLenum glewStatus = glewInit();
     if (glewStatus != GLEW_OK)

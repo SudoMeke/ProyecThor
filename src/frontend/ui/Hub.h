@@ -20,6 +20,13 @@ public:
     void ClearSettingsRequest()       { m_OpenSettingsRequested = false; }
     int  GetActiveTab()         const { return m_ActiveTab; }
 
+    // Acceso rapido "Biblioteca" (columna izquierda): a diferencia de
+    // "Abrir configuracion" (que superpone Ajustes sin salir del Hub), este
+    // SI sale del Hub -- Render() devuelve true igual que con "Empezar a
+    // proyectar", y UIManager distingue cual de los dos paso con este flag.
+    bool LibraryOnlyRequested() const { return m_LibraryOnlyRequested; }
+    void ClearLibraryOnlyRequest()    { m_LibraryOnlyRequested = false; }
+
 private:
     void RenderLeftColumn(float w, float h);
     void RenderCenterHero(float w, float h);
@@ -36,6 +43,7 @@ private:
 
     bool  m_LaunchRequested       = false;
     bool  m_OpenSettingsRequested = false;
+    bool  m_LibraryOnlyRequested  = false;
 
     int   m_ActiveTab             = 0;
     int   m_SelectedMonitor       = -1;

@@ -148,7 +148,8 @@ void UIManager::AddPanel(std::shared_ptr<IPanel> panel)
 void UIManager::OpenHub()
 {
     m_Hub.ForceOpen();
-    m_Mode = WorkspaceMode::Hub;
+    m_Mode            = WorkspaceMode::Hub;
+    m_LibraryOnlyMode = false;
 }
 
 void UIManager::RequestSettings()
@@ -708,8 +709,10 @@ if (m_Mode == WorkspaceMode::Hub)
         {
             if (!m_Hub.SettingsRequested())
             {
-                m_Mode        = WorkspaceMode::Projector;
-                m_ResetLayout = true;
+                m_Mode            = WorkspaceMode::Projector;
+                m_ResetLayout     = true;
+                m_LibraryOnlyMode = m_Hub.LibraryOnlyRequested();
+                m_Hub.ClearLibraryOnlyRequest();
             }
         }
 
@@ -743,7 +746,16 @@ if (m_Mode == WorkspaceMode::Hub)
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     for (auto& panel : m_Panels)
+    {
+        // Acceso rapido "Biblioteca" del Hub: solo se somete ese panel este
+        // frame (Home/Vista en Vivo/Diseño ni se dibujan), asi el operador
+        // ve UNICAMENTE Biblioteca, sin nada mas alrededor para arrastrar
+        // encima. "Library" es el GetName() interno de LibraryPanel (no el
+        // titulo localizado de su ventana, ese es str.library).
+        if (m_LibraryOnlyMode && panel->GetName() != "Library")
+            continue;
         panel->Render();
+    }
 if (m_FocusViewNextFrame) {
         ImGui::SetWindowFocus("Vista en Vivo");
         m_FocusViewNextFrame = false;
@@ -1046,6 +1058,10 @@ void UIManager::RenderModeToolbar()
                 m_Mode = (WorkspaceMode)item.index;
                 if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
                 if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+                // Elegir "Proyector"/"Hub" a mano en la toolbar siempre da
+                // el workspace completo -- el acceso rapido de Biblioteca
+                // solo aplica cuando se entra vía el boton del Hub.
+                m_LibraryOnlyMode = false;
             }
         };
 
@@ -1326,6 +1342,9 @@ void UIManager::RenderQuickSwitcher()
         m_Mode = kItems[idx].mode;
         if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
         if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+        // Mismo criterio que RenderModeItem: el selector rapido (Alt+Espacio)
+        // tambien da el workspace completo, nunca el recorte de Biblioteca.
+        m_LibraryOnlyMode = false;
         m_QuickSwitchOpen = false;
     };
 
@@ -1605,45 +1624,57 @@ void UIManager::BeginDockspace()
         ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
-        ImGuiID dock_main = dockspace_id;
+        if (m_LibraryOnlyMode)
+        {
+            // Acceso rapido "Biblioteca" desde el Hub: un solo nodo a
+            // pantalla completa con nada mas que el panel de Biblioteca (el
+            // Render de biblioteca ya vive adentro como una pestaña mas de
+            // ese mismo panel) -- sin Home/Vista en Vivo/Diseño alrededor.
+            ImGui::DockBuilderDockWindow(str.library, dockspace_id);
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
+        else
+        {
+            ImGuiID dock_main = dockspace_id;
 
-        ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.25f, nullptr, &dock_main);
-        ImGuiID dock_left_top, dock_left_bottom;
-        ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
+            ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.25f, nullptr, &dock_main);
+            ImGuiID dock_left_top, dock_left_bottom;
+            ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
 
-        ImGuiID dock_right;
-        ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.37f, &dock_right, &dock_main);
+            ImGuiID dock_right;
+            ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.37f, &dock_right, &dock_main);
 
-        ImGuiID dock_center_right;
-        ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.45f, &dock_center_right, &dock_main);
-        ImGuiID dock_center_right_top, dock_center_right_bottom;
-        ImGui::DockBuilderSplitNode(dock_center_right, ImGuiDir_Down, 0.70f, &dock_center_right_bottom, &dock_center_right_top);
+            ImGuiID dock_center_right;
+            ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.45f, &dock_center_right, &dock_main);
+            ImGuiID dock_center_right_top, dock_center_right_bottom;
+            ImGui::DockBuilderSplitNode(dock_center_right, ImGuiDir_Down, 0.70f, &dock_center_right_bottom, &dock_center_right_top);
 
-        ImGuiID dock_main_top, dock_main_bottom;
-        ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
-ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
+            ImGuiID dock_main_top, dock_main_bottom;
+            ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
+            ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
 
-ImGui::DockBuilderDockWindow("Home",               dock_main_top);
-ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right);
+            ImGui::DockBuilderDockWindow("Home",               dock_main_top);
+            ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right);
 
-        ImGui::DockBuilderDockWindow("Diseño",              dock_main_bottom);
+            ImGui::DockBuilderDockWindow("Diseño",              dock_main_bottom);
 
-{
-    ImGuiID leafNodes[] = {
-        dock_left_top, dock_left_bottom,
-        dock_main_top, dock_main_bottom,
-        dock_right
-    };
-    for (ImGuiID nodeId : leafNodes)
-    {
-        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
-            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-    }
-}
+            {
+                ImGuiID leafNodes[] = {
+                    dock_left_top, dock_left_bottom,
+                    dock_main_top, dock_main_bottom,
+                    dock_right
+                };
+                for (ImGuiID nodeId : leafNodes)
+                {
+                    if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
+                        node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+                }
+            }
 
-ImGui::DockBuilderFinish(dockspace_id);
+            ImGui::DockBuilderFinish(dockspace_id);
 
-        m_FocusViewNextFrame = true;
+            m_FocusViewNextFrame = true;
+        }
     }
 }
 

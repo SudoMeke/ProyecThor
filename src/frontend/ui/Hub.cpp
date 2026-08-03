@@ -671,8 +671,11 @@ bool Hub::Render() {
     RenderNovedadesPanel();
     RenderUpdateDetailModal();
 
-    if (m_LaunchRequested) {
+    if (m_LaunchRequested || m_LibraryOnlyRequested) {
         m_LaunchRequested = false;
+        // m_LibraryOnlyRequested se deja tal cual -- UIManager lo lee (para
+        // saber a que fue que se salio del Hub) y lo limpia el mismo via
+        // ClearLibraryOnlyRequest(), mismo patron que SettingsRequested().
         m_Open            = false;
         return true;
     }
@@ -760,6 +763,25 @@ void Hub::RenderLeftColumn(float w, float h) {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(4);
 
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+    // Acceso rapido a Biblioteca -- a diferencia de "Abrir configuracion",
+    // este SI sale del Hub: entra al workspace pero mostrando solo el panel
+    // de Biblioteca (con Render incluido, ya es una pestaña de ese mismo
+    // panel), sin Home/Vista en Vivo/Diseño alrededor.
+    ImGui::SetCursorPosX(30.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
+    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+
+    if (ImGui::Button("Biblioteca", ImVec2(w - 60.0f, 36.0f)))
+        m_LibraryOnlyRequested = true;
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
+
     ImGui::Dummy(ImVec2(0.0f, 28.0f));
 
     dl->AddLine(
@@ -805,6 +827,78 @@ void Hub::RenderLeftColumn(float w, float h) {
     QuickBtn("", "Stage",           2);
     QuickBtn("", "Idioma",          6);
     QuickBtn("", "Actualizaciones", 7);
+
+    ImGui::EndChild();
+}
+
+// Columna central -- foco dominante del Hub. "Empezar a proyectar" vive
+// aca solo, en una tarjeta grande con halo/glow (mismo lenguaje visual que
+// el brillo del logo "Thor"), en vez de ser un boton mas entre varios en el
+// sidebar. Reemplaza al viejo layout de sidebar+dashboard: la idea de la
+// imagen de referencia era "accion central, todo lo demas a los lados".
+void Hub::RenderCenterHero(float w, float h) {
+    ImGui::BeginChild("##CenterHero", ImVec2(w, h), false, ImGuiWindowFlags_NoScrollbar);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2      wp = ImGui::GetWindowPos();
+
+    const float cardW = std::min(440.0f, w - 60.0f);
+    const float cardH = 300.0f;
+
+    ImGui::SetCursorPos(ImVec2((w - cardW) * 0.5f, (h - cardH) * 0.5f));
+    const ImVec2 cardMin = ImGui::GetCursorScreenPos();
+    const ImVec2 cardMax = ImVec2(cardMin.x + cardW, cardMin.y + cardH);
+
+    // El InvisibleButton va primero para tener el estado de hover/click antes
+    // de dibujar -- los elementos visuales de mas abajo se dibujan encima
+    // (mismo drawlist) sin afectar el hit-test, que ya quedo resuelto aca.
+    ImGui::InvisibleButton("##heroBtn", ImVec2(cardW, cardH));
+    const bool hovered = ImGui::IsItemHovered();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    if (ImGui::IsItemClicked())
+        m_LaunchRequested = true;
+    const float hoverT = HubHoverLerp(ImGui::GetID("##heroBtn"), hovered);
+
+    // Halo/glow detras de la tarjeta, se agranda levemente con el hover.
+    for (int i = 6; i >= 1; i--) {
+        const float t     = static_cast<float>(i) / 6.0f;
+        const float pad   = 10.0f + t * 30.0f * (1.0f + hoverT * 0.4f);
+        const float alpha = 0.05f * (1.0f - t) * (0.6f + hoverT * 0.6f);
+        dl->AddRectFilled(ImVec2(cardMin.x - pad, cardMin.y - pad), ImVec2(cardMax.x + pad, cardMax.y + pad),
+            ColAf(HT::AccentBlue, alpha), HT::RadiusLg + pad * 0.3f);
+    }
+
+    dl->AddRectFilled(cardMin, cardMax, ColAf(HT::Card, 0.92f), HT::RadiusLg);
+    dl->AddRect(cardMin, cardMax, ColAf(HT::AccentBlue, 0.35f + hoverT * 0.35f), HT::RadiusLg, 0, 1.5f + hoverT);
+
+    // Icono de "play" dibujado a mano (triangulo), no depende de que la
+    // fuente activa de la UI tenga un glifo de reproduccion.
+    const float   iconR       = 34.0f;
+    const ImVec2  cardCenterX = ImVec2((cardMin.x + cardMax.x) * 0.5f, 0.0f);
+    const ImVec2  iconCenter  = ImVec2(cardCenterX.x, cardMin.y + 92.0f);
+    dl->AddCircleFilled(iconCenter, iconR + 14.0f, ColAf(HT::AccentBlue, 0.16f + hoverT * 0.12f), 40);
+    dl->AddCircleFilled(iconCenter, iconR, HT::AccentBlue, 40);
+    const float triW = iconR * 0.85f, triH = iconR * 0.95f;
+    dl->AddTriangleFilled(
+        ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y - triH * 0.5f),
+        ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y + triH * 0.5f),
+        ImVec2(iconCenter.x + triW * 0.58f, iconCenter.y),
+        HT::OnAccent);
+
+    auto CenteredScaledText = [&](const char* text, float scale, ImU32 col, float yLocal) {
+        const ImVec2 sz      = ImGui::CalcTextSize(text);
+        const float  scaledW = sz.x * scale;
+        ImGui::SetCursorPos(ImVec2((w - scaledW) * 0.5f, yLocal));
+        ImGui::PushStyleColor(ImGuiCol_Text, col);
+        ImGui::SetWindowFontScale(scale);
+        ImGui::TextUnformatted(text);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+    };
+
+    const float cardTopLocal = (h - cardH) * 0.5f;
+    CenteredScaledText("Empezar a proyectar", 1.55f, HT::TextPri, cardTopLocal + 150.0f);
+    CenteredScaledText("Letra, Biblia, video y overlays en tiempo real", 1.0f, HT::TextMuted, cardTopLocal + 196.0f);
 
     ImGui::EndChild();
 }
@@ -949,198 +1043,57 @@ void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
     }
 }
 
-void Hub::RenderMainContent(float w, float h) {
-    static GLuint bgTex             = 0;
-    static bool   texLoaded         = false;
-    static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 12; // id de kUpdateRegistry (12 = v0.5.1, la mas reciente)
+void Hub::RenderRightColumn(float w, float h) {
+    ImGui::BeginChild("##RightCol", ImVec2(w, h), false);
 
-    if (!texLoaded) {
-        bgTex     = LoadTextureFromFile("splash_bg2.png");
-        texLoaded = true;
-    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2      wp = ImGui::GetWindowPos();
+    dl->AddRectFilled(wp, ImVec2(wp.x + w, wp.y + h), ColAf(HT::Surface, 0.45f), HT::RadiusLg);
 
-    if (!m_BgParticlesInit)
-        InitBgParticles(w, h);
+    const float pad         = 24.0f;
+    const float rightColWidth = w - pad * 2.0f;
 
-    // dt propio para las animaciones de parallax de esta funcion (no depende
-    // de m_Time para poder reutilizar el helper de forma autonoma).
-    float parallaxDt;
-    {
-        static std::chrono::steady_clock::time_point s_LastParallaxT = std::chrono::steady_clock::now();
-        const auto now = std::chrono::steady_clock::now();
-        parallaxDt = std::chrono::duration<float>(now - s_LastParallaxT).count();
-        s_LastParallaxT = now;
-        parallaxDt = std::clamp(parallaxDt, 0.0f, 0.05f);
-    }
-
-    ImGui::BeginChild("##MainContent", ImVec2(w, h), false);
-
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2      wp = ImGui::GetWindowPos();
-        RenderBgCanvas(dl, wp, w, h);
-        if (bgTex != 0)
-            dl->AddImage((ImTextureID)(intptr_t)bgTex, wp, ImVec2(wp.x + w, wp.y + h),
-                ImVec2(0,0), ImVec2(1,1), ColAf(IM_COL32_WHITE, HT::BgImageAlpha));
-    }
-
-    const float marginX       = 50.0f;
-    const float marginTop     = 40.0f;
-    const float spacingX      = 40.0f;
-    const float totalWidth    = w - (marginX * 2.0f);
-    const float leftColWidth  = totalWidth * 0.55f;
-    const float rightColWidth = totalWidth * 0.45f - spacingX;
-
-    ImGui::SetCursorPos(ImVec2(marginX, marginTop));
-
-    // Encabezado de seccion con una linea sutil debajo (mismo estilo "Cat()"
-    // que ya usa el modal de actualizacion), para dar jerarquia visual
-    // consistente entre ambas columnas.
-    auto SectionHeader = [&](const char* title, float width) {
-        ImGui::SetWindowFontScale(1.3f);
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-        ImGui::Text("%s", title);
-        ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.0f);
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 2.0f), ImVec2(p.x + width, p.y + 2.0f), HT::BorderFaint);
-        ImGui::Dummy(ImVec2(0.0f, 13.0f));
-    };
-
-    // ── Columna izquierda ─────────────────────────────────────────────────────
+    ImGui::SetCursorPos(ImVec2(pad, pad));
     ImGui::BeginGroup();
 
-    SectionHeader("Actualizaciones", leftColWidth);
-
-    // Altura del bloque de acciones que va debajo de la lista (boton "Buscar
-    // actualizaciones" + "Foro / Soporte"), para poder descontarla del calculo
-    // del scroll y que este siempre termine justo antes de dichos botones.
-    const float actionsRowH   = 36.0f;
-    const float gapBeforeList = ImGui::GetCursorPosY(); // lo ya consumido: titulo + dummy
-    const float gapAfterList  = 15.0f;                  // Dummy entre la lista y los botones
-    const float bottomMargin  = 55.0f;                  // espacio final, grande, tras los botones
-
-    // Alto restante disponible para la lista scrolleable: ocupa todo lo que
-    // sobra hasta el final del panel, dejando lugar para los botones de abajo
-    // y un margen inferior comodo.
-    const float updatesListH = std::max(
-        220.0f,
-        h - marginTop - gapBeforeList - gapAfterList - actionsRowH - bottomMargin
-    );
-
-    // Contenedor scrolleable para la lista de actualizaciones
-    ImGui::BeginChild("##UpdatesList", ImVec2(leftColWidth, updatesListH), false);
-
-    // Función auxiliar para dibujar tarjetas de actualización.
-    // Cada tarjeta usa la portada especifica de su propia entrada en el registro,
-    // con recorte tipo "cover" + parallax al hover y esquinas redondeadas.
-    auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
-        const GLTextureInfo cardCover = GetCoverTexture(info.coverFile);
+    // ── Tarjeta "Novedades" -- abre el panel de la seccion 1 ────────────────
+    {
+        const UpdateVersionInfo* latest = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
+        const float cardH = 62.0f;
 
         ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild(info.version, ImVec2(leftColWidth, 140.0f), false, ImGuiWindowFlags_NoScrollbar);
+        ImGui::BeginChild("##NovedadesCard", ImVec2(rightColWidth, cardH), false, ImGuiWindowFlags_NoScrollbar);
 
-        ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
-        ImVec2 cardEndPos   = ImVec2(cardStartPos.x + leftColWidth, cardStartPos.y + 140.0f);
-        const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartPos, cardEndPos);
-        const float hoverT = HubHoverLerp(ImGui::GetID(info.version), cardHovered);
+        const ImVec2 nStart = ImGui::GetCursorScreenPos();
+        const ImVec2 nEnd   = ImVec2(nStart.x + rightColWidth, nStart.y + cardH);
+        const bool   novHovered = ImGui::IsMouseHoveringRect(nStart, nEnd);
+        const float  hoverT = HubHoverLerp(ImGui::GetID("##NovedadesCard"), novHovered);
+        if (hoverT > 0.001f)
+            ImGui::GetWindowDrawList()->AddRectFilled(nStart, nEnd, ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusMd);
 
-        ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
-        ImGui::BeginGroup();
-
-        const float thumbW = 180.0f, thumbH = 120.0f;
-        if (cardCover.id != 0) {
-            const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
-            const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbMin.y + thumbH);
-
-            char stateKey[96];
-            snprintf(stateKey, sizeof(stateKey), "card_%s", info.version);
-
-            DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.id, cardCover.width, cardCover.height,
-                thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCornersAll,
-                stateKey, parallaxDt, cardHovered, 1.10f);
-
-            ImGui::Dummy(ImVec2(thumbW, thumbH));
-            ImGui::SameLine(0.0f, 15.0f);
-        }
-
-        ImGui::BeginGroup();
-        ImGui::Dummy(ImVec2(0.0f, 5.0f));
+        ImGui::SetCursorPos(ImVec2(14.0f, 8.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::AccentBlue);
+        ImGui::Text("Novedades");
+        ImGui::PopStyleColor();
         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::Text("%s", info.cardBadge);
+        ImGui::Text("v%s disponible  -  tecla N", latest ? latest->version : PROYECTHOR_VERSION_STRING);
         ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.1f);
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-        ImGui::Text("Version v%s", info.version);
-        ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + leftColWidth - (cardCover.id != 0 ? 220.0f : 30.0f));
-        ImGui::TextWrapped("%s", info.summary);
-        ImGui::PopTextWrapPos();
-        ImGui::PopStyleColor();
-        ImGui::EndGroup();
-
-        ImGui::EndGroup();
-
-        ImGui::SetCursorScreenPos(cardStartPos);
-        if (ImGui::InvisibleButton(info.version, ImVec2(leftColWidth, 140.0f))) {
-            selectedUpdateVer = info.id;
-            isUpdateModalOpen = true;
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-
-        // Realce de hover suavizado (en vez de un rect plano on/off): fondo
-        // tenue + barra de acento a la izquierda que crece con hoverT.
-        ImDrawList* cardDl = ImGui::GetWindowDrawList();
-        if (hoverT > 0.001f) {
-            cardDl->AddRectFilled(cardStartPos, cardEndPos,
-                ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusMd);
-            cardDl->AddRectFilled(cardStartPos, ImVec2(cardStartPos.x + 3.0f, cardEndPos.y),
-                ColAf(HT::AccentBlue, hoverT), HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
-        }
 
         ImGui::EndChild();
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 15.0f)); // Espacio entre tarjetas
-    };
 
-    // Renderizamos una tarjeta por cada version registrada, en orden (mas reciente primero)
-    for (const auto& info : kUpdateRegistry)
-        RenderUpdateCard(info);
-
-    ImGui::EndChild(); // Fin de UpdatesList
-
-    ImGui::Dummy(ImVec2(0.0f, gapAfterList));
-
-    ImGui::BeginGroup();
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
-    if (ImGui::Button("Buscar actualizaciones", ImVec2(180.0f, actionsRowH))) {
-        m_ActiveTab = 7; m_OpenSettingsRequested = true; // 7 = Actualizaciones (ver QuickBtn arriba)
+        ImGui::SetCursorScreenPos(nStart);
+        if (ImGui::InvisibleButton("##NovedadesHit", ImVec2(rightColWidth, cardH)))
+            m_NovedadesOpen = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
-    ImGui::SameLine(0.0f, 15.0f);
-    if (ImGui::Button("Foro / Soporte", ImVec2(180.0f, actionsRowH)))
-        ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/discussions");
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
-    ImGui::EndGroup();
 
-    ImGui::EndGroup();
+    ImGui::Dummy(ImVec2(0.0f, 18.0f));
 
-    // ── Columna derecha ───────────────────────────────────────────────────────
-    ImGui::SameLine(0.0f, spacingX);
-    ImGui::BeginGroup();
-
-    SectionHeader("Resumen local", rightColWidth);
+    DrawSectionHeader("Resumen local", rightColWidth);
 
     const auto topSongs = ProyecThor::UI::GetTopSongPlayStats(5);
     const int totalProjections = ProyecThor::UI::GetTotalSongProjections();
@@ -1293,25 +1246,37 @@ void Hub::RenderMainContent(float w, float h) {
 
     ImGui::EndGroup();
     ImGui::EndChild();
+}
 
-    // ── Modal Universal de Actualizacion ──────────────────────────────────────
-    // s_ModalAnim se aproxima a 1 mientras isUpdateModalOpen y decae a 0 al
-    // cerrar; el modal sigue dibujandose (con escala/alpha decrecientes)
-    // hasta que la animacion termina, en vez de desaparecer de golpe.
-    static float s_ModalAnim = 0.0f;
+// Modal universal de detalle de actualizacion -- sin cambios de logica
+// respecto a la version anterior, solo movido a su propio metodo (antes
+// vivia al final de RenderMainContent) y usando m_SelectedUpdateVer /
+// m_IsUpdateModalOpen (miembros) en vez de estaticos locales, para que tanto
+// el hero como la lista de historial dentro de RenderNovedadesPanel puedan
+// abrirlo.
+void Hub::RenderUpdateDetailModal() {
+    // selectedUpdateVer queda como alias de solo lectura del miembro: el
+    // resto de este metodo (el gran if/else por version) lo referencia tal
+    // cual estaba antes, sin necesidad de tocar ese bloque.
+    const int selectedUpdateVer = m_SelectedUpdateVer;
+
+    // m_UpdateModalAnim se aproxima a 1 mientras m_IsUpdateModalOpen y decae
+    // a 0 al cerrar; el modal sigue dibujandose (con escala/alpha
+    // decrecientes) hasta que la animacion termina, en vez de desaparecer de
+    // golpe.
     {
-        const float target = isUpdateModalOpen ? 1.0f : 0.0f;
-        s_ModalAnim += (target - s_ModalAnim) * std::min(1.0f, parallaxDt * 10.0f);
-        s_ModalAnim = std::clamp(s_ModalAnim, 0.0f, 1.0f);
-        if (s_ModalAnim < 0.001f) s_ModalAnim = 0.0f;
+        const float target = m_IsUpdateModalOpen ? 1.0f : 0.0f;
+        m_UpdateModalAnim += (target - m_UpdateModalAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+        m_UpdateModalAnim = std::clamp(m_UpdateModalAnim, 0.0f, 1.0f);
+        if (m_UpdateModalAnim < 0.001f) m_UpdateModalAnim = 0.0f;
     }
 
-    if (isUpdateModalOpen || s_ModalAnim > 0.0f) {
+    if (m_IsUpdateModalOpen || m_UpdateModalAnim > 0.0f) {
         const UpdateVersionInfo* selInfo = FindUpdateVersion(selectedUpdateVer);
         const GLTextureInfo modalCover = selInfo ? GetCoverTexture(selInfo->coverFile) : GLTextureInfo{};
 
         ImGuiViewport* vp     = ImGui::GetMainViewport();
-        const float     fadeA = EaseOut(s_ModalAnim);
+        const float     fadeA = EaseOut(m_UpdateModalAnim);
 
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
 
@@ -1364,7 +1329,7 @@ void Hub::RenderMainContent(float w, float h) {
                 // borde del modal, mientras que abajo continua el contenido.
                 DrawCoverImageCover(dl, modalCover.id, modalCover.width, modalCover.height,
                     headerMin, headerMax, modalRounding, ImDrawFlags_RoundCornersTop,
-                    stateKey, parallaxDt, headerHovered, 1.06f);
+                    stateKey, ImGui::GetIO().DeltaTime, headerHovered, 1.06f);
                 ImGui::Dummy(ImVec2(modalW, headerH));
             } else {
                 dl->AddRectFilled(headerMin, headerMax, ColA(HT::CardAlt, 255),
@@ -1813,7 +1778,7 @@ void Hub::RenderMainContent(float w, float h) {
             ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
             if (ImGui::Button("Cerrar", ImVec2(bw, bh)))
-                isUpdateModalOpen = false;
+                m_IsUpdateModalOpen = false;
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(4);
         }
