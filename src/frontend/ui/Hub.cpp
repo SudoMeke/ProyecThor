@@ -10,20 +10,20 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <fstream>
+#include <filesystem>
 #include "settings/SettingsManager.h"
 #include "../external/tools/OpenURL.h"
 #include "Version.h"
 #include "DesignSystem.h"
 #include "HubTheme.h"
 #include "SongPlayStats.h"
+#include "FilePicker.h"
 
 extern GLuint LoadTextureFromFile(const char* filename);
 
 static void RenderSplashScreen(GLFWwindow *splashWindow, const std::string &status, float progress, GLuint logoTexture, GLuint bgTexture, ImFont *titleFont, ImFont *regularFont, ImFont *smallFont, const std::string &creditText, const ProyecThor::Settings::ThemeSettings &theme);
 
-static constexpr float HUB_SIDEBAR_W   = 280.0f;
-static constexpr float HUB_RIGHT_COL_W = 320.0f;
-static constexpr float HUB_COL_GAP     = 18.0f;
 static constexpr float HUB_APPEAR_SPD  = 3.0f;
 
 namespace DS = ProyecThor::UI::DS;
@@ -288,9 +288,114 @@ static float EaseOut(float t) {
     return 1.0f - (1.0f - t) * (1.0f - t);
 }
 
+// Textura de fondo de la tarjeta "Abrir configuracion" -- reusa el cache +
+// ancho/alto de GetCoverTexture (necesarios para el recorte tipo "cover" de
+// DrawTiltTextureCard, ver mas abajo).
+static const char* kConfigCardTextureFile = "bin/assets/ui/textures/20260524_104505.jpg";
+
+// Tarjeta con inclinacion 3D al estilo "tilt" de sitios web: en reposo
+// queda plana, y solo mientras el mouse esta encima las esquinas se
+// distorsionan en perspectiva segun la posicion del cursor dentro de la
+// tarjeta (con una sombra que se despega y un brillo diagonal que sigue la
+// inclinacion). Devuelve el estado de hover/click via los punteros -- el
+// llamador dibuja su propio contenido (texto, overlay) encima.
+static void DrawTiltTextureCard(ImDrawList* dl, GLuint texId, int texW, int texH, ImVec2 pMin, ImVec2 pMax,
+                                 ImGuiID id, bool* outHovered, bool* outClicked) {
+    const ImVec2 size = ImVec2(pMax.x - pMin.x, pMax.y - pMin.y);
+
+    ImGui::SetCursorScreenPos(pMin);
+    ImGui::InvisibleButton("##tiltCardHit", size);
+    const bool hovered = ImGui::IsItemHovered();
+    if (outHovered) *outHovered = hovered;
+    if (outClicked) *outClicked = ImGui::IsItemClicked();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* tiltX = storage->GetFloatRef(id ^ 0x54494C31u, 0.0f); // "TIL1"
+    float* tiltY = storage->GetFloatRef(id ^ 0x54494C32u, 0.0f); // "TIL2"
+    float* lift  = storage->GetFloatRef(id ^ 0x54494C33u, 0.0f); // "TIL3"
+
+    const ImVec2 center = ImVec2(pMin.x + size.x * 0.5f, pMin.y + size.y * 0.5f);
+    const ImVec2 mouse  = ImGui::GetIO().MousePos;
+    const float nx = hovered ? std::clamp((mouse.x - center.x) / (size.x * 0.5f), -1.0f, 1.0f) : 0.0f;
+    const float ny = hovered ? std::clamp((mouse.y - center.y) / (size.y * 0.5f), -1.0f, 1.0f) : 0.0f;
+
+    // Interpolacion lenta a proposito (pedido explicito: "mucho mas suave,
+    // mas sutil") -- un factor de suavizado chico en vez de que el tilt
+    // "salte" a la posicion del mouse casi de golpe.
+    const float speed = std::min(1.0f, ImGui::GetIO().DeltaTime * 4.5f);
+    *tiltX += (nx - *tiltX) * speed;
+    *tiltY += (ny - *tiltY) * speed;
+    *lift  += ((hovered ? 1.0f : 0.0f) - *lift) * speed;
+
+    const float maxAngle = 0.055f; // ~3 grados -- apenas perceptible, no un "volanteo"
+    const float rotY =  (*tiltX) * maxAngle;
+    const float rotX = -(*tiltY) * maxAngle;
+    const float focal = 900.0f; // mas alto = menos distorsion de perspectiva
+
+    const float halfW = size.x * 0.5f, halfH = size.y * 0.5f;
+    const ImVec2 local[4] = {
+        ImVec2(-halfW, -halfH), ImVec2(halfW, -halfH),
+        ImVec2(halfW,   halfH), ImVec2(-halfW,  halfH),
+    };
+    ImVec2 screen[4];
+    for (int i = 0; i < 4; i++) {
+        const float x = local[i].x, y = local[i].y, z = 0.0f;
+        const float x1 =  x * std::cos(rotY) + z * std::sin(rotY);
+        const float z1 = -x * std::sin(rotY) + z * std::cos(rotY);
+        const float y2 =  y * std::cos(rotX) - z1 * std::sin(rotX);
+        const float z2 =  y * std::sin(rotX) + z1 * std::cos(rotX);
+        const float persp = focal / (focal + z2);
+        screen[i] = ImVec2(center.x + x1 * persp, center.y + y2 * persp);
+    }
+
+    // Base solida detras del quad inclinado: al rotar en "3D falso" las
+    // esquinas del quad ya no coinciden exactamente con el rectangulo
+    // original -- sin este relleno, los huecos dejaban ver el fondo oscuro
+    // del Hub detras de la tarjeta en vez del color del panel.
+    dl->AddRectFilled(pMin, pMax, ColA(HT::CardAlt, 255), HT::RadiusMd);
+
+    // Sombra que se despega debajo de la tarjeta al inclinarse -- desplazamiento
+    // reducido, apenas insinuado en vez de un salto notorio.
+    const ImVec2 shadowCenter = ImVec2(center.x + (*tiltX) * 3.0f, center.y + halfH * 0.72f + (*lift) * 4.0f);
+    dl->AddEllipseFilled(shadowCenter, ImVec2(halfW * 0.94f, halfH * 0.14f + (*lift) * 2.0f),
+                          IM_COL32(0, 0, 0, (int)(50 + (*lift) * 35)), 0.0f, 24);
+
+    if (texId != 0 && texW > 0 && texH > 0) {
+        // Recorte tipo "cover" (igual que DrawCoverImageCover): la imagen
+        // llena el rectangulo sin deformarse -- una tarjeta ancha y baja
+        // como esta forzaria un stretch feo si se mapeara el UV 0..1 entero.
+        const float boxAspect = size.x / size.y;
+        const float imgAspect = static_cast<float>(texW) / static_cast<float>(texH);
+        float baseUW, baseUH;
+        if (imgAspect > boxAspect) { baseUH = 1.0f; baseUW = boxAspect / imgAspect; }
+        else                       { baseUW = 1.0f; baseUH = imgAspect / boxAspect; }
+        const float u0 = (1.0f - baseUW) * 0.5f, u1 = u0 + baseUW;
+        const float v0 = (1.0f - baseUH) * 0.5f, v1 = v0 + baseUH;
+
+        dl->AddImageQuad((ImTextureID)(intptr_t)texId,
+            screen[0], screen[1], screen[2], screen[3],
+            ImVec2(u0, v0), ImVec2(u1, v0), ImVec2(u1, v1), ImVec2(u0, v1),
+            IM_COL32(255, 255, 255, 255));
+    } else {
+        dl->AddQuadFilled(screen[0], screen[1], screen[2], screen[3], ColA(HT::CardAlt, 255));
+    }
+
+    dl->AddQuad(screen[0], screen[1], screen[2], screen[3],
+        ColAf(HT::TextPri, 0.12f + (*lift) * 0.14f), 1.5f);
+}
+
 Hub::Hub() : m_LastFrameTime(std::chrono::steady_clock::now()) {
     const auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
     m_SelectedMonitor = settings.projection.targetMonitor;
+}
+
+Hub::~Hub() {
+    // Puede bloquear un instante si una descarga de subtitulos seguia en
+    // curso -- preferible a std::terminate() por destruir un std::thread
+    // todavia joinable (mismo criterio que UIManager::Shutdown()).
+    if (m_DownloadSubsThread.joinable())
+        m_DownloadSubsThread.join();
 }
 
 void Hub::ForceOpen() {
@@ -656,13 +761,7 @@ bool Hub::Render() {
         dl->AddImage((ImTextureID)(intptr_t)s_HubBgTex, wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y),
             ImVec2(0, 0), ImVec2(1, 1), ColAf(IM_COL32_WHITE, HT::BgImageAlpha));
 
-    const float centerW = vp->WorkSize.x - HUB_SIDEBAR_W - HUB_RIGHT_COL_W - HUB_COL_GAP * 2.0f;
-
-    RenderLeftColumn(HUB_SIDEBAR_W, vp->WorkSize.y);
-    ImGui::SameLine(0.0f, HUB_COL_GAP);
-    RenderCenterHero(centerW, vp->WorkSize.y);
-    ImGui::SameLine(0.0f, HUB_COL_GAP);
-    RenderRightColumn(HUB_RIGHT_COL_W, vp->WorkSize.y);
+    RenderContent(vp->WorkSize.x, vp->WorkSize.y);
 
     ImGui::PopStyleVar(); // Alpha
     ImGui::End();
@@ -670,6 +769,7 @@ bool Hub::Render() {
 
     RenderNovedadesPanel();
     RenderUpdateDetailModal();
+    RenderDownloadSubtitlesPanel();
 
     if (m_LaunchRequested || m_LibraryOnlyRequested) {
         m_LaunchRequested = false;
@@ -683,28 +783,41 @@ bool Hub::Render() {
     return false;
 }
 
-void Hub::RenderLeftColumn(float w, float h) {
-    ImGui::BeginChild("##LeftCol", ImVec2(w, h), false, ImGuiWindowFlags_NoScrollbar);
+// Flujo unico de paneles, centrado y usando todo el ancho del Hub --
+// reemplaza el viejo layout de 3 columnas fijas (izquierda/centro/derecha).
+// Cada seccion (logo, hero "Empezar a proyectar", config con textura,
+// Biblioteca/Novedades, accesos rapidos, resumen local) es su propia
+// tarjeta redondeada apilada verticalmente, con scroll si no entra todo en
+// alto -- ya no hay bloques de fondo solido por columna.
+void Hub::RenderContent(float w, float h) {
+    // Sin scroll a proposito (pedido explicito): todas las secciones de
+    // abajo estan dimensionadas para entrar juntas en una ventana normal de
+    // Hub sin necesitar desplazarse.
+    ImGui::BeginChild("##HubContent", ImVec2(w, h), false, ImGuiWindowFlags_NoScrollbar);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2      wp = ImGui::GetWindowPos();
 
-    // Tarjeta semi-translucida propia de esta columna, sobre el fondo
-    // compartido que ahora dibuja Hub::Render en toda la ventana.
-    dl->AddRectFilled(wp, ImVec2(wp.x + w, wp.y + h), ColAf(HT::Surface, 0.45f), HT::RadiusLg);
+    // Ancho maximo de contenido acotado a proposito: dejar que los paneles
+    // se estiren al ancho completo de la ventana los deja viendose como
+    // barras chatas y desproporcionadas (pedido explicito: "menos anchos").
+    const float margin   = 50.0f;
+    const float contentW = std::min(720.0f, std::max(320.0f, w - margin * 2.0f));
+    const float contentX = (w - contentW) * 0.5f;
 
-    ImGui::SetCursorPosY(40.0f);
-    ImGui::SetCursorPosX(30.0f);
+    ImGui::SetCursorPos(ImVec2(contentX, 24.0f));
+    ImGui::BeginGroup();
 
+    // ── Logo + version, centrados arriba de todo ────────────────────────
     {
         ImFont*     font         = ImGui::GetFont();
-        const float logoFontSize = ImGui::GetFontSize() * 1.5f;
-
-        const ImVec2 logoScreenPos = ImGui::GetCursorScreenPos();
+        const float logoFontSize = ImGui::GetFontSize() * 1.25f;
 
         const ImVec2 sizeProyec = font->CalcTextSizeA(logoFontSize, FLT_MAX, 0.0f, "Proyec");
         const ImVec2 sizeThor   = font->CalcTextSizeA(logoFontSize, FLT_MAX, 0.0f, "Thor");
+        const float  totalW     = sizeProyec.x + sizeThor.x;
 
+        ImGui::SetCursorPosX(contentX + (contentW - totalW) * 0.5f);
+        const ImVec2 logoScreenPos = ImGui::GetCursorScreenPos();
         const ImVec2 posProyec = logoScreenPos;
         const ImVec2 posThor   = ImVec2(logoScreenPos.x + sizeProyec.x, logoScreenPos.y);
 
@@ -733,173 +846,246 @@ void Hub::RenderLeftColumn(float w, float h) {
         dl->AddText(font, logoFontSize, posProyec, HT::TextPri, "Proyec");
         dl->AddText(font, logoFontSize, posThor,   HT::AccentSoft, "Thor");
 
-        ImGui::Dummy(ImVec2(sizeProyec.x + sizeThor.x, logoFontSize));
+        ImGui::Dummy(ImVec2(totalW, logoFontSize));
+
+        const std::string verText = std::string("v") + PROYECTHOR_VERSION_STRING;
+        const ImVec2      vSize   = ImGui::CalcTextSize(verText.c_str());
+        ImGui::SetCursorPosX(contentX + (contentW - vSize.x) * 0.5f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted(verText.c_str());
+        ImGui::PopStyleColor();
     }
 
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-    ImGui::Text("v%s", PROYECTHOR_VERSION_STRING);
-    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-    ImGui::Dummy(ImVec2(0.0f, 32.0f));
+    // ── Hero: "Empezar a proyectar" -- panel dominante, ancho completo ───
+    {
+        const float cardW = contentW;
+        const float cardH = 130.0f;
 
-    dl->AddLine(
-        ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
-        ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
-        HT::Divider, 1.0f);
+        ImGui::SetCursorPosX(contentX);
+        const ImVec2 cardMin = ImGui::GetCursorScreenPos();
+        const ImVec2 cardMax = ImVec2(cardMin.x + cardW, cardMin.y + cardH);
 
-    ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        // El InvisibleButton va primero para tener el estado de hover/click
+        // antes de dibujar -- los elementos visuales de mas abajo se dibujan
+        // encima (mismo drawlist) sin afectar el hit-test, ya resuelto aca.
+        ImGui::InvisibleButton("##heroBtn", ImVec2(cardW, cardH));
+        const bool hovered = ImGui::IsItemHovered();
+        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsItemClicked())
+            m_LaunchRequested = true;
+        const float hoverT = HubHoverLerp(ImGui::GetID("##heroBtn"), hovered);
 
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+        // Halo/glow detras de la tarjeta, se agranda levemente con el hover.
+        for (int i = 6; i >= 1; i--) {
+            const float t     = static_cast<float>(i) / 6.0f;
+            const float pad   = 8.0f + t * 22.0f * (1.0f + hoverT * 0.4f);
+            const float alpha = 0.045f * (1.0f - t) * (0.6f + hoverT * 0.6f);
+            dl->AddRectFilled(ImVec2(cardMin.x - pad, cardMin.y - pad), ImVec2(cardMax.x + pad, cardMax.y + pad),
+                ColAf(HT::AccentBlue, alpha), HT::RadiusLg + pad * 0.3f);
+        }
 
-    if (ImGui::Button("Abrir configuracion", ImVec2(w - 60.0f, 36.0f)))
-        m_OpenSettingsRequested = true;
+        dl->AddRectFilled(cardMin, cardMax, ColAf(HT::Card, 0.92f), HT::RadiusLg);
+        dl->AddRect(cardMin, cardMax, ColAf(HT::AccentBlue, 0.35f + hoverT * 0.35f), HT::RadiusLg, 0, 1.5f + hoverT);
 
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
+        // Icono de "play" dibujado a mano (triangulo), no depende de que la
+        // fuente activa de la UI tenga un glifo de reproduccion. Ahora a la
+        // izquierda de la tarjeta (panel ancho) en vez de arriba centrado.
+        const float   iconR       = 30.0f;
+        const ImVec2  iconCenter  = ImVec2(cardMin.x + 70.0f, (cardMin.y + cardMax.y) * 0.5f);
+        dl->AddCircleFilled(iconCenter, iconR + 12.0f, ColAf(HT::AccentBlue, 0.16f + hoverT * 0.12f), 40);
+        dl->AddCircleFilled(iconCenter, iconR, HT::AccentBlue, 40);
+        const float triW = iconR * 0.85f, triH = iconR * 0.95f;
+        dl->AddTriangleFilled(
+            ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y - triH * 0.5f),
+            ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y + triH * 0.5f),
+            ImVec2(iconCenter.x + triW * 0.58f, iconCenter.y),
+            HT::OnAccent);
 
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        const float textX = iconCenter.x + iconR + 28.0f;
+        ImGui::SetCursorScreenPos(ImVec2(textX, cardMin.y + cardH * 0.5f - 34.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::SetWindowFontScale(1.5f);
+        ImGui::TextUnformatted("Empezar a proyectar");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
 
-    // Acceso rapido a Biblioteca -- a diferencia de "Abrir configuracion",
-    // este SI sale del Hub: entra al workspace pero mostrando solo el panel
-    // de Biblioteca (con Render incluido, ya es una pestaña de ese mismo
-    // panel), sin Home/Vista en Vivo/Diseño alrededor.
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+        ImGui::SetCursorScreenPos(ImVec2(textX, cardMin.y + cardH * 0.5f + 6.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted("Letra, Biblia, video y overlays en tiempo real");
+        ImGui::PopStyleColor();
 
-    if (ImGui::Button("Biblioteca", ImVec2(w - 60.0f, 36.0f)))
-        m_LibraryOnlyRequested = true;
+        ImGui::SetCursorScreenPos(ImVec2(cardMin.x, cardMax.y));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f)); // registra el limite real del panel (evita el aviso de ImGui)
+    }
 
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-    ImGui::Dummy(ImVec2(0.0f, 28.0f));
+    // ── Tarjeta "Abrir configuracion" -- debajo de "Empezar a proyectar",
+    // con la textura del usuario como fondo (bin/assets/ui/textures) e
+    // inclinacion 3D solo al pasar el mouse (ver DrawTiltTextureCard).
+    {
+        const float cfgH = 64.0f;
 
-    dl->AddLine(
-        ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
-        ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
-        HT::Divider, 1.0f);
+        ImGui::SetCursorPosX(contentX);
+        const ImVec2 cfgMin = ImGui::GetCursorScreenPos();
+        const ImVec2 cfgMax = ImVec2(cfgMin.x + contentW, cfgMin.y + cfgH);
 
-    ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        const GLTextureInfo cfgTex = GetCoverTexture(kConfigCardTextureFile);
+        bool cfgHovered = false, cfgClicked = false;
+        DrawTiltTextureCard(dl, cfgTex.id, cfgTex.width, cfgTex.height, cfgMin, cfgMax,
+            ImGui::GetID("##cfgCard"), &cfgHovered, &cfgClicked);
+        if (cfgClicked)
+            m_OpenSettingsRequested = true;
 
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-    ImGui::TextUnformatted("Accesos rapidos");
-    ImGui::PopStyleColor();
+        // Degradado oscuro abajo (mismo recurso que el hero de Novedades)
+        // para que el texto se lea encima de la foto.
+        dl->AddRectFilledMultiColor(
+            ImVec2(cfgMin.x, cfgMin.y + cfgH * 0.25f), cfgMax,
+            IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 200), IM_COL32(0, 0, 0, 200));
 
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::SetCursorScreenPos(ImVec2(cfgMin.x + 18.0f, cfgMax.y - 36.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::TextUnformatted("Abrir configuracion");
+        ImGui::PopStyleColor();
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(0xFFFFFFFFu, 190));
+        ImGui::TextUnformatted("Apariencia, Proyeccion, Stage y mas");
+        ImGui::PopStyleColor();
 
-    auto QuickBtn = [&](const char* icon, const char* label, int settingsTab) {
-        ImGui::SetCursorPosX(30.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(0, 0, 0, 0));
+        ImGui::SetCursorScreenPos(ImVec2(cfgMin.x, cfgMax.y));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+    // Tarjeta chica clickeable generica -- usada para Biblioteca y
+    // Novedades, misma altura, dos por fila.
+    auto PanelButtonCard = [&](float pw, float ph, const char* title, const std::string& subtitle) -> bool {
+        ImGui::PushID(title);
+        const ImVec2 pMin = ImGui::GetCursorScreenPos();
+        const ImVec2 pMax = ImVec2(pMin.x + pw, pMin.y + ph);
+
+        ImGui::InvisibleButton("##hit", ImVec2(pw, ph));
+        const bool  hovered = ImGui::IsItemHovered();
+        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        const bool  clicked = ImGui::IsItemClicked();
+        const float hoverT  = HubHoverLerp(ImGui::GetID("##hit"), hovered);
+
+        dl->AddRectFilled(pMin, pMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusLg);
+        dl->AddRect(pMin, pMax, ColAf(HT::AccentBlue, 0.10f + hoverT * 0.35f), HT::RadiusLg, 0, 1.0f + hoverT);
+        if (hoverT > 0.001f)
+            dl->AddRectFilled(pMin, pMax, ColAf(HT::TextPri, 0.04f * hoverT), HT::RadiusLg);
+
+        ImGui::SetCursorScreenPos(ImVec2(pMin.x + 18.0f, pMin.y + 14.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::AccentBlue);
+        ImGui::SetWindowFontScale(1.08f);
+        ImGui::TextUnformatted(title);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+        ImGui::SetCursorScreenPos(ImVec2(pMin.x + 18.0f, pMin.y + 40.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted(subtitle.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::SetCursorScreenPos(ImVec2(pMin.x, pMax.y));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+        ImGui::PopID();
+        return clicked;
+    };
+
+    // ── Fila: Biblioteca + Novedades + Descargar subtitulos ──────────────
+    {
+        const float rowGap = 16.0f;
+        const float thirdW = (contentW - rowGap * 2.0f) / 3.0f;
+        const float rowH   = 62.0f;
+
+        ImGui::SetCursorPosX(contentX);
+        const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+
+        // Acceso rapido a Biblioteca: entra al workspace pero mostrando
+        // solo el panel de Biblioteca (con Render incluido, ya es una
+        // pestaña de ese mismo panel), sin Home/Vista en Vivo/Diseño
+        // alrededor.
+        if (PanelButtonCard(thirdW, rowH, "Biblioteca", "Solo el panel de Biblioteca, con Render incluido"))
+            m_LibraryOnlyRequested = true;
+
+        ImGui::SetCursorScreenPos(ImVec2(rowStart.x + thirdW + rowGap, rowStart.y));
+        const UpdateVersionInfo* latestForRow = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
+        const std::string novSub = std::string("v") +
+            (latestForRow ? latestForRow->version : PROYECTHOR_VERSION_STRING) + " disponible  -  tecla N";
+        if (PanelButtonCard(thirdW, rowH, "Novedades", novSub))
+            m_NovedadesOpen = true;
+
+        ImGui::SetCursorScreenPos(ImVec2(rowStart.x + (thirdW + rowGap) * 2.0f, rowStart.y));
+        if (PanelButtonCard(thirdW, rowH, "Descargar subtitulos", "Bajalos como .txt desde una URL"))
+            m_DownloadSubsOpen = true;
+
+        ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + rowH));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+    // ── Accesos rapidos -- panel con fila de botones a Ajustes ───────────
+    {
+        ImGui::SetCursorPosX(contentX);
+        const ImVec2 qMin = ImGui::GetCursorScreenPos();
+        const float  qH   = 64.0f;
+        const ImVec2 qMax = ImVec2(qMin.x + contentW, qMin.y + qH);
+        dl->AddRectFilled(qMin, qMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusLg);
+
+        ImGui::SetCursorScreenPos(ImVec2(qMin.x + 18.0f, qMin.y + 8.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted("Accesos rapidos");
+        ImGui::PopStyleColor();
+
+        // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia,
+        // 1=Proyeccion, 2=Stage, 3=Audio, 4=Canciones, 5=Teclas, 6=Idioma,
+        // 7=Actualizaciones). "General" se quito del todo (pedido
+        // explicito, no se usaba), de ahi que ya no aparezca aca.
+        struct QuickItem { const char* label; int tab; };
+        static const QuickItem items[] = {
+            { "Apariencia",      0 },
+            { "Proyección",      1 },
+            { "Stage",           2 },
+            { "Idioma",          6 },
+            { "Actualizaciones", 7 },
+        };
+        const int   count  = (int)(sizeof(items) / sizeof(items[0]));
+        const float btnGap = 10.0f;
+        const float btnW   = (contentW - 36.0f - btnGap * (count - 1)) / count;
+
+        ImGui::SetCursorScreenPos(ImVec2(qMin.x + 18.0f, qMin.y + 30.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
         ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
-
-        char id[64];
-        snprintf(id, sizeof(id), "%s  %s##qb%d", icon, label, settingsTab);
-
-        if (ImGui::Button(id, ImVec2(w - 60.0f, 32.0f))) {
-            m_ActiveTab             = settingsTab;
-            m_OpenSettingsRequested = true;
+        for (int i = 0; i < count; i++) {
+            if (i > 0) ImGui::SameLine(0.0f, btnGap);
+            char id[64];
+            snprintf(id, sizeof(id), "%s##qb%d", items[i].label, items[i].tab);
+            if (ImGui::Button(id, ImVec2(btnW, 26.0f))) {
+                m_ActiveTab             = items[i].tab;
+                m_OpenSettingsRequested = true;
+            }
         }
-
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(4);
-    };
 
-    // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia,
-    // 1=Proyeccion, 2=Stage, 3=Audio, 4=Canciones, 5=Teclas, 6=Idioma,
-    // 7=Actualizaciones). "General" se quito del todo (pedido explicito, no
-    // se usaba), de ahi que ya no aparezca aca.
-    QuickBtn("", "Apariencia",      0);
-    QuickBtn("", "Proyección",      1);
-    QuickBtn("", "Stage",           2);
-    QuickBtn("", "Idioma",          6);
-    QuickBtn("", "Actualizaciones", 7);
-
-    ImGui::EndChild();
-}
-
-// Columna central -- foco dominante del Hub. "Empezar a proyectar" vive
-// aca solo, en una tarjeta grande con halo/glow (mismo lenguaje visual que
-// el brillo del logo "Thor"), en vez de ser un boton mas entre varios en el
-// sidebar. Reemplaza al viejo layout de sidebar+dashboard: la idea de la
-// imagen de referencia era "accion central, todo lo demas a los lados".
-void Hub::RenderCenterHero(float w, float h) {
-    ImGui::BeginChild("##CenterHero", ImVec2(w, h), false, ImGuiWindowFlags_NoScrollbar);
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2      wp = ImGui::GetWindowPos();
-
-    const float cardW = std::min(440.0f, w - 60.0f);
-    const float cardH = 300.0f;
-
-    ImGui::SetCursorPos(ImVec2((w - cardW) * 0.5f, (h - cardH) * 0.5f));
-    const ImVec2 cardMin = ImGui::GetCursorScreenPos();
-    const ImVec2 cardMax = ImVec2(cardMin.x + cardW, cardMin.y + cardH);
-
-    // El InvisibleButton va primero para tener el estado de hover/click antes
-    // de dibujar -- los elementos visuales de mas abajo se dibujan encima
-    // (mismo drawlist) sin afectar el hit-test, que ya quedo resuelto aca.
-    ImGui::InvisibleButton("##heroBtn", ImVec2(cardW, cardH));
-    const bool hovered = ImGui::IsItemHovered();
-    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    if (ImGui::IsItemClicked())
-        m_LaunchRequested = true;
-    const float hoverT = HubHoverLerp(ImGui::GetID("##heroBtn"), hovered);
-
-    // Halo/glow detras de la tarjeta, se agranda levemente con el hover.
-    for (int i = 6; i >= 1; i--) {
-        const float t     = static_cast<float>(i) / 6.0f;
-        const float pad   = 10.0f + t * 30.0f * (1.0f + hoverT * 0.4f);
-        const float alpha = 0.05f * (1.0f - t) * (0.6f + hoverT * 0.6f);
-        dl->AddRectFilled(ImVec2(cardMin.x - pad, cardMin.y - pad), ImVec2(cardMax.x + pad, cardMax.y + pad),
-            ColAf(HT::AccentBlue, alpha), HT::RadiusLg + pad * 0.3f);
+        ImGui::SetCursorScreenPos(ImVec2(qMin.x, qMax.y));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
     }
 
-    dl->AddRectFilled(cardMin, cardMax, ColAf(HT::Card, 0.92f), HT::RadiusLg);
-    dl->AddRect(cardMin, cardMax, ColAf(HT::AccentBlue, 0.35f + hoverT * 0.35f), HT::RadiusLg, 0, 1.5f + hoverT);
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-    // Icono de "play" dibujado a mano (triangulo), no depende de que la
-    // fuente activa de la UI tenga un glifo de reproduccion.
-    const float   iconR       = 34.0f;
-    const ImVec2  cardCenterX = ImVec2((cardMin.x + cardMax.x) * 0.5f, 0.0f);
-    const ImVec2  iconCenter  = ImVec2(cardCenterX.x, cardMin.y + 92.0f);
-    dl->AddCircleFilled(iconCenter, iconR + 14.0f, ColAf(HT::AccentBlue, 0.16f + hoverT * 0.12f), 40);
-    dl->AddCircleFilled(iconCenter, iconR, HT::AccentBlue, 40);
-    const float triW = iconR * 0.85f, triH = iconR * 0.95f;
-    dl->AddTriangleFilled(
-        ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y - triH * 0.5f),
-        ImVec2(iconCenter.x - triW * 0.32f, iconCenter.y + triH * 0.5f),
-        ImVec2(iconCenter.x + triW * 0.58f, iconCenter.y),
-        HT::OnAccent);
+    // ── Resumen local -- un solo panel compacto (pedido explicito: no
+    // mostrar todo de una con tarjetas y lista de canciones expandidas) ──
+    RenderResumenLocalSection(contentW);
 
-    auto CenteredScaledText = [&](const char* text, float scale, ImU32 col, float yLocal) {
-        const ImVec2 sz      = ImGui::CalcTextSize(text);
-        const float  scaledW = sz.x * scale;
-        ImGui::SetCursorPos(ImVec2((w - scaledW) * 0.5f, yLocal));
-        ImGui::PushStyleColor(ImGuiCol_Text, col);
-        ImGui::SetWindowFontScale(scale);
-        ImGui::TextUnformatted(text);
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-    };
-
-    const float cardTopLocal = (h - cardH) * 0.5f;
-    CenteredScaledText("Empezar a proyectar", 1.55f, HT::TextPri, cardTopLocal + 150.0f);
-    CenteredScaledText("Letra, Biblia, video y overlays en tiempo real", 1.0f, HT::TextMuted, cardTopLocal + 196.0f);
-
+    ImGui::EndGroup();
     ImGui::EndChild();
 }
 
@@ -1043,209 +1229,233 @@ void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
     }
 }
 
-void Hub::RenderRightColumn(float w, float h) {
-    ImGui::BeginChild("##RightCol", ImVec2(w, h), false);
+// "Resumen local" -- metricas + top canciones, llamado por RenderContent
+// como la ultima seccion del flujo de paneles. w es el ancho de contenido
+// completo (contentW), no una columna angosta: las dos metric cards ahora
+// van lado a lado en vez de apiladas.
+// Panel unico y compacto (pedido explicito: nada de tarjetas +
+// sparkline + lista de canciones expandidas de una) -- tres numeros clave
+// en una sola fila, mismo lenguaje visual que las tarjetas de
+// Biblioteca/Novedades.
+void Hub::RenderResumenLocalSection(float w) {
+    const int  totalProjections = ProyecThor::UI::GetTotalSongProjections();
+    const auto perfSummary      = ProyecThor::UI::GetPerformanceSummary();
+    const auto topSongs         = ProyecThor::UI::GetTopSongPlayStats(1);
 
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2      wp = ImGui::GetWindowPos();
-    dl->AddRectFilled(wp, ImVec2(wp.x + w, wp.y + h), ColAf(HT::Surface, 0.45f), HT::RadiusLg);
+    const float panelH = 78.0f;
+    ImDrawList* dl   = ImGui::GetWindowDrawList();
+    const ImVec2 pMin = ImGui::GetCursorScreenPos();
+    const ImVec2 pMax = ImVec2(pMin.x + w, pMin.y + panelH);
+    dl->AddRectFilled(pMin, pMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusLg);
 
-    const float pad         = 24.0f;
-    const float rightColWidth = w - pad * 2.0f;
+    ImGui::SetCursorScreenPos(ImVec2(pMin.x + 18.0f, pMin.y + 8.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+    ImGui::TextUnformatted("Resumen local");
+    ImGui::PopStyleColor();
 
-    ImGui::SetCursorPos(ImVec2(pad, pad));
-    ImGui::BeginGroup();
-
-    // ── Tarjeta "Novedades" -- abre el panel de la seccion 1 ────────────────
-    {
-        const UpdateVersionInfo* latest = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
-        const float cardH = 62.0f;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild("##NovedadesCard", ImVec2(rightColWidth, cardH), false, ImGuiWindowFlags_NoScrollbar);
-
-        const ImVec2 nStart = ImGui::GetCursorScreenPos();
-        const ImVec2 nEnd   = ImVec2(nStart.x + rightColWidth, nStart.y + cardH);
-        const bool   novHovered = ImGui::IsMouseHoveringRect(nStart, nEnd);
-        const float  hoverT = HubHoverLerp(ImGui::GetID("##NovedadesCard"), novHovered);
-        if (hoverT > 0.001f)
-            ImGui::GetWindowDrawList()->AddRectFilled(nStart, nEnd, ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusMd);
-
-        ImGui::SetCursorPos(ImVec2(14.0f, 8.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::AccentBlue);
-        ImGui::Text("Novedades");
-        ImGui::PopStyleColor();
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::Text("v%s disponible  -  tecla N", latest ? latest->version : PROYECTHOR_VERSION_STRING);
-        ImGui::PopStyleColor();
-
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-
-        ImGui::SetCursorScreenPos(nStart);
-        if (ImGui::InvisibleButton("##NovedadesHit", ImVec2(rightColWidth, cardH)))
-            m_NovedadesOpen = true;
-        if (ImGui::IsItemHovered())
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, 18.0f));
-
-    DrawSectionHeader("Resumen local", rightColWidth);
-
-    const auto topSongs = ProyecThor::UI::GetTopSongPlayStats(5);
-    const int totalProjections = ProyecThor::UI::GetTotalSongProjections();
-    const auto perfSummary = ProyecThor::UI::GetPerformanceSummary();
-    const auto perfHistory = ProyecThor::UI::GetRecentPerformanceHistory(8);
-
-    auto DrawMetricCard = [&](const char* label, const std::string& value, const char* hint,
-                               ImU32 color, const std::vector<int>* spark = nullptr) {
-        const bool  hasSpark = spark && spark->size() >= 2;
-        const float cardH    = hasSpark ? 96.0f : 70.0f;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild(label, ImVec2(rightColWidth - 8.0f, cardH), false);
-
-        const ImVec2 cMin     = ImGui::GetWindowPos();
-        const ImVec2 cMax     = ImVec2(cMin.x + rightColWidth - 8.0f, cMin.y + cardH);
-        const float  hoverT   = HubHoverLerp(ImGui::GetID(label), ImGui::IsWindowHovered());
-        if (hoverT > 0.001f)
-            ImGui::GetWindowDrawList()->AddRectFilled(cMin, cMax, ColAf(HT::TextPri, 0.04f * hoverT), HT::RadiusMd);
-
+    auto Stat = [&](float x, const char* label, const std::string& value, ImU32 color) {
+        ImGui::SetCursorScreenPos(ImVec2(x, pMin.y + 30.0f));
         ImGui::PushStyleColor(ImGuiCol_Text, color);
+        ImGui::SetWindowFontScale(1.12f);
         ImGui::TextUnformatted(value.c_str());
+        ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
+        ImGui::SetCursorScreenPos(ImVec2(x, pMin.y + 52.0f));
         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
         ImGui::TextUnformatted(label);
-        ImGui::TextDisabled("%s", hint);
         ImGui::PopStyleColor();
-
-        // Mini sparkline con el historial reciente (ya se pedia via
-        // GetRecentPerformanceHistory pero nunca se dibujaba).
-        if (hasSpark) {
-            const ImVec2 sMin = ImVec2(cMin.x + 12.0f, cMax.y - 30.0f);
-            const ImVec2 sMax = ImVec2(cMax.x - 12.0f, cMax.y - 10.0f);
-
-            int lo = spark->front(), hi = spark->front();
-            for (int v : *spark) { lo = std::min(lo, v); hi = std::max(hi, v); }
-            if (hi == lo) hi = lo + 1;
-
-            std::vector<ImVec2> pts(spark->size());
-            for (size_t i = 0; i < spark->size(); ++i) {
-                const float tx = static_cast<float>(i) / static_cast<float>(spark->size() - 1);
-                const float ty = static_cast<float>((*spark)[i] - lo) / static_cast<float>(hi - lo);
-                pts[i] = ImVec2(sMin.x + tx * (sMax.x - sMin.x), sMax.y - ty * (sMax.y - sMin.y));
-            }
-
-            ImDrawList* sdl = ImGui::GetWindowDrawList();
-            std::vector<ImVec2> fillPts = pts;
-            fillPts.push_back(ImVec2(sMax.x, sMax.y));
-            fillPts.push_back(ImVec2(sMin.x, sMax.y));
-            sdl->AddConvexPolyFilled(fillPts.data(), static_cast<int>(fillPts.size()), ColAf(color, 0.16f));
-            sdl->AddPolyline(pts.data(), static_cast<int>(pts.size()), color, 0, 1.6f);
-        }
-
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
     };
 
-    std::vector<int> fpsSpark;
-    fpsSpark.reserve(perfHistory.size());
-    for (const auto& [sampleLabel, fps] : perfHistory)
-        fpsSpark.push_back(fps);
+    const float colW = (w - 36.0f) / 3.0f;
+    Stat(pMin.x + 18.0f,               "Proyecciones totales", std::to_string(totalProjections), HT::Success);
+    Stat(pMin.x + 18.0f + colW,        "FPS promedio",         std::to_string(perfSummary.first), HT::AccentBlue);
 
-    const std::string fpsHint =
-        std::string("Ultimos registros del Hub  ·  pico ") + std::to_string(perfSummary.second) + " fps";
+    std::string topLabel = "Cancion mas proyectada";
+    std::string topValue = "Sin datos aun";
+    if (!topSongs.empty()) {
+        topValue = topSongs[0].first;
+        if (topValue.size() > 20) {
+            topValue.resize(20);
+            // Evita cortar a mitad de un caracter UTF-8 multibyte (tildes/ñ).
+            while (!topValue.empty() && (static_cast<unsigned char>(topValue.back()) & 0xC0) == 0x80)
+                topValue.pop_back();
+            topValue += "...";
+        }
+        topLabel = "Mas proyectada (" + std::to_string(topSongs[0].second) + ")";
+    }
+    Stat(pMin.x + 18.0f + colW * 2.0f, topLabel.c_str(), topValue, HT::TextPri);
 
-    DrawMetricCard("Proyecciones totales", std::to_string(totalProjections), "Cuentas locales registradas", HT::Success);
-    DrawMetricCard("FPS promedio", std::to_string(perfSummary.first), fpsHint.c_str(), HT::AccentBlue, &fpsSpark);
+    ImGui::SetCursorScreenPos(ImVec2(pMin.x, pMax.y));
+    ImGui::Dummy(ImVec2(0.0f, 0.0f));
+}
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-    ImGui::BeginChild("##SongStats", ImVec2(rightColWidth, 240.0f), false);
+// "Descargar subtitulos" -- utilidad standalone del Hub: pega una URL,
+// se bajan sus subtitulos (mismo fetch que "Importar desde URL" del menu
+// Archivo, ver SubtitleImporter.h) y se guardan como .txt suelto, sin crear
+// una cancion. "Guardar en" sigue el mismo patron de Biblioteca > Render
+// (preguntar cada vez via dialogo nativo, o una carpeta fija).
+void Hub::RenderDownloadSubtitlesPanel() {
+    // Se consume el resultado (y se une el hilo) apenas esta listo, SIEMPRE
+    // -- mismo motivo que UIManager::RenderUrlImportModal: si no, un
+    // intento nuevo mas tarde pisaria con "=" un std::thread todavia no
+    // unido y std::terminate() explota.
+    bool resultReady = false;
+    ProyecThor::Core::SubtitleFetchResult resultCopy;
+    {
+        std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+        if (m_DownloadSubsResult.has_value() && !m_DownloadSubsRunning) {
+            resultCopy  = *m_DownloadSubsResult;
+            resultReady = true;
+            m_DownloadSubsResult.reset();
+        }
+    }
+    if (resultReady) {
+        if (m_DownloadSubsThread.joinable())
+            m_DownloadSubsThread.join();
 
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-    ImGui::Text("Canciones más proyectadas");
-    ImGui::PopStyleColor();
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-    if (topSongs.empty()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::TextWrapped("Aún no hay estadísticas locales. Proyecta 2 versos o más de una canción para empezar.");
-        ImGui::PopStyleColor();
-    } else {
-        for (size_t i = 0; i < topSongs.size(); ++i) {
-            const auto& [title, count] = topSongs[i];
-            const std::string childId = "##songStat" + std::to_string(i);
-
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusSm);
-            ImGui::BeginChild(childId.c_str(), ImVec2(rightColWidth - 10.0f, 48.0f), false);
-
-            const ImVec2 rMin    = ImGui::GetWindowPos();
-            const ImVec2 rMax    = ImVec2(rMin.x + rightColWidth - 10.0f, rMin.y + 48.0f);
-            const float  hoverT  = HubHoverLerp(ImGui::GetID(childId.c_str()), ImGui::IsWindowHovered());
-            if (hoverT > 0.001f)
-                ImGui::GetWindowDrawList()->AddRectFilled(rMin, rMax, ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusSm);
-
-            // Columna derecha (contador + "proyecciones") con ancho fijo
-            // reservado segun su propio contenido; el titulo se trunca con
-            // elipsis para no invadirla en canciones con nombres largos
-            // (antes se dibujaba sin clip y se superponia con el contador).
-            const std::string countStr  = std::to_string(count);
-            const float countColW   = std::max(ImGui::CalcTextSize(countStr.c_str()).x,
-                                                ImGui::CalcTextSize("proyecciones").x);
-            const float rightColX   = (rightColWidth - 10.0f) - countColW - 14.0f;
-            const float titleMaxW   = rightColX - 12.0f;
-
-            std::string displayTitle = title;
-            if (ImGui::CalcTextSize(displayTitle.c_str()).x > titleMaxW) {
-                while (!displayTitle.empty() &&
-                       ImGui::CalcTextSize((displayTitle + "...").c_str()).x > titleMaxW) {
-                    displayTitle.pop_back();
+        if (resultCopy.success) {
+            std::string savePath;
+            if (m_DownloadSubsAskEachTime || m_DownloadSubsPresetFolder.empty()) {
+                std::string suggested = resultCopy.title.empty() ? "subtitulos" : resultCopy.title;
+                savePath = ProyecThor::UI::PickSaveTextPath(
+                    (m_DownloadSubsPresetFolder.empty() ? suggested : (m_DownloadSubsPresetFolder + "/" + suggested)) + ".txt");
+            } else {
+                // Carpeta fija: nombre automatico a partir del titulo, con
+                // el mismo criterio anti-colision que ya usa el conversor
+                // de Render (agrega " (2)", " (3)"... si ya existe).
+                std::string base = resultCopy.title.empty() ? "subtitulos" : resultCopy.title;
+                std::string candidate = m_DownloadSubsPresetFolder + "/" + base + ".txt";
+                int suffix = 2;
+                while (std::filesystem::exists(candidate)) {
+                    candidate = m_DownloadSubsPresetFolder + "/" + base + " (" + std::to_string(suffix) + ").txt";
+                    ++suffix;
                 }
-                // Evita cortar a mitad de un caracter UTF-8 multibyte
-                // (tildes/ñ) dejando un byte de continuacion colgante.
-                while (!displayTitle.empty() &&
-                       (static_cast<unsigned char>(displayTitle.back()) & 0xC0) == 0x80) {
-                    displayTitle.pop_back();
-                }
-                displayTitle += "...";
+                savePath = candidate;
             }
 
-            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-            ImGui::TextUnformatted(displayTitle.c_str());
-            ImGui::PopStyleColor();
-            ImGui::SameLine(rightColX);
-            ImGui::BeginGroup();
-            ImGui::TextUnformatted(countStr.c_str());
-            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-            ImGui::TextDisabled("proyecciones");
-            ImGui::PopStyleColor();
-            ImGui::EndGroup();
-
-            ImGui::EndChild();
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor();
-            if (i + 1 < topSongs.size()) {
-                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+            if (!savePath.empty()) {
+                std::ofstream f(savePath, std::ios::binary);
+                if (f.is_open()) {
+                    f << "\xEF\xBB\xBF" << resultCopy.lyrics;
+                    f.close();
+                    m_DownloadSubsSavedPath = savePath;
+                    m_DownloadSubsLastError.clear();
+                } else {
+                    m_DownloadSubsLastError = "No se pudo escribir el archivo en esa ubicacion.";
+                }
             }
+            // savePath vacio == el operador cancelo el dialogo -- no es un
+            // error, simplemente no se guarda nada y queda listo para
+            // reintentar sin perder el texto ya descargado.
+        } else {
+            m_DownloadSubsLastError = resultCopy.error;
         }
     }
 
-    ImGui::EndChild();
+    if (!m_DownloadSubsOpen) return;
+
+    const ImVec2 baseSize(480.0f, 260.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+    ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(baseSize, ImGuiCond_Appearing);
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
+    bool open = ImGui::Begin("Descargar subtitulos", &m_DownloadSubsOpen,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (open) {
+        ImGui::TextWrapped("Pega el link de un video. Se buscan sus subtitulos (español primero, si "
+                            "no ingles) y se guardan como un .txt suelto -- no crea una cancion.");
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+        ImGui::BeginDisabled(m_DownloadSubsRunning);
+        ImGui::SetNextItemWidth(-1.0f);
+        bool enterPressed = ImGui::InputTextWithHint("##dlSubsUrl", "https://www.youtube.com/watch?v=...",
+            m_DownloadSubsUrlBuf, sizeof(m_DownloadSubsUrlBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::EndDisabled();
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        // ── Guardar en -- mismo patron que Biblioteca > Render ───────────
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted("Guardar en");
+        ImGui::PopStyleColor();
+        if (ImGui::RadioButton("Preguntar cada vez", m_DownloadSubsAskEachTime))
+            m_DownloadSubsAskEachTime = true;
+        if (ImGui::RadioButton("Carpeta fija", !m_DownloadSubsAskEachTime))
+            m_DownloadSubsAskEachTime = false;
+
+        if (!m_DownloadSubsAskEachTime) {
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            char folderBuf[512];
+            std::snprintf(folderBuf, sizeof(folderBuf), "%s",
+                m_DownloadSubsPresetFolder.empty() ? "Sin elegir..." : m_DownloadSubsPresetFolder.c_str());
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 96.0f);
+            ImGui::InputText("##dlSubsPresetFolder", folderBuf, sizeof(folderBuf), ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button("Elegir...", ImVec2(86.0f, 0.0f))) {
+                std::string chosen = ProyecThor::UI::PickFolder("Elegir carpeta para subtitulos descargados");
+                if (!chosen.empty()) m_DownloadSubsPresetFolder = chosen;
+            }
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        bool wantStart = false;
+        if (m_DownloadSubsRunning) {
+            ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Buscando subtitulos...");
+        } else {
+            if (ImGui::Button("Descargar", ImVec2(120.0f, 32.0f)))
+                wantStart = true;
+            if (enterPressed)
+                wantStart = true;
+            ImGui::SameLine();
+            if (ImGui::Button("Cerrar", ImVec2(100.0f, 32.0f))) {
+                m_DownloadSubsOpen = false;
+                m_DownloadSubsLastError.clear();
+            }
+        }
+
+        if (!m_DownloadSubsLastError.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.35f, 0.35f, 1.0f));
+            ImGui::TextWrapped("%s", m_DownloadSubsLastError.c_str());
+            ImGui::PopStyleColor();
+        }
+        if (!m_DownloadSubsSavedPath.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::Success);
+            ImGui::TextWrapped("Guardado en: %s", m_DownloadSubsSavedPath.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        if (wantStart && !m_DownloadSubsRunning && m_DownloadSubsUrlBuf[0] != '\0') {
+            if (m_DownloadSubsThread.joinable()) m_DownloadSubsThread.join(); // por si quedo un intento anterior sin unir
+            m_DownloadSubsLastError.clear();
+            m_DownloadSubsSavedPath.clear();
+            m_DownloadSubsRunning = true;
+            {
+                std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+                m_DownloadSubsResult.reset();
+            }
+            std::string urlCopy = m_DownloadSubsUrlBuf;
+            m_DownloadSubsThread = std::thread([this, urlCopy]() {
+                ProyecThor::Core::SubtitleFetchResult res = ProyecThor::Core::FetchSubtitlesAsLyrics(urlCopy);
+                std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+                m_DownloadSubsResult  = std::move(res);
+                m_DownloadSubsRunning = false;
+            });
+        }
+    }
+
+    ImGui::End();
     ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
-
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-
-    ImGui::EndGroup();
-    ImGui::EndChild();
 }
 
 // Modal universal de detalle de actualizacion -- sin cambios de logica

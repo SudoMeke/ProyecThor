@@ -3,6 +3,10 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <thread>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <GLFW/glfw3.h>
 #include "IPanel.h"
 #include "../toolbar/ConfigPanel.h"
@@ -18,6 +22,7 @@
 #include "panels/SyncPanel.h"
 #include "panels/OSCPanel.h"
 #include "frontend/views/QuickNotes.h"
+#include "backend/core/SubtitleImporter.h"
 
 namespace ProyecThor::UI {
 
@@ -132,6 +137,21 @@ private:
     void         RenderNotesWindow();
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
+
+    // "Importar desde URL" (Archivo > Importar) -- descarga subtitulos via
+    // yt-dlp (ver SubtitleImporter.h) en un hilo de fondo, ya que la
+    // descarga depende de la red y puede tardar varios segundos; congelar
+    // la UI mientras tanto no es aceptable. El resultado se entrega via
+    // m_UrlImportResult protegido por mutex y se consume una sola vez en
+    // RenderUrlImportModal, sin importar si la ventana sigue abierta.
+    void        RenderUrlImportModal();
+    bool        m_ShowUrlImport        = false;
+    bool        m_UrlImportRunning     = false;
+    char        m_UrlImportBuffer[512] = {};
+    std::string m_UrlImportLastError;
+    std::thread m_UrlImportThread;
+    std::mutex  m_UrlImportMutex;
+    std::optional<ProyecThor::Core::SubtitleFetchResult> m_UrlImportResult;
 
     // Popup de acceso rapido a "Estilos" -- boton propio en RenderModeToolbar
     // (junto a Notas), lista los estilos guardados (Diseño > Estilos, ver

@@ -39,6 +39,13 @@ void CreateNewSong(LibraryContext& ctx);
 // hace el mismo select+RequestSongEditorOpen directo contra PresentationCore.
 void CreateNewSongFromClipboard(const std::string& clipboardText);
 
+// Variante para el menu Archivo > Importar > "Importar desde URL": mismo
+// patron que CreateNewSongFromClipboard, pero <suggestedTitle> (titulo del
+// video, via yt-dlp) se usa como base del nombre de archivo en vez de
+// "Cancion pegada" -- ver SubtitleImporter::FetchSubtitlesAsLyrics y
+// RenderUrlImportModal en UIManager.cpp.
+void CreateNewSongFromText(const std::string& suggestedTitle, const std::string& text);
+
 std::string GetSongAuthor(const std::string& filename);
 void SetSongAuthor(const std::string& filename, const std::string& author);
 

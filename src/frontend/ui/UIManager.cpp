@@ -683,7 +683,12 @@ void UIManager::RenderAll()
     m_Sync.Update();
     m_OSC.Update();
 
-    RenderModeToolbar();
+    // La toolbar de modos (pills "Hub"/"Proyector" + Notas/Estilos/
+    // Streaming) no se muestra en el Hub a proposito -- el Hub ya tiene su
+    // propia forma de navegar (tarjetas centrales), esta barra solo tiene
+    // sentido una vez en el workspace real.
+    if (m_Mode != WorkspaceMode::Hub)
+        RenderModeToolbar();
 
     // Salida real ("ProjectorLive"/"StageLive") -- SIEMPRE se renderiza aca,
     // antes de cualquier return anticipado de abajo (editor a pantalla
@@ -691,6 +696,11 @@ void UIManager::RenderAll()
     // interrumpa solo porque el operador esta mirando otra cosa en su
     // propia pantalla. Ver comentario en UIManager.h.
     RenderLiveOutputWindows();
+
+    // Se renderiza siempre, sin importar el modo/return anticipado de mas
+    // abajo, para que "Archivo > Importar > Importar desde URL" funcione
+    // igual desde el Hub que desde el Proyector.
+    RenderUrlImportModal();
 
     // Editor a pantalla completa (Overlay/Estilos) activo -- ver
     // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
@@ -824,6 +834,8 @@ if (m_FocusViewNextFrame) {
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.500f, 0.500f, 0.490f, 1.0f));
         ImGui::Text("Creado por TheVixcho y la comunidad de ProyecThor");
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Colaboradores: Oscar Farias, Victor Farias, Fabiola Fernandez");
         ImGui::Spacing();
         ImGui::TextDisabled("2026");
         ImGui::PopStyleColor();
@@ -1280,6 +1292,117 @@ void UIManager::RenderNotesWindow()
         s_WasOpenLastFrame = false;
 }
 
+void UIManager::RenderUrlImportModal()
+{
+    // Se consume el resultado (y se une el hilo) apenas esta listo, SIEMPRE
+    // -- incluso si el operador ya cerro la ventana mientras corria en
+    // segundo plano. Sin esto, un intento nuevo mas tarde pisaria con "="
+    // un std::thread todavia no unido y std::terminate() explota.
+    bool resultReady = false;
+    ProyecThor::Core::SubtitleFetchResult resultCopy;
+    {
+        std::lock_guard<std::mutex> lk(m_UrlImportMutex);
+        if (m_UrlImportResult.has_value() && !m_UrlImportRunning) {
+            resultCopy   = *m_UrlImportResult;
+            resultReady  = true;
+            m_UrlImportResult.reset();
+        }
+    }
+    if (resultReady) {
+        if (m_UrlImportThread.joinable())
+            m_UrlImportThread.join();
+
+        if (resultCopy.success) {
+            // Si el operador ya cerro/cancelo mientras se descargaba, no se
+            // crea la cancion igual a sus espaldas -- se descarta el
+            // resultado en silencio.
+            if (m_ShowUrlImport) {
+                ProyecThor::Library::CreateNewSongFromText(resultCopy.title, resultCopy.lyrics);
+                m_ShowUrlImport         = false;
+                m_UrlImportBuffer[0]    = '\0';
+                m_UrlImportLastError.clear();
+            }
+        } else {
+            m_UrlImportLastError = resultCopy.error;
+        }
+    }
+
+    if (!m_ShowUrlImport) return;
+
+    const ImVec2 baseSize(480.0f, 230.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+    ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(baseSize, ImGuiCond_Appearing);
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
+    bool open = ImGui::Begin("Importar desde URL", &m_ShowUrlImport,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (open) {
+        ImGui::TextWrapped("Pega el link de un video (YouTube y similares). Se buscan sus subtitulos "
+                            "-- primero en espa\xC3\xB1ol, si no en ingles -- y se usan como letra "
+                            "inicial de una cancion nueva.");
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+        ImGui::BeginDisabled(m_UrlImportRunning);
+        ImGui::SetNextItemWidth(-1.0f);
+        bool enterPressed = ImGui::InputTextWithHint("##urlImportInput", "https://www.youtube.com/watch?v=...",
+            m_UrlImportBuffer, sizeof(m_UrlImportBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::EndDisabled();
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        bool wantStart = false;
+        if (m_UrlImportRunning) {
+            ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Buscando subtitulos...");
+        } else {
+            if (ImGui::Button("Importar", ImVec2(120.0f, 32.0f)))
+                wantStart = true;
+            if (enterPressed)
+                wantStart = true;
+            ImGui::SameLine();
+            if (ImGui::Button("Cancelar", ImVec2(100.0f, 32.0f))) {
+                m_ShowUrlImport      = false;
+                m_UrlImportBuffer[0] = '\0';
+                m_UrlImportLastError.clear();
+            }
+        }
+
+        if (!m_UrlImportLastError.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.35f, 0.35f, 1.0f));
+            ImGui::TextWrapped("%s", m_UrlImportLastError.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        if (wantStart && !m_UrlImportRunning && m_UrlImportBuffer[0] != '\0') {
+            if (m_UrlImportThread.joinable()) m_UrlImportThread.join(); // por si quedo un intento anterior sin unir
+            m_UrlImportLastError.clear();
+            m_UrlImportRunning = true;
+            {
+                std::lock_guard<std::mutex> lk(m_UrlImportMutex);
+                m_UrlImportResult.reset();
+            }
+            std::string urlCopy = m_UrlImportBuffer;
+            m_UrlImportThread = std::thread([this, urlCopy]() {
+                ProyecThor::Core::SubtitleFetchResult res = ProyecThor::Core::FetchSubtitlesAsLyrics(urlCopy);
+                std::lock_guard<std::mutex> lk(m_UrlImportMutex);
+                m_UrlImportResult  = std::move(res);
+                m_UrlImportRunning = false;
+            });
+        }
+    }
+
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void UIManager::RenderStylesPopup()
 {
     // Sin color de fondo propio -- hereda ImGuiCol_PopupBg del tema activo
@@ -1449,6 +1572,11 @@ void UIManager::RenderMainMenuBar()
                     const char* clip = ImGui::GetClipboardText();
                     if (clip && clip[0] != '\0')
                         ProyecThor::Library::CreateNewSongFromClipboard(clip);
+                }
+                if (ImGui::MenuItem("Importar desde URL"))
+                {
+                    m_ShowUrlImport = true;
+                    m_UrlImportLastError.clear();
                 }
                 ImGui::EndMenu();
             }
@@ -1685,6 +1813,11 @@ void UIManager::EndDockspace()
 
 void UIManager::Shutdown()
 {
+    // Puede bloquear un instante si una descarga de subtitulos seguia en
+    // curso -- preferible a std::terminate() por destruir un std::thread
+    // todavia joinable (ver RenderUrlImportModal).
+    if (m_UrlImportThread.joinable())
+        m_UrlImportThread.join();
     m_Panels.clear();
 }
 

@@ -2,7 +2,12 @@
 
 #include <chrono>
 #include <array>
+#include <thread>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <imgui.h>
+#include "backend/core/SubtitleImporter.h"
 
 struct GLFWmonitor;
 
@@ -11,6 +16,7 @@ namespace ProyecThor::UI {
 class Hub {
 public:
     Hub();
+    ~Hub(); // une m_DownloadSubsThread si sigue viva -- ver definicion en Hub.cpp
 
     bool Render();
     void ForceOpen();
@@ -28,11 +34,15 @@ public:
     void ClearLibraryOnlyRequest()    { m_LibraryOnlyRequested = false; }
 
 private:
-    void RenderLeftColumn(float w, float h);
-    void RenderCenterHero(float w, float h);
-    void RenderRightColumn(float w, float h);
+    // Layout de un solo flujo central de paneles (logo, hero "Empezar a
+    // proyectar", config con textura, Biblioteca/Novedades, accesos rapidos,
+    // resumen local) usando todo el ancho del Hub -- reemplaza al viejo
+    // layout de 3 columnas fijas (izquierda/centro/derecha).
+    void RenderContent(float w, float h);
+    void RenderResumenLocalSection(float w);
     void RenderNovedadesPanel();
     void RenderUpdateDetailModal();
+    void RenderDownloadSubtitlesPanel();
 
     void UpdateAnimations(float dt);
 
@@ -58,6 +68,22 @@ private:
     bool  m_IsUpdateModalOpen     = false;
     int   m_SelectedUpdateVer     = 13; // id de kUpdateRegistry; arranca en la mas reciente
     float m_UpdateModalAnim       = 0.0f;
+
+    // --- "Descargar subtitulos" -- utilidad independiente de la Biblioteca:
+    // baja los subtitulos de una URL (mismo fetch que "Importar desde URL"
+    // del menu Archivo, ver SubtitleImporter.h) y los guarda como .txt
+    // suelto, sin crear una cancion. Corre en un hilo de fondo por la
+    // misma razon que UIManager::RenderUrlImportModal (depende de la red).
+    bool        m_DownloadSubsOpen           = false;
+    bool        m_DownloadSubsRunning        = false;
+    char        m_DownloadSubsUrlBuf[512]    = {};
+    bool        m_DownloadSubsAskEachTime    = true;
+    std::string m_DownloadSubsPresetFolder;
+    std::string m_DownloadSubsLastError;
+    std::string m_DownloadSubsSavedPath; // no vacio tras un exito -- se muestra "Guardado en: ..."
+    std::thread m_DownloadSubsThread;
+    std::mutex  m_DownloadSubsMutex;
+    std::optional<ProyecThor::Core::SubtitleFetchResult> m_DownloadSubsResult;
 
     // --- Canvas de particulas (fondo animado) ---
     struct BgParticle {

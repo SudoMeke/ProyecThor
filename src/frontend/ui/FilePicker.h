@@ -30,6 +30,11 @@ std::string PickFolder(const std::string& title = "Elegir carpeta");
 // (con extension). Devuelve "" si cancela.
 std::string PickSaveVideoPath(const std::string& defaultPath);
 
+// Mismo patron que PickSaveVideoPath pero filtrado a texto plano (.txt) --
+// usado por "Descargar subtitulos" del Hub (ver SubtitleImporter.h),
+// donde el resultado es un .txt suelto y no una cancion de Biblioteca.
+std::string PickSaveTextPath(const std::string& defaultPath);
+
 // Extension-sniffing simple para decidir si un path va por el pipeline de
 // video o de imagen (mismo criterio que BackgroundLayer).
 bool LooksLikeVideoPath(const std::string& path);

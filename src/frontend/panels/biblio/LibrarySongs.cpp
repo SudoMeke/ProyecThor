@@ -1490,14 +1490,27 @@ void CreateNewSong(LibraryContext& ctx)
 }
 
 // =============================================================================
-//  CreateNewSongFromClipboard — ver comentario en LibrarySongs.h. Mismo
-//  patron que CreateNewSong, pero con el texto del portapapeles como letra
-//  inicial y sin LibraryContext (se llama desde el menu Archivo, que no
-//  tiene una instancia a mano).
+//  CreateNewSongFromText — nucleo compartido por CreateNewSongFromClipboard
+//  y la importacion desde URL (ver LibrarySongs.h): elige un nombre de
+//  archivo libre a partir de <suggestedTitle>, escribe <text> como letra
+//  inicial, y abre el editor unificado directo. Sin LibraryContext (se
+//  llama desde el menu Archivo, que no tiene una instancia a mano).
 // =============================================================================
-void CreateNewSongFromClipboard(const std::string& clipboardText)
+void CreateNewSongFromText(const std::string& suggestedTitle, const std::string& text)
 {
-    const std::string base = "Cancion pegada";
+    // Caracteres invalidos en nombres de archivo Windows (los mismos quedan
+    // afuera en Linux por prolijidad, aunque ahi solo '/' es realmente
+    // invalido) -- se reemplazan por espacio y se recorta el resultado.
+    std::string base = suggestedTitle;
+    for (char& c : base) {
+        if (std::string("\\/:*?\"<>|").find(c) != std::string::npos)
+            c = ' ';
+    }
+    while (!base.empty() && (base.front() == ' ' || base.front() == '.')) base.erase(base.begin());
+    while (!base.empty() && (base.back()  == ' ' || base.back()  == '.')) base.pop_back();
+    if (base.empty()) base = "Cancion importada";
+    if (base.size() > 80) base.resize(80); // nombres de archivo demasiado largos rompen algunos filesystems
+
     std::string filename = base + ".txt";
     int suffix = 2;
     while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
@@ -1508,7 +1521,7 @@ void CreateNewSongFromClipboard(const std::string& clipboardText)
     std::ofstream f(U8Path(GetAssetsPath() + "/songs/" + filename));
     if (f.is_open()) {
         f << "\xEF\xBB\xBF";
-        f << clipboardText;
+        f << text;
     }
     f.close();
 
@@ -1521,6 +1534,11 @@ void CreateNewSongFromClipboard(const std::string& clipboardText)
     Core::PresentationCore::Get().SetSelection(s);
 
     Core::PresentationCore::Get().RequestSongEditorOpen(filename);
+}
+
+void CreateNewSongFromClipboard(const std::string& clipboardText)
+{
+    CreateNewSongFromText("Cancion pegada", clipboardText);
 }
 
 // =============================================================================

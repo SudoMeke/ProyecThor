@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "LibraryVideoPreview.h"
 #include "ui/DesignSystem.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "frontend/panels/layers/LayersTheme.h"
@@ -197,6 +198,9 @@ static bool RenderVideoContextMenu(LibraryContext& ctx, const std::string& filen
         Core::PresentationCore::Get().SetBackgroundMedia(fp, true, /*allowAudio=*/true);
         Core::PresentationCore::Get().SetProjecting(true);
     }
+    if (ImGui::MenuItem("Ver en pantalla completa") && origIdx >= 0) {
+        OpenVideoPreview(ctx, origIdx);
+    }
     ImGui::Separator();
     if (ImGui::MenuItem("Renombrar")) {
         ctx.renameOldName  = filename;
@@ -331,6 +335,7 @@ static void RenderVideoCard(LibraryContext& ctx, const std::string& filename, in
     ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
     dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, DS::TextPrimary, dn.c_str());
 
+    ImGui::SetNextItemAllowOverlap(); // deja que el boton de preview de abajo, dibujado encima, reciba su propio click
     ImGui::InvisibleButton(("##vidcard" + std::to_string(cardIdx)).c_str(), {W, H});
 
     if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && origIdx >= 0) {
@@ -339,6 +344,19 @@ static void RenderVideoCard(LibraryContext& ctx, const std::string& filename, in
         s.title = filename;
         s.type  = Core::ItemType::Video;
         Core::PresentationCore::Get().SetSelection(s);
+    }
+
+    // Boton "ver en pantalla completa" -- centrado sobre la miniatura, solo
+    // visible al pasar el mouse (mismo hover t que ya se calcula arriba
+    // para el borde). Ver LibraryVideoPreview.h.
+    if (t > 0.01f && origIdx >= 0) {
+        const float playSz = 40.0f;
+        ImGui::SetCursorScreenPos({ pos.x + (W - playSz) * 0.5f, pos.y + (H - playSz) * 0.5f });
+        if (GlassIconButton(("pvopen" + std::to_string(cardIdx)).c_str(), "play", ">",
+                             "Ver en pantalla completa", { playSz, playSz }))
+        {
+            OpenVideoPreview(ctx, origIdx);
+        }
     }
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
@@ -402,6 +420,11 @@ void RenderVideoSection(LibraryContext& ctx)
     }
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(5);
+
+    // Se dibuja siempre, sin importar la pestaña activa -- tiene que poder
+    // seguir mostrandose/cerrandose aunque el operador cambie de pestaña
+    // mientras el preview a pantalla completa esta abierto.
+    RenderVideoPreviewOverlay(ctx);
 }
 
 // =============================================================================
