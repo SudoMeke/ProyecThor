@@ -410,8 +410,10 @@ void SettingsPanel::RenderCategoryUpdates() {
     auto& u   = ProyecThor::Settings::SettingsManager::Get().GetSettings().updates;
     auto  st  = s_Status.load();
 
-    // ── Versión instalada ─────────────────────────────────────────────────────
-    if (SectionTitle("Versión instalada")) {
+    // Version instalada + Estado + Configuracion fusionadas en una sola
+    // subcategoria (pedido explicito): antes eran 3 entradas de sidebar
+    // para algo que se lee de punta a punta como una sola pagina.
+    if (SectionTitle("Versión instalada", "Actualizaciones")) {
         // Badge de versión
         {
             ImDrawList* dl  = ImGui::GetWindowDrawList();
@@ -452,10 +454,9 @@ void SettingsPanel::RenderCategoryUpdates() {
                     "este sistema de actualizaciones), revisa 'Agregar o quitar "
                     "programas' de Windows y desinstala a mano cualquier versión vieja "
                     "sobrante.");
-    }
 
-    // ── Caja de estado ───────────────────────────────────────────────────────
-    if (SectionTitle("Estado")) {
+    ImGui::Spacing();
+    ImGui::SeparatorText("Estado");
     ImGui::Spacing();
 
     // Dimensiones y colores según estado
@@ -611,10 +612,11 @@ void SettingsPanel::RenderCategoryUpdates() {
 
     ImGui::PopStyleVar(2);
     if (busy) ImGui::EndDisabled();
-    } // if (SectionTitle("Estado"))
 
-    // ── Configuración ──────────────────────────────────────────────────────────
-    if (SectionTitle("Configuracion")) {
+    ImGui::Spacing();
+    ImGui::SeparatorText("Configuracion");
+
+    {
         ImGui::Checkbox("Comprobar al iniciar", &u.checkOnStartup);
         HelpTooltip("Comprueba actualizaciones automaticamente al abrir ProyecThor.");
 
@@ -664,6 +666,7 @@ void SettingsPanel::RenderCategoryUpdates() {
 
         ImGui::PopStyleVar(2);
     }
+    } // if (SectionTitle("Versión instalada", "Actualizaciones"))
 }
 
 } // namespace ProyecThor::UI::Settings

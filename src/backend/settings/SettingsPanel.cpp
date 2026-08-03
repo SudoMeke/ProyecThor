@@ -35,27 +35,25 @@ struct Category {
 static const Category k_Categories[] = {
     { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
     { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 1
-    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Cast,      IM_COL32( 80, 205, 165, 255) }, // 2
-    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 3
-    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 4
-    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 5
-    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 6
-    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 7
+    { "CNX", "Conexiones",      "Red, app movil, streaming y OSC",         CatIcon::Cast,      IM_COL32(120, 160, 235, 255) }, // 2
+    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Sliders,   IM_COL32( 80, 205, 165, 255) }, // 3
+    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
+    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
+    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
+    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
+    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
     // "General" (Inicio/Guardado automatico/Carpetas por defecto) se quito
     // del todo -- pedido explicito, no se usaba. Los campos siguen viviendo
     // en SettingsManager.h (GeneralSettings) con sus valores actuales, solo
     // que ya no hay UI para editarlos.
     //
-    // Red/Mobile/Streaming/OSC NO son categorías propias -- son
-    // subcategorías (SectionTitle) DENTRO de "Proyección" (ver
-    // CategoryProjection.cpp), igual que Monitor de Salida/Calidad de
-    // Salida/Logo. Separarlas en categorías de nivel superior fue un error
-    // (quedaban sueltas de la categoría a la que en realidad pertenecen);
-    // lo que sí vale la pena de esa idea es que cada tema tenga su propia
-    // entrada navegable en el sidebar -- eso ya lo resuelve el mecanismo de
-    // subcategorías (m_SectionAnchors) sin inventar categorías nuevas.
+    // Red/Mobile/Streaming/OSC vivieron un tiempo como subcategorias DENTRO
+    // de "Proyeccion" (ver historial de CategoryProjection.cpp) -- pedido
+    // explicito de volver a subirlas a su propia categoria de nivel
+    // superior ("Conexiones", ver CategoryConnections.cpp), esta vez como 4
+    // subcategorias propias (no fusionadas entre si).
 };
-static constexpr int k_CategoryCount = 8;
+static constexpr int k_CategoryCount = 9;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -159,9 +157,9 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
 struct NavGroup { const char* label; const int items[3]; int count; };
 static const NavGroup k_NavGroups[] = {
     { "APARIENCIA", { 0,       }, 1 },
-    { "PANTALLAS",  { 1, 2,    }, 2 }, // Proyección + Pantallas (Stage) -- mismo grupo, pedido explicito
-    { "AUDIO",      { 3, 4,    }, 2 },
-    { "SISTEMA",    { 5, 6, 7  }, 3 },
+    { "PANTALLAS",  { 1, 2, 3  }, 3 }, // Proyección + Conexiones + Pantallas (Stage) -- mismo grupo, pedido explicito
+    { "AUDIO",      { 4, 5,    }, 2 },
+    { "SISTEMA",    { 6, 7, 8  }, 3 },
 };
 static constexpr int k_NavGroupCount = 4;
 
@@ -698,14 +696,15 @@ void SettingsPanel::RenderContent() {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.frameRounding);
 
     switch (m_SelectedCategory) {
-        case 0: RenderCategoryTheme();      break;
-        case 1: RenderCategoryProjection(); break;
-        case 2: RenderCategoryStage();      break;
-        case 3: RenderCategoryAudio();      break;
-        case 4: RenderCategorySongs();      break;
-        case 5: RenderCategoryShortcuts();  break;
-        case 6: RenderCategoryLanguage();   break;
-        case 7: RenderCategoryUpdates();    break;
+        case 0: RenderCategoryTheme();       break;
+        case 1: RenderCategoryProjection();  break;
+        case 2: RenderCategoryConnections(); break;
+        case 3: RenderCategoryStage();       break;
+        case 4: RenderCategoryAudio();       break;
+        case 5: RenderCategorySongs();       break;
+        case 6: RenderCategoryShortcuts();   break;
+        case 7: RenderCategoryLanguage();    break;
+        case 8: RenderCategoryUpdates();     break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 

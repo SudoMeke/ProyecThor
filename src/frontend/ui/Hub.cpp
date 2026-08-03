@@ -873,9 +873,9 @@ void Hub::RenderContent(float w, float h) {
         static const QuickItem items[] = {
             { "Apariencia",      0 },
             { "Proyección",      1 },
-            { "Stage",           2 },
-            { "Idioma",          6 },
-            { "Actualizaciones", 7 },
+            { "Stage",           3 },
+            { "Idioma",          7 },
+            { "Actualizaciones", 8 },
         };
         const int   count  = (int)(sizeof(items) / sizeof(items[0]));
         const float btnGap = 10.0f;

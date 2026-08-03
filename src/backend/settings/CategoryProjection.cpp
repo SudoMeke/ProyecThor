@@ -4,10 +4,6 @@
 #include "backend/core/PresentationCore.h"
 #include "backend/core/AppPaths.h"
 #include "frontend/ui/FilePicker.h"
-#include "frontend/panels/OSCPanel.h"
-#include "frontend/panels/BroadcastPanel.h"
-#include "frontend/panels/StreamingPanel.h"
-#include "frontend/panels/SyncPanel.h"
 #include <imgui.h>
 #include <filesystem>
 #include <GLFW/glfw3.h>
@@ -124,8 +120,12 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
 
         ImGui::Spacing();
 
-        // ── Calidad de Salida (video de fondo) ────────────────────────────────
-        if (SectionTitle("Calidad de Salida (Video de Fondo)")) {
+        // ── Video y Renderizado ───────────────────────────────────────────────
+        // Fusiona Calidad de Salida + Motor de Renderizado + FSR Upscaling en
+        // una sola entrada de sidebar (navGroup="Video y Renderizado") -- las
+        // 3 son, en el fondo, "como se ve/rinde el video de fondo", separarlas
+        // en 3 subcategorias sueltas era ruido de navegacion sin necesidad.
+        if (SectionTitle("Calidad de Salida (Video de Fondo)", "Video y Renderizado")) {
             int monitorCount = 0;
             GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
             int monW = 1920, monH = 1080;
@@ -212,12 +212,10 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         "FSR esta desactivado: el video de fondo no se reescalara con nitidez.");
                 }
             }
-        }
 
-        ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::SeparatorText("Motor de Renderizado (Videos)");
 
-        // ── Motor de renderizado (Videos) ─────────────────────────────────────
-        if (SectionTitle("Motor de Renderizado (Videos)")) {
             int engine = Core::PresentationCore::Get().GetVideoRenderEngine();
             float w2    = ImGui::GetContentRegionAvail().x;
             float btnW2 = (w2 - 6.0f) * 0.5f;
@@ -248,12 +246,10 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     "Con libvlc: mientras un video este activo, sin overlays/texto encima "
                     "y sin transicion animada entre clips (corte seco).");
             }
-        }
 
-        ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::SeparatorText("FSR Upscaling");
 
-        // ── FSR Upscaling ─────────────────────────────────────────────────────
-        if (SectionTitle("FSR Upscaling")) {
             // OJO: la fuente de verdad es p.fsrEnabled/p.fsrSharpness (el mismo
             // ProjectionSettings que usa Ajustes > Diseño > Shaders), no el
             // estado en vivo de PresentationCore directamente -- leer/escribir
@@ -282,8 +278,11 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
 
         ImGui::Spacing();
 
-        // ── Logo (pantalla de carga) ─────────────────────────────────────────
-        if (SectionTitle("Logo")) {
+        // ── Marca ─────────────────────────────────────────────────────────────
+        // Fusiona Logo + Fondos (las dos cosas que definen la "identidad
+        // visual" que se ve al proyectar: el logo de carga y el video/imagen
+        // de fondo detras del texto) en una sola entrada de sidebar.
+        if (SectionTitle("Logo", "Marca")) {
             std::string display = p.loadingLogoPath.empty()
                 ? "(sin logo)"
                 : std::filesystem::path(p.loadingLogoPath).filename().string();
@@ -322,12 +321,10 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     changed = true;
                 }
             }
-        }
 
-        ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::SeparatorText("Fondos");
 
-        // ── Fondos ────────────────────────────────────────────────────────────
-        if (SectionTitle("Fondos")) {
             const auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
 
             bool pingPong = p.bgPingPongLoop;
@@ -353,76 +350,8 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
 
         ImGui::Spacing();
 
-        // ── Red (LAN) ──────────────────────────────────────────────────────────
-        // Antes vivia en su propia categoria "Conexiones" -- se mudo aca porque
-        // en realidad ES parte de la proyeccion (transmite lo mismo que se
-        // proyecta hacia otros equipos de la sala), separarla en una categoria
-        // de nivel superior la dejaba suelta de con que tiene que ver de
-        // verdad. Sigue teniendo su propia entrada navegable en el sidebar
-        // (ver m_SectionAnchors/RenderSidebar), solo que como subcategoria de
-        // Proyeccion, no como categoria propia.
-        if (SectionTitle("Red (LAN)")) {
-            ImGui::TextDisabled("Conexion LAN con Stage y otros equipos de la sala.");
-            ImGui::Spacing();
-            if (m_StreamingPanelRef)
-                m_StreamingPanelRef->RenderContent();
-            else
-                ImGui::TextDisabled("Red no disponible.");
-        }
-
-        ImGui::Spacing();
-
-        // ── Mobile ────────────────────────────────────────────────────────────
-        if (SectionTitle("Mobile")) {
-            ImGui::TextDisabled("App movil complementaria: control remoto y sincronizacion.");
-            ImGui::Spacing();
-            if (m_SyncPanelRef)
-                m_SyncPanelRef->RenderContent();
-            else
-                ImGui::TextDisabled("Mobile no disponible.");
-        }
-
-        ImGui::Spacing();
-
-        // ── Streaming (RTMP) ─────────────────────────────────────────────────
-        // Los 3 bloques comparten navGroup="Streaming": una sola entrada en el
-        // sidebar (la del primero) en vez de 3 sueltas, mismo criterio que ya
-        // usa CategoryTheme.cpp para Temas/Colores/Fuentes/Diseño. Los 3 se
-        // muestran/ocultan juntos (misma pagina "Streaming").
-        if (SectionTitle("Captura", "Streaming")) {
-            ImGui::TextDisabled("Transmision RTMP: que se captura, como se compone y cuando arranca.");
-            ImGui::Spacing();
-            if (m_BroadcastPanelRef)
-                m_BroadcastPanelRef->RenderCaptureSection();
-            else
-                ImGui::TextDisabled("Streaming no disponible.");
-
-            ImGui::Spacing();
-
-            if (m_BroadcastPanelRef) {
-                ImGui::SeparatorText("Capa (Layer)");
-                m_BroadcastPanelRef->RenderLayerSection();
-
-                ImGui::Spacing();
-
-                ImGui::SeparatorText("Iniciar");
-                m_BroadcastPanelRef->RenderStartSection();
-            }
-        }
-
-        ImGui::Spacing();
-
-        // ── OSC ───────────────────────────────────────────────────────────────
-        if (SectionTitle("OSC")) {
-            ImGui::TextDisabled("Luces y controladores externos via OSC.");
-            ImGui::Spacing();
-            if (m_OSCPanelRef)
-                m_OSCPanelRef->RenderContent();
-            else
-                ImGui::TextDisabled("OSC no disponible.");
-        }
-
-        ImGui::Spacing();
+        // Red/Mobile/Streaming/OSC viven en su propia categoria de nivel
+        // superior -- ver Ajustes > Conexiones (CategoryConnections.cpp).
 
         // Guardar cambios si hubo alguno
         if (changed) {
