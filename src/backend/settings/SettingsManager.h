@@ -177,7 +177,7 @@ namespace ProyecThor::Settings {
     // Set reducido de tokens de diseño. ApplyTheme() los expande a todos
     // los colores de ImGui, así que un solo token cambia toda la app.
     enum class ThemePreset {
-        Dark, Light, OrangeBlack, Jazz, Kofi, Deadlock, Galaxy, Custom
+        Dark, Light, OrangeBlack, Jazz, Kofi, Deadlock, Galaxy, Mek, Custom
     };
 
     const char* ThemePresetName(ThemePreset preset);
@@ -493,10 +493,9 @@ namespace ProyecThor::Settings {
         void ApplyTheme();
 
         // Aplica un preset y lo deja como tema activo (sin guardar a disco).
-        void ApplyPreset(ThemePreset preset) {
-            m_Settings.theme = MakeThemePreset(preset);
-            ApplyTheme();
-        }
+        // Para Mek, ademas intenta usar la fuente de waybar (Linux) -- ver
+        // implementacion en SettingsManager.cpp.
+        void ApplyPreset(ThemePreset preset);
 
         void ApplyProjection();
 
