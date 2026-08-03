@@ -612,9 +612,15 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
     GLFWwindow* mainWindow = nullptr;
 
     const std::vector<LoadStep> steps = {
-        { "Leyendo preferencias del sistema...", 0.55f, [](){}},
+        // Duraciones bajadas a un piso chico (~0.12s, antes sumaban 2.3s
+        // garantizados entre los 5 pasos) -- RunStep() espera COMO MINIMO
+        // step.dur aunque el trabajo real termine antes, y 3 de estos 5
+        // pasos ni siquiera hacen trabajo real (lambda vacio, puro relleno
+        // para que la barra de progreso no saltara de golpe). Sigue
+        // sintiendose como una transicion animada, ya no como una demora.
+        { "Leyendo preferencias del sistema...", 0.12f, [](){}},
 
-        { "Inicializando motor grafico OpenGL...", 0.50f, [&](){
+        { "Inicializando motor grafico OpenGL...", 0.12f, [&](){
             glfwDefaultWindowHints();
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -681,7 +687,7 @@ std::cerr << "[DIAG] splashWindow creado OK\n";
             }
         }},
 
-        { "Cargando iconos y recursos graficos...", 0.50f, [&](){
+        { "Cargando iconos y recursos graficos...", 0.12f, [&](){
     if (!mainWindow) return;
     glfwMakeContextCurrent(mainWindow);
 
@@ -715,9 +721,9 @@ StyleGeneralApp::LoadAppIcon("history",    "bin/assets/icons/ui/history.png");
 StyleGeneralApp::LoadAppIcon("cards_star",  "bin/assets/icons/ui/cards_star.png");
         }},
 
-        { "Cargando tipografias y modulos de interfaz...", 0.45f, [](){}},
+        { "Cargando tipografias y modulos de interfaz...", 0.12f, [](){}},
 
-        { "Listo", 0.30f, [](){}},
+        { "Listo", 0.12f, [](){}},
     };
 
     for (int i = 0; i < (int)steps.size(); ++i)

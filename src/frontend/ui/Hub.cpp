@@ -21,8 +21,10 @@ extern GLuint LoadTextureFromFile(const char* filename);
 
 static void RenderSplashScreen(GLFWwindow *splashWindow, const std::string &status, float progress, GLuint logoTexture, GLuint bgTexture, ImFont *titleFont, ImFont *regularFont, ImFont *smallFont, const std::string &creditText, const ProyecThor::Settings::ThemeSettings &theme);
 
-static constexpr float HUB_SIDEBAR_W  = 280.0f;
-static constexpr float HUB_APPEAR_SPD = 3.0f;
+static constexpr float HUB_SIDEBAR_W   = 280.0f;
+static constexpr float HUB_RIGHT_COL_W = 320.0f;
+static constexpr float HUB_COL_GAP     = 18.0f;
+static constexpr float HUB_APPEAR_SPD  = 3.0f;
 
 namespace DS = ProyecThor::UI::DS;
 namespace HT = ProyecThor::UI::HubTheme;
@@ -68,6 +70,20 @@ struct UpdateVersionInfo {
 };
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
+    {
+        13, "0.6.0",
+        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
+        "Editor de overlays completo en la app movil (mover, redimensionar, rotar, "
+        "seleccion multiple con guias de iman, Borrador y Degradado, exportar y "
+        "enviar a la PC), panel Render renovado en Biblioteca (codecs H.264/H.265/"
+        "VP9/AV1, control de compresion, cancelar a mitad de camino, barra de "
+        "progreso real, estimacion y comparacion de peso, elegir donde guardar), "
+        "soporte real para Linux/CachyOS (paquete de Arch validado por CI, Wayland "
+        "via XWayland) y la app ahora respeta el escalado de pantalla de Windows "
+        "(150%, etc). Actualizacion grande todavia en curso: revisa el detalle "
+        "completo antes de considerarla cerrada."
+    },
     {
         12, "0.5.1",
         "ACTUALIZACION", "ACTUALIZACION",
@@ -296,137 +312,268 @@ void Hub::UpdateAnimations(float dt) {
     }
 }
 
-// Carrusel de novedades — se muestra una vez por version nueva.
-void Hub::RenderWhatsNewIfNeeded() {
-    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-    if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) return;
+// Encabezado de seccion con una linea sutil debajo (mismo estilo "Cat()" que
+// usa el modal de detalle), reusado tanto por el panel Novedades como por
+// "Resumen local" en la columna derecha.
+static void DrawSectionHeader(const char* title, float width) {
+    ImGui::SetWindowFontScale(1.2f);
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+    ImGui::Text("%s", title);
+    ImGui::PopStyleColor();
+    ImGui::SetWindowFontScale(1.0f);
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 2.0f), ImVec2(p.x + width, p.y + 2.0f), HT::BorderFaint);
+    ImGui::Dummy(ImVec2(0.0f, 13.0f));
+}
 
-    struct Slide { const char* title; const char* body; };
-    static const Slide kSlides[] = {
-        { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
-          "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
-        { "Ajustes reorganizado",
-          "Cada configuracion ahora es su propia pagina, con buscador incluido. Proyeccion y Pantallas quedaron agrupadas juntas, y Red, Mobile, Streaming y OSC pasaron a vivir dentro de Proyeccion en vez de tener su propia categoria aparte." },
-        { "Fondos: bucle falso",
-          "Nueva opcion en Ajustes > Proyeccion > Fondos: el video reproduce hacia adelante y despues \"hacia atras\" en vez de cortar siempre al mismo frame, dando sensacion de bucle continuo." },
-        { "Overlays",
-          "Crea textos, formas e imagenes en un editor a pantalla completa y proyectalos como una capa transparente encima del fondo y la letra, desde Biblioteca > Overlay o directo desde Vista en Vivo." },
-        { "Vista en Vivo renovada",
-          "Reproductor mas simple: Overlays, Chat, Pads y Reloj ahora se abren dentro del mismo panel en vez de ventanas flotantes sueltas." },
-        { "Nueva seccion: Pantallas",
-          "La configuracion de Stage ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyeccion." },
-        { "Correcciones de tema y apariencia",
-          "Varios menus y ventanas que ignoraban el tema elegido ahora lo respetan, y los fondos de los paneles son solidos en vez de verse transparentes." },
-    };
-    constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
+// Panel "Novedades" -- reemplaza al viejo carrusel de bienvenida que se
+// auto-abria una vez por version nueva. Ahora se abre solo a demanda (tecla
+// N o la tarjeta "Novedades" de la columna derecha), y consolida en un solo
+// lugar el parche mas reciente (vista grande tipo hero) y el historial
+// completo de versiones (misma tarjeta + modal de siempre, sin cambios).
+void Hub::RenderNovedadesPanel() {
+    const float target = m_NovedadesOpen ? 1.0f : 0.0f;
+    m_NovedadesAnim += (target - m_NovedadesAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    m_NovedadesAnim = std::clamp(m_NovedadesAnim, 0.0f, 1.0f);
+    if (m_NovedadesAnim < 0.001f) m_NovedadesAnim = 0.0f;
 
-    static int  s_Index         = 0;
-    static bool s_OpenedOnce    = false;
-    // Desmarcado por default: si el operador cierra sin marcarlo, el
-    // carrusel vuelve a aparecer en el proximo arranque (dismissedChangelog
-    // NO se persiste). Solo marcando la casilla se guarda la version actual
-    // en dismissedChangelog y deja de mostrarse.
-    static bool s_DontShowAgain = false;
-    if (!s_OpenedOnce) {
-        ImGui::OpenPopup("##WhatsNewCarousel");
-        s_OpenedOnce     = true;
-        s_Index          = 0;
-        s_DontShowAgain  = false;
-    }
+    if (!m_NovedadesOpen && m_NovedadesAnim <= 0.0f) return;
 
-    ImGuiViewport* vp      = ImGui::GetMainViewport();
-    const ImVec2   winSize = ImVec2(580.0f, 434.0f);
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
-                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
-    ImGui::SetNextWindowSize(winSize);
+    ImGuiViewport* vp    = ImGui::GetMainViewport();
+    const float    fadeA = EaseOut(m_NovedadesAnim);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(30.0f, 28.0f));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.055f, 0.060f, 0.085f, 0.99f));
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
 
-    if (ImGui::BeginPopupModal("##WhatsNewCarousel", nullptr,
-                               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+    // Fondo oscurecido detras del panel, mismo patron que el modal de detalle.
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 170));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("##NovedadesDim", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::End();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.75f, 0.30f, 1.0f));
-        ImGui::TextUnformatted("NOVEDADES");
+    const float scale  = 0.96f + 0.04f * fadeA;
+    const float panelW = 720.0f * scale, panelH = 680.0f * scale;
+
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(panelW, panelH), ImGuiCond_Always);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ColA(HT::Card, 255));
+    ImGui::PushStyleColor(ImGuiCol_Border,   HT::Divider);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   HT::RadiusLg);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(28.0f, 24.0f));
+
+    bool vis = ImGui::Begin("##NovedadesPanel", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoMove);
+
+    if (vis) {
+        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            m_NovedadesOpen = false;
+
+        const float headerW = ImGui::GetContentRegionAvail().x;
+
+        ImGui::SetWindowFontScale(1.3f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::TextUnformatted("Novedades");
         ImGui::PopStyleColor();
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-        ImGui::Spacing();
-
-        const Slide& slide = kSlides[s_Index];
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97f, 1.0f));
-        ImGui::SetWindowFontScale(1.18f);
-        ImGui::TextWrapped("%s", slide.title);
         ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.74f, 0.85f, 1.0f));
-        ImGui::TextWrapped("%s", slide.body);
-        ImGui::PopStyleColor();
+        ImGui::SameLine(headerW - 64.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
+        ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
+        if (ImGui::Button("Cerrar##novedades", ImVec2(64.0f, 28.0f)))
+            m_NovedadesOpen = false;
+        ImGui::PopStyleColor(4);
 
-        ImGui::SetCursorPosY(winSize.y - 130.0f);
-        float dotsW = kSlideCount * 16.0f;
-        ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2      dp = ImGui::GetCursorScreenPos();
-        for (int i = 0; i < kSlideCount; i++) {
-            ImU32 col = (i == s_Index) ? IM_COL32(120, 150, 255, 255) : IM_COL32(70, 72, 90, 255);
-            dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y + 5.0f), 5.0f, col);
-        }
-        ImGui::Dummy(ImVec2(dotsW, 14.0f));
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-        ImGui::SetCursorPosY(winSize.y - 96.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.64f, 0.76f, 1.0f));
-        ImGui::Checkbox("No volver a mostrar", &s_DontShowAgain);
-        ImGui::PopStyleColor();
+        // ── Hero: el parche mas reciente (kUpdateRegistry[0]) ───────────────
+        const UpdateVersionInfo* latest = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
+        if (latest) {
+            const GLTextureInfo heroCover = GetCoverTexture(latest->coverFile);
+            const float heroW = headerW, heroH = 230.0f;
 
-        ImGui::SetCursorPosY(winSize.y - 60.0f);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusLg);
+            ImGui::BeginChild("##NovedadesHero", ImVec2(heroW, heroH), false, ImGuiWindowFlags_NoScrollbar);
 
-        if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Proximamente");
+            ImDrawList* hdl  = ImGui::GetWindowDrawList();
+            const ImVec2 hMin = ImGui::GetWindowPos();
+            const ImVec2 hMax = ImVec2(hMin.x + heroW, hMin.y + heroH);
+            const bool heroHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
 
-        ImGui::SameLine();
-        if (s_Index == 0) ImGui::BeginDisabled();
-        if (ImGui::Button("< Anterior", ImVec2(100, 34))) s_Index--;
-        if (s_Index == 0) ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        // "No volver a mostrar" sin marcar (default): dismissedChangelog NO
-        // se toca, asi que el carrusel vuelve a aparecer en el proximo
-        // arranque -- cerrar (con cualquiera de los dos botones) solo lo
-        // saca de la vista por esta sesion.
-        auto closeCarousel = [&]() {
-            if (s_DontShowAgain) {
-                general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
-                ProyecThor::Settings::SettingsManager::Get().Save();
+            if (heroCover.id != 0) {
+                DrawCoverImageCover(hdl, heroCover.id, heroCover.width, heroCover.height,
+                    hMin, hMax, HT::RadiusLg, ImDrawFlags_RoundCornersAll,
+                    "novedades_hero", ImGui::GetIO().DeltaTime, heroHovered, 1.08f);
+            } else {
+                hdl->AddRectFilled(hMin, hMax, ColA(HT::CardAlt, 255), HT::RadiusLg);
             }
-            ImGui::CloseCurrentPopup();
+
+            // Degradado oscuro en la mitad inferior para que el texto se lea
+            // bien encima de la foto de portada.
+            hdl->AddRectFilledMultiColor(
+                ImVec2(hMin.x, hMin.y + heroH * 0.32f), hMax,
+                IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 215), IM_COL32(0, 0, 0, 215));
+
+            ImGui::SetCursorPos(ImVec2(22.0f, heroH - 104.0f));
+            ImGui::BeginGroup();
+
+            // Badge tipo "pill" -- mismo criterio de medir texto real que
+            // DrawPillBadge del modal de detalle (no se comparte por vivir en
+            // ambitos de compilacion distintos: aca es un metodo de Hub, alla
+            // una lambda local del modal).
+            auto Pill = [&](const char* text, ImU32 bg, ImU32 fg) {
+                ImGui::SetWindowFontScale(0.78f);
+                const ImVec2 bs = ImGui::CalcTextSize(text);
+                ImGui::SetWindowFontScale(1.0f);
+                const ImVec2 pad(8.0f, 3.0f);
+                const ImVec2 bp = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddRectFilled(
+                    ImVec2(bp.x - pad.x, bp.y - pad.y), ImVec2(bp.x + bs.x + pad.x, bp.y + bs.y + pad.y),
+                    bg, HT::RadiusSm);
+                ImGui::Dummy(ImVec2(pad.x, 0.0f));
+                ImGui::SameLine(0.0f, 0.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, fg);
+                ImGui::SetWindowFontScale(0.78f); ImGui::Text("%s", text); ImGui::SetWindowFontScale(1.0f);
+                ImGui::PopStyleColor();
+                ImGui::SameLine(0.0f, pad.x);
+            };
+            Pill(latest->modalBadge, HT::AccentBlue, HT::OnAccent);
+            // Aviso de que la GRAN actualizacion sigue en curso -- tono de
+            // advertencia (Danger), no Success (ese ya se usa para "estable").
+            Pill("AUN EN BETA / EN CONSTRUCCION", HT::Danger, HT::OnAccent);
+            ImGui::NewLine();
+
+            ImGui::SetWindowFontScale(1.5f);
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+            ImGui::Text("Version v%s", latest->version);
+            ImGui::PopStyleColor();
+            ImGui::SetWindowFontScale(1.0f);
+
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + heroW - 44.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 210));
+            ImGui::TextWrapped("%s", latest->summary);
+            ImGui::PopStyleColor();
+            ImGui::PopTextWrapPos();
+
+            ImGui::EndGroup();
+
+            ImGui::SetCursorPos(ImVec2(heroW - 194.0f, 18.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::AccentBlue);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::AccentBlue);
+            ImGui::PushStyleColor(ImGuiCol_Text,          HT::OnAccent);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+            if (ImGui::Button("Ver todo el detalle", ImVec2(174.0f, 32.0f))) {
+                m_SelectedUpdateVer = latest->id;
+                m_IsUpdateModalOpen = true;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(4);
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 18.0f));
+        DrawSectionHeader("Historial de versiones", headerW);
+
+        // ── Lista completa de versiones (misma tarjeta de siempre) ──────────
+        auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
+            const GLTextureInfo cardCover = GetCoverTexture(info.coverFile);
+
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
+            ImGui::BeginChild(info.version, ImVec2(headerW, 140.0f), false, ImGuiWindowFlags_NoScrollbar);
+
+            ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
+            ImVec2 cardEndPos   = ImVec2(cardStartPos.x + headerW, cardStartPos.y + 140.0f);
+            const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartPos, cardEndPos);
+            const float hoverT = HubHoverLerp(ImGui::GetID(info.version), cardHovered);
+
+            ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
+            ImGui::BeginGroup();
+
+            const float thumbW = 180.0f, thumbH = 120.0f;
+            if (cardCover.id != 0) {
+                const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
+                const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbMin.y + thumbH);
+
+                char stateKey[96];
+                snprintf(stateKey, sizeof(stateKey), "card_%s", info.version);
+
+                DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.id, cardCover.width, cardCover.height,
+                    thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCornersAll,
+                    stateKey, ImGui::GetIO().DeltaTime, cardHovered, 1.10f);
+
+                ImGui::Dummy(ImVec2(thumbW, thumbH));
+                ImGui::SameLine(0.0f, 15.0f);
+            }
+
+            ImGui::BeginGroup();
+            ImGui::Dummy(ImVec2(0.0f, 5.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+            ImGui::Text("%s", info.cardBadge);
+            ImGui::PopStyleColor();
+            ImGui::SetWindowFontScale(1.1f);
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+            ImGui::Text("Version v%s", info.version);
+            ImGui::PopStyleColor();
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + headerW - (cardCover.id != 0 ? 220.0f : 30.0f));
+            ImGui::TextWrapped("%s", info.summary);
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+            ImGui::EndGroup();
+
+            ImGui::EndGroup();
+
+            ImGui::SetCursorScreenPos(cardStartPos);
+            if (ImGui::InvisibleButton(info.version, ImVec2(headerW, 140.0f))) {
+                m_SelectedUpdateVer = info.id;
+                m_IsUpdateModalOpen = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+            ImDrawList* cardDl = ImGui::GetWindowDrawList();
+            if (hoverT > 0.001f) {
+                cardDl->AddRectFilled(cardStartPos, cardEndPos,
+                    ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusMd);
+                cardDl->AddRectFilled(cardStartPos, ImVec2(cardStartPos.x + 3.0f, cardEndPos.y),
+                    ColAf(HT::AccentBlue, hoverT), HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
+            }
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0.0f, 15.0f));
         };
 
-        if (s_Index == kSlideCount - 1) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
-            if (ImGui::Button("Entendido", ImVec2(110, 34)))
-                closeCarousel();
-            ImGui::PopStyleColor();
-        } else {
-            if (ImGui::Button("Siguiente >", ImVec2(110, 34))) s_Index++;
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Cerrar", ImVec2(70, 34)))
-            closeCarousel();
-
-        ImGui::EndPopup();
+        const float historyH = ImGui::GetContentRegionAvail().y;
+        ImGui::BeginChild("##NovedadesHistory", ImVec2(headerW, historyH), false);
+        for (const auto& info : kUpdateRegistry)
+            RenderUpdateCard(info);
+        ImGui::EndChild();
     }
 
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
+    ImGui::End();
+    ImGui::PopStyleVar(4); // Alpha, WindowRounding, WindowBorderSize, WindowPadding
+    ImGui::PopStyleColor(2);
 }
 
 bool Hub::Render() {
@@ -452,10 +599,21 @@ bool Hub::Render() {
 
     UpdateAnimations(dt);
 
+    // Abrir/cerrar el panel "Novedades" con N -- mismo criterio que el resto
+    // del codebase (cada panel/pantalla chequea sus propias teclas
+    // localmente, no hay un archivo central de input). Se ignora mientras el
+    // modal de detalle esta abierto para que una sola tecla no controle los
+    // dos a la vez.
+    if (!m_IsUpdateModalOpen && ImGui::IsKeyPressed(ImGuiKey_N, false))
+        m_NovedadesOpen = !m_NovedadesOpen;
+
     ImGuiViewport* vp = ImGui::GetMainViewport();
 
-    UpdateBgParticles(dt, vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
-    UpdateNebulas(dt, vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
+    if (!m_BgParticlesInit)
+        InitBgParticles(vp->WorkSize.x, vp->WorkSize.y);
+
+    UpdateBgParticles(dt, vp->WorkSize.x, vp->WorkSize.y);
+    UpdateNebulas(dt, vp->WorkSize.x, vp->WorkSize.y);
 
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
@@ -479,26 +637,39 @@ bool Hub::Render() {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2      wp = ImGui::GetWindowPos();
 
-    dl->AddRectFilled(wp,
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y), ColAf(HT::BgSidebar, appearA));
-    dl->AddRectFilled(
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y),
-        ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), ColAf(HT::BgMain, appearA));
+    // El canvas de fondo (grilla/particulas/nebulosas + imagen splash_bg2)
+    // ahora cubre TODA la ventana -- antes quedaba solo a la derecha del
+    // sidebar, con un relleno solido separado a la izquierda y una linea
+    // divisoria entre ambos. Las tres columnas de abajo dibujan su propia
+    // tarjeta semi-translucida encima de este mismo fondo compartido, en vez
+    // de paneles opacos aparte.
+    dl->AddRectFilled(wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), ColAf(HT::BgMain, appearA));
+    RenderBgCanvas(dl, wp, vp->WorkSize.x, vp->WorkSize.y);
 
-    dl->AddLine(
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y),
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y),
-        ColAf(HT::Divider, appearA), 1.0f);
+    static GLuint s_HubBgTex      = 0;
+    static bool   s_HubBgTexTried = false;
+    if (!s_HubBgTexTried) {
+        s_HubBgTexTried = true;
+        s_HubBgTex      = LoadTextureFromFile("splash_bg2.png");
+    }
+    if (s_HubBgTex != 0)
+        dl->AddImage((ImTextureID)(intptr_t)s_HubBgTex, wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y),
+            ImVec2(0, 0), ImVec2(1, 1), ColAf(IM_COL32_WHITE, HT::BgImageAlpha));
 
-    RenderSidebar(HUB_SIDEBAR_W, vp->WorkSize.y);
-    ImGui::SameLine(0.0f, 0.0f);
-    RenderMainContent(vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
+    const float centerW = vp->WorkSize.x - HUB_SIDEBAR_W - HUB_RIGHT_COL_W - HUB_COL_GAP * 2.0f;
+
+    RenderLeftColumn(HUB_SIDEBAR_W, vp->WorkSize.y);
+    ImGui::SameLine(0.0f, HUB_COL_GAP);
+    RenderCenterHero(centerW, vp->WorkSize.y);
+    ImGui::SameLine(0.0f, HUB_COL_GAP);
+    RenderRightColumn(HUB_RIGHT_COL_W, vp->WorkSize.y);
 
     ImGui::PopStyleVar(); // Alpha
     ImGui::End();
     ImGui::PopStyleVar(2);
 
-    RenderWhatsNewIfNeeded();
+    RenderNovedadesPanel();
+    RenderUpdateDetailModal();
 
     if (m_LaunchRequested) {
         m_LaunchRequested = false;
@@ -509,11 +680,15 @@ bool Hub::Render() {
     return false;
 }
 
-void Hub::RenderSidebar(float w, float h) {
-    ImGui::BeginChild("##Sidebar", ImVec2(w, h), false);
+void Hub::RenderLeftColumn(float w, float h) {
+    ImGui::BeginChild("##LeftCol", ImVec2(w, h), false, ImGuiWindowFlags_NoScrollbar);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2      wp = ImGui::GetWindowPos();
+
+    // Tarjeta semi-translucida propia de esta columna, sobre el fondo
+    // compartido que ahora dibuja Hub::Render en toda la ventana.
+    dl->AddRectFilled(wp, ImVec2(wp.x + w, wp.y + h), ColAf(HT::Surface, 0.45f), HT::RadiusLg);
 
     ImGui::SetCursorPosY(40.0f);
     ImGui::SetCursorPosX(30.0f);
@@ -571,27 +746,6 @@ void Hub::RenderSidebar(float w, float h) {
         HT::Divider, 1.0f);
 
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
-
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertFloat4ToU32(
-        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x + 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y + 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z + 0.08f, 1.0f)));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertFloat4ToU32(
-        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x - 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y - 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z - 0.08f, 1.0f)));
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::OnAccent);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
-
-    if (ImGui::Button("Empezar a proyectar", ImVec2(w - 60.0f, 45.0f)))
-        m_LaunchRequested = true;
-
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
-
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
     ImGui::SetCursorPosX(30.0f);
     ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
@@ -1287,7 +1441,34 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            if (selectedUpdateVer == 12) { // v0.5.1
+            if (selectedUpdateVer == 13) { // v0.6.0
+                Cat("App movil: editor de overlays");
+                Bul("Edicion completa de overlays desde el celular: mover, redimensionar y rotar capas con gestos, igual que en la PC.");
+                Bul("Seleccion multiple con recuadro de arrastre (rubber-band), guias de iman para alinear capas entre si, y una barra con el tamaño en pixeles mientras moves o redimensionas.");
+                Bul("Panel de capas reordenable arrastrando (igual que en la PC), y dos herramientas nuevas: Borrador y Degradado, con edicion real de pixeles.");
+                Bul("Boton \"Enviar al PC\": exporta el overlay y lo sube directo a la app de escritorio sin pasar por USB ni un cable.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca > Render");
+                Bul("Eleccion de codec de video al convertir (H.264, H.265, VP9 o AV1) y un control deslizante de compresion.");
+                Bul("Boton para cancelar una conversion a mitad de camino, con una barra de progreso real en vez de una animacion generica.");
+                Bul("Estimacion del peso final antes de convertir, y comparacion exacta de antes/despues una vez termina.");
+                Bul("Podes elegir si guardar siempre en una carpeta fija o que te pregunte cada vez, con el mismo dialogo nativo de siempre.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Soporte real para Linux y CachyOS");
+                Bul("ProyecThor ahora compila y corre en Linux de verdad: paquete para Arch/CachyOS validado automaticamente en cada version.");
+                Bul("Funciona tanto en X11 como en Wayland (via XWayland), incluyendo en escritorios como el de CachyOS.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Windows: escalado de pantalla (DPI)");
+                Bul("La app ahora respeta el porcentaje de escalado de Windows (125%, 150%, etc.): en laptops con pantallas de alta densidad, la letra y los botones ya no se ven diminutos.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Aviso");
+                Bul("Esta es una actualizacion grande y todavia esta en beta / en construccion: pueden aparecer ajustes y correcciones adicionales en las proximas versiones menores.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 12) { // v0.5.1
                 Cat("Contadores (antes \"Reloj y Contadores\")");
                 Bul("Se acorto el nombre de la seccion a secas \"Contadores\" en el sidebar de Home.");
                 ImGui::Dummy(ImVec2(0,12));

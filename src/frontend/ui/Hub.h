@@ -21,9 +21,11 @@ public:
     int  GetActiveTab()         const { return m_ActiveTab; }
 
 private:
-    void RenderSidebar(float w, float h);
-    void RenderMainContent(float w, float h);
-    void RenderWhatsNewIfNeeded();
+    void RenderLeftColumn(float w, float h);
+    void RenderCenterHero(float w, float h);
+    void RenderRightColumn(float w, float h);
+    void RenderNovedadesPanel();
+    void RenderUpdateDetailModal();
 
     void UpdateAnimations(float dt);
 
@@ -37,6 +39,17 @@ private:
 
     int   m_ActiveTab             = 0;
     int   m_SelectedMonitor       = -1;
+
+    // --- Panel "Novedades" (parche destacado + historial de versiones),
+    // abierto a demanda con la tecla N o la tarjeta del mismo nombre ---
+    bool  m_NovedadesOpen         = false;
+    float m_NovedadesAnim         = 0.0f;
+
+    // --- Modal universal de detalle de actualizacion -- compartido entre
+    // el hero de Novedades ("Ver todo el detalle") y su lista de historial ---
+    bool  m_IsUpdateModalOpen     = false;
+    int   m_SelectedUpdateVer     = 13; // id de kUpdateRegistry; arranca en la mas reciente
+    float m_UpdateModalAnim       = 0.0f;
 
     // --- Canvas de particulas (fondo animado) ---
     struct BgParticle {

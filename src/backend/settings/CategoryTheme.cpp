@@ -7,6 +7,8 @@
 #include <vector>
 #include <algorithm>
 #include <filesystem>
+#include <cmath>
+#include <GL/glew.h>
 #ifdef _WIN32
 #include <windows.h>
 #include <commdlg.h>
@@ -14,6 +16,8 @@
 #include <cstdio>
 #include <array>
 #endif
+
+extern GLuint LoadTextureFromFile(const char* filename);
 
 namespace ProyecThor::UI::Settings {
 
@@ -128,6 +132,101 @@ static bool PresetSwatch(const char* label, ThemePreset preset, ThemePreset acti
     return clicked;
 }
 
+// Textura decorativa junto al nombre del preset activo. Se carga una sola
+// vez (cacheada) desde bin/assets/ui/textures -- misma convencion de rutas
+// relativas al ejecutable que ya usan los iconos de StyleGeneralApp.
+static GLuint GetThemeShowcaseTexture() {
+    static GLuint texId = 0;
+    static bool   tried = false;
+    if (!tried) {
+        tried = true;
+        texId = LoadTextureFromFile("bin/assets/ui/textures/20260524_104505.jpg");
+    }
+    return texId;
+}
+
+// Tarjeta con inclinacion 3D al estilo "tilt" de sitios web (vanilla-tilt.js
+// y similares): en reposo queda plana, y solo mientras el mouse esta encima
+// las esquinas se distorsionan en perspectiva segun la posicion del cursor
+// dentro de la tarjeta, con una sombra que se despega y un brillo diagonal
+// que sigue la inclinacion. Todo interpolado cuadro a cuadro (no salta de
+// golpe entre plano <-> inclinado), y vuelve a quedar plana en cuanto el
+// mouse se va -- no hay animacion en reposo.
+static void RenderTiltTextureCard(ImVec2 size) {
+    GLuint texId = GetThemeShowcaseTexture();
+
+    ImGuiID   id = ImGui::GetID("##themeTiltCard");
+    ImVec2    p0 = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##themeTiltHit", size);
+    bool hovered = ImGui::IsItemHovered();
+
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* tiltX = storage->GetFloatRef(id ^ 0x54494C31u, 0.0f); // "TIL1"
+    float* tiltY = storage->GetFloatRef(id ^ 0x54494C32u, 0.0f); // "TIL2"
+    float* lift  = storage->GetFloatRef(id ^ 0x54494C33u, 0.0f); // "TIL3"
+
+    ImVec2 center = ImVec2(p0.x + size.x * 0.5f, p0.y + size.y * 0.5f);
+    ImVec2 mouse  = ImGui::GetIO().MousePos;
+    float nx = hovered ? std::clamp((mouse.x - center.x) / (size.x * 0.5f), -1.0f, 1.0f) : 0.0f;
+    float ny = hovered ? std::clamp((mouse.y - center.y) / (size.y * 0.5f), -1.0f, 1.0f) : 0.0f;
+
+    const float speed = std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    *tiltX += (nx - *tiltX) * speed;
+    *tiltY += (ny - *tiltY) * speed;
+    *lift  += ((hovered ? 1.0f : 0.0f) - *lift) * speed;
+
+    const float maxAngle = 0.20f; // ~11.5 grados
+    float rotY =  (*tiltX) * maxAngle; // giro izquierda/derecha
+    float rotX = -(*tiltY) * maxAngle; // giro arriba/abajo
+    const float focal = 480.0f;
+
+    float halfW = size.x * 0.5f, halfH = size.y * 0.5f;
+    ImVec2 local[4] = {
+        ImVec2(-halfW, -halfH), ImVec2(halfW, -halfH),
+        ImVec2(halfW,   halfH), ImVec2(-halfW,  halfH),
+    };
+    ImVec2 screen[4];
+    for (int i = 0; i < 4; i++) {
+        float x = local[i].x, y = local[i].y, z = 0.0f;
+        float x1 =  x * std::cos(rotY) + z * std::sin(rotY);
+        float z1 = -x * std::sin(rotY) + z * std::cos(rotY);
+        float y2 =  y * std::cos(rotX) - z1 * std::sin(rotX);
+        float z2 =  y * std::sin(rotX) + z1 * std::cos(rotX);
+        float persp = focal / (focal + z2);
+        screen[i] = ImVec2(center.x + x1 * persp, center.y + y2 * persp);
+    }
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Sombra que se despega debajo de la tarjeta al inclinarse.
+    ImVec2 shadowCenter = ImVec2(center.x + (*tiltX) * 6.0f, center.y + halfH * 0.65f + (*lift) * 8.0f);
+    dl->AddEllipseFilled(shadowCenter, ImVec2(halfW * 0.92f, halfH * 0.16f + (*lift) * 3.0f),
+                          IM_COL32(0, 0, 0, (int)(60 + (*lift) * 50)), 0.0f, 24);
+
+    if (texId != 0) {
+        dl->AddImageQuad((ImTextureID)(intptr_t)texId,
+            screen[0], screen[1], screen[2], screen[3],
+            ImVec2(0, 0), ImVec2(1, 0), ImVec2(1, 1), ImVec2(0, 1),
+            IM_COL32(255, 255, 255, 255));
+    } else {
+        dl->AddQuadFilled(screen[0], screen[1], screen[2], screen[3], IM_COL32(40, 40, 46, 255));
+        ImGui::SetCursorScreenPos(ImVec2(p0.x + 8, p0.y + size.y * 0.5f - 8));
+        ImGui::TextDisabled("(sin textura)");
+    }
+
+    // Brillo diagonal que sigue la inclinacion -- solo visible con el
+    // mouse encima, reforzando la sensacion de superficie satinada.
+    if (*lift > 0.01f) {
+        ImVec2 glareCenter = ImVec2(center.x + (*tiltX) * halfW * 0.55f,
+                                     center.y + (*tiltY) * halfH * 0.55f);
+        dl->AddCircleFilled(glareCenter, halfW * 0.5f,
+            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.12f * (*lift))), 32);
+    }
+
+    dl->AddQuad(screen[0], screen[1], screen[2], screen[3],
+        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.12f + (*lift) * 0.18f)), 1.5f);
+}
+
 void SettingsPanel::RenderCategoryTheme() {
     auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
 
@@ -158,6 +257,8 @@ void SettingsPanel::RenderCategoryTheme() {
         ImGui::Dummy(ImVec2(0.0f, 10.0f));
         ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Preset activo: %s",
             ProyecThor::Settings::ThemePresetName(theme.preset));
+        ImGui::SameLine(0.0f, 16.0f);
+        RenderTiltTextureCard(ImVec2(96.0f, 60.0f));
     }
 
     // Compartidas por todos los bloques de "Colores"/"Diseño" de abajo --

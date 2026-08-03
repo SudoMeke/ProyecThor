@@ -10,7 +10,7 @@
 ;     66A0344F-F850-49CB-9F63-488AB7B3DBCD
 ;
 ; Variables de preprocesador (podés pasarlas con /D al compilar, ej.
-; ISCC ProyecThor.iss /DBuildDir=C:\ruta\a\build-win /DProductVersion=0.5.1):
+; ISCC ProyecThor.iss /DBuildDir=C:\ruta\a\build-win /DProductVersion=0.6.0):
 ;   BuildDir       -> carpeta con el build de Windows ya compilado
 ;                      (build-win/, con ProyecThor.exe + todas las DLLs,
 ;                      ffmpeg.exe, yt-dlp.exe, lua/, plugins/, shaders/,
@@ -21,7 +21,7 @@
   #define BuildDir "..\..\build-win"
 #endif
 #ifndef ProductVersion
-  #define ProductVersion "0.5.1"
+  #define ProductVersion "0.6.0"
 #endif
 
 [Setup]
