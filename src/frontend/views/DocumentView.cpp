@@ -110,7 +110,7 @@ namespace ProyecThor::UI {
             if (total > 0) {
                 float fraction = static_cast<float>(progress) / static_cast<float>(total);
                 ImGui::ProgressBar(fraction, ImVec2(-1, 0));
-                ImGui::TextDisabled("Pagina %d de %d", progress, total);
+                ImGui::TextDisabled("Página %d de %d", progress, total);
             } else {
                 // Aun iniciando, mostramos barra indeterminada
                 ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(-1, 0));

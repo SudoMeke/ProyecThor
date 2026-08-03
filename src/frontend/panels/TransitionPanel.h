@@ -96,7 +96,7 @@ private:
     float GetOutgoingLocalT() const;
     float GetIncomingLocalT() const;
 
-    // Punto de corte entre "salida" y "entrada" dentro de la duracion
+    // Punto de corte entre "salida" y "entrada" dentro de la duración
     // total configurada. 0.5 = mitad y mitad. Se deja como constante unica
     // por si en el futuro se prefiere un pequeno solape (ej. 0.45/0.55)
     // para suavizar duraciones muy cortas.
@@ -120,4 +120,4 @@ private:
     static float EaseInOut(float t);
 };
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

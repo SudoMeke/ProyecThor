@@ -174,7 +174,7 @@ void TabTypography::RenderColorPicker(StyleData& data, float colWidth) {
 
 void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-    ImGui::Text("Tamanio inicial   %.0f px", data.textSize);
+    ImGui::Text("Tamaño inicial   %.0f px", data.textSize);
     ImGui::PopStyleColor();
 
     DS::ModernSlider("##editSize", &data.textSize, 20.0f, 300.0f, colWidth);
@@ -182,7 +182,7 @@ void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-    ImGui::Text("Referencia (nombre + version)   %.0f px", data.refTextSize);
+    ImGui::Text("Referencia (nombre + versión)   %.0f px", data.refTextSize);
     ImGui::PopStyleColor();
 
     DS::ModernSlider("##editRefSize", &data.refTextSize, 10.0f, 200.0f, colWidth);
@@ -206,8 +206,8 @@ void TabTypography::RenderAutoScaleCheckbox(StyleData& data) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::TextWrapped(
-        "Cuando el texto supera la zona segura, el tamanio se reduce automaticamente "
-        "hasta que entre. Util para presentaciones con contenido variable.");
+        "Cuando el texto supera la zona segura, el tamaño se reduce automáticamente "
+        "hasta que entre. Útil para presentaciones con contenido variable.");
     ImGui::PopStyleColor();
 }
 
@@ -264,4 +264,4 @@ void TabTypography::ImportFont() {
     }
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

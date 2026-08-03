@@ -41,13 +41,13 @@ enum class LibrarySideMode {
     Categories = 0,
     // Red y Mobile se mudaron a Ajustes > Conexiones (ver
     // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC -- una
-    // sola pagina para "todo lo que conecta ProyecThor con el exterior",
+    // sola página para "todo lo que conecta ProyecThor con el exterior",
     // en vez de repartido entre aca y el rail de Conexiones (retirado).
     // "Reloj" (antes indice 2) se saco de aca -- ya vive en el toolbar
     // inline de ViewPanel (ver ViewPanel::InlineTool::Clock), duplicaba
     // el acceso.
     Render     = 3, // "Render" — conversor de formato (ver MediaConverter.h),
-                     // mudado desde la seccion "Biblioteca" del workspace
+                     // mudado desde la sección "Biblioteca" del workspace
                      // (LibraryManagerPanel, retirada del todo).
     Overlay    = 4, // "Overlay" — galeria + editor de overlays PNG (ver
                      // OverlayLibraryTab), se abre a pantalla completa
@@ -81,7 +81,7 @@ private:
     void RenderFileInUseToast();
 
     // ── Render (conversor de formato, ver LibrarySideMode::Render) ───────
-    // Migrado tal cual desde LibraryManagerPanel (seccion "Biblioteca" del
+    // Migrado tal cual desde LibraryManagerPanel (sección "Biblioteca" del
     // workspace, retirada del todo) — convierte Video/Audio ya importados a
     // otro formato aprovechando ffmpeg (ver MediaConverter.h).
     void RenderConverterSection();

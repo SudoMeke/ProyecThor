@@ -183,7 +183,7 @@ namespace ProyecThor::UI {
             unsigned long err = FPDF_GetLastError();
             result.success      = false;
             result.errorMessage = "PDFium no pudo abrir el PDF: " + filePath +
-                                  " (codigo de error: " + std::to_string(err) + ")";
+                                  " (código de error: " + std::to_string(err) + ")";
             return result;
         }
 
@@ -191,7 +191,7 @@ namespace ProyecThor::UI {
         if (totalPages <= 0) {
             FPDF_CloseDocument(doc);
             result.success      = false;
-            result.errorMessage = "El PDF no contiene paginas.";
+            result.errorMessage = "El PDF no contiene páginas.";
             return result;
         }
 
@@ -315,7 +315,7 @@ namespace ProyecThor::UI {
 
         if (exitCode != 0) {
             result.success      = false;
-            result.errorMessage = "LibreOffice fallo al convertir el archivo. Codigo: " + std::to_string(exitCode);
+            result.errorMessage = "LibreOffice fallo al convertir el archivo. Código: " + std::to_string(exitCode);
             return result;
         }
 

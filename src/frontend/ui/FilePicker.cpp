@@ -24,7 +24,7 @@ std::string PickImageOrVideoFile() {
     COMDLG_FILTERSPEC filters[] = {
         {L"Video e Imagen", L"*.mp4;*.mkv;*.avi;*.mov;*.jpg;*.jpeg;*.png"},
         {L"Videos",         L"*.mp4;*.mkv;*.avi;*.mov"},
-        {L"Imagenes",       L"*.jpg;*.jpeg;*.png"},
+        {L"Imágenes",       L"*.jpg;*.jpeg;*.png"},
     };
     dlg->SetFileTypes(3, filters);
     dlg->SetFileTypeIndex(1);
@@ -57,7 +57,7 @@ std::string PickImageFile() {
         return {};
 
     COMDLG_FILTERSPEC filters[] = {
-        {L"Imagenes", L"*.jpg;*.jpeg;*.png"},
+        {L"Imágenes", L"*.jpg;*.jpeg;*.png"},
     };
     dlg->SetFileTypes(1, filters);
     dlg->SetFileTypeIndex(1);
@@ -199,8 +199,8 @@ std::string PickImageOrVideoFile() {
 std::string PickImageFile() {
     const char* commands[] = {
         "zenity --file-selection --title=\"Elegir imagen\" "
-        "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
+        "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
     };
     return RunFilePickerCommands(commands, 2);
 }

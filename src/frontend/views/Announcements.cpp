@@ -458,7 +458,7 @@ void Announcements::Render(GlassRenderer& glass) {
     // ─────────────────────────────────────────────────────────────────────
 
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
-    ImGui::TextUnformatted("Animacion");
+    ImGui::TextUnformatted("Animación");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
@@ -490,7 +490,7 @@ void Announcements::Render(GlassRenderer& glass) {
     ImGui::Spacing();
 
     ImGui::PushStyleColor(ImGuiCol_CheckMark, accent);
-    ImGui::Checkbox("Pausar animacion", &m_Paused);
+    ImGui::Checkbox("Pausar animación", &m_Paused);
     ImGui::PopStyleColor();
 
     ImGui::Spacing();
@@ -502,7 +502,7 @@ void Announcements::Render(GlassRenderer& glass) {
     // ─────────────────────────────────────────────────────────────────────
 
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
-    ImGui::TextUnformatted("Posicion y apariencia");
+    ImGui::TextUnformatted("Posición y apariencia");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
@@ -704,7 +704,7 @@ void Announcements::Render(GlassRenderer& glass) {
 
         // ── Tamaño de fuente ──────────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Text, textSub);
-        ImGui::TextUnformatted("Tamanio (px a 1920px de ancho)");
+        ImGui::TextUnformatted("Tamaño (px a 1920px de ancho)");
         ImGui::PopStyleColor();
 
         {

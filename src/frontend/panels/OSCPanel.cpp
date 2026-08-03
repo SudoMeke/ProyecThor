@@ -70,7 +70,7 @@ void OSCPanel::BuildParamRegistry() {
           []{ return PresentationCore::Get().GetGrainIntensity(); },
           [](float v){ PresentationCore::Get().SetGrainIntensity(v); } },
 
-        { "Shaders > Saturacion (color)",
+        { "Shaders > Saturación (color)",
           []{ return PresentationCore::Get().GetSaturationAmount(); },
           [](float v){ PresentationCore::Get().SetSaturationAmount(v); } },
 
@@ -90,7 +90,7 @@ void OSCPanel::BuildParamRegistry() {
           []{ return PresentationCore::Get().GetBloomIntensity(); },
           [](float v){ PresentationCore::Get().SetBloomIntensity(v); } },
 
-        { "Shaders > Aberracion cromatica",
+        { "Shaders > Aberración cromática",
           []{ return PresentationCore::Get().GetChromaticAberrationIntensity(); },
           [](float v){ PresentationCore::Get().SetChromaticAberrationIntensity(v); } },
 
@@ -171,8 +171,8 @@ void OSCPanel::Update() {
 void OSCPanel::RenderConnectionSection() {
     auto& y = ProyecThor::Settings::SettingsManager::Get().GetSettings().yggdrasil;
 
-    ImGui::SeparatorText("Conexion");
-    ImGui::TextWrapped("Direccion a la que se envian los mensajes (luces). No hace falta "
+    ImGui::SeparatorText("Conexión");
+    ImGui::TextWrapped("Dirección a la que se envían los mensajes (luces). No hace falta "
                         "para recibir/Aprender, eso usa el puerto de escucha de abajo.");
 
     ImGui::SetNextItemWidth(160.0f);
@@ -204,7 +204,7 @@ void OSCPanel::RenderConnectionSection() {
         }
     }
 
-    ImGui::Checkbox("Escuchar automaticamente al abrir ProyecThor", &y.autoListen);
+    ImGui::Checkbox("Escuchar automáticamente al abrir ProyecThor", &y.autoListen);
 
     ImVec4 statusCol = listening ? ImVec4(0.35f, 0.85f, 0.55f, 1.0f) : ImVec4(0.60f, 0.62f, 0.70f, 1.0f);
     ImGui::TextColored(statusCol, "%s", m_ListenStatus.empty() ? "Sin iniciar." : m_ListenStatus.c_str());
@@ -215,7 +215,7 @@ void OSCPanel::RenderControlListSection() {
     auto& bindings = ProyecThor::Settings::SettingsManager::Get().GetSettings().yggdrasil.bindings;
 
     ImGui::SeparatorText("Control List (recibir + OSC Learn)");
-    ImGui::TextWrapped("Vincula un parametro en vivo de ProyecThor a un mensaje OSC entrante: "
+    ImGui::TextWrapped("Vincula un parámetro en vivo de ProyecThor a un mensaje OSC entrante: "
                         "apreta \"Aprender\", mové el fader/control externo, y queda vinculado.");
     ImGui::Spacing();
 
@@ -223,10 +223,10 @@ void OSCPanel::RenderControlListSection() {
                             ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
         return;
 
-    ImGui::TableSetupColumn("Parametro",     ImGuiTableColumnFlags_WidthStretch, 0.34f);
+    ImGui::TableSetupColumn("Parámetro",     ImGuiTableColumnFlags_WidthStretch, 0.34f);
     ImGui::TableSetupColumn("Valor",         ImGuiTableColumnFlags_WidthStretch, 0.20f);
-    ImGui::TableSetupColumn("Direccion OSC", ImGuiTableColumnFlags_WidthStretch, 0.26f);
-    ImGui::TableSetupColumn("Accion",        ImGuiTableColumnFlags_WidthStretch, 0.20f);
+    ImGui::TableSetupColumn("Dirección OSC", ImGuiTableColumnFlags_WidthStretch, 0.26f);
+    ImGui::TableSetupColumn("Acción",        ImGuiTableColumnFlags_WidthStretch, 0.20f);
     ImGui::TableHeadersRow();
 
     for (int i = 0; i < (int)m_Params.size(); i++) {
@@ -280,7 +280,7 @@ void OSCPanel::RenderSendSection() {
 
     ImGui::SeparatorText("Luces (enviar)");
     ImGui::TextWrapped("Cada fila es una luz/cue disparable a mano. El punto de color muestra "
-                        "si el ultimo envio a esa luz funciono.");
+                        "si el último envío a esa luz funcionó.");
     ImGui::Spacing();
 
     if (ImGui::Button("+ Agregar luz")) {
@@ -310,7 +310,7 @@ void OSCPanel::RenderSendSection() {
         InputTextStd("##label", &m.label);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(160.0f);
-        InputTextStd("Direccion##addr", &m.address);
+        InputTextStd("Dirección##addr", &m.address);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(200.0f);
         InputTextStd("Argumentos##args", &m.argsText);

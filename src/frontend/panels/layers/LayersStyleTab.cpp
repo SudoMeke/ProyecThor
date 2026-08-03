@@ -287,7 +287,7 @@ void LayersStyleTab::RenderTopBar() {
     const float btnSz = 26.0f;
     const float zoomW = 76.0f;
     const float gap   = 4.0f;
-    const float rowW  = zoomW + gap + btnSz*5 + gap*5; // +1 boton: "Ajustes rapidos"
+    const float rowW  = zoomW + gap + btnSz*5 + gap*5; // +1 botón: "Ajustes rápidos"
     const float avail = ImGui::GetWindowContentRegionMax().x;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
 
@@ -327,7 +327,7 @@ void LayersStyleTab::RenderTopBar() {
     ImGui::SameLine(0, gap);
     if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
             // Tres sliders verticales — mismo lenguaje visual que
-            // ControlIcons::DrawQuality, para "ajustes rapidos".
+            // ControlIcons::DrawQuality, para "ajustes rápidos".
             float th = std::max(1.2f, r * 0.16f);
             const float xs[3]    = { -0.5f, 0.0f, 0.5f };
             const float knobY[3] = { 0.18f, -0.28f, 0.05f };
@@ -336,7 +336,7 @@ void LayersStyleTab::RenderTopBar() {
                 dl->AddLine({x, c.y - r*0.75f}, {x, c.y + r*0.75f}, col, th);
                 dl->AddCircleFilled({x, c.y + knobY[i]*r}, r*0.16f, col, 12);
             }
-        }, "Ajustes rapidos", {btnSz,btnSz}))
+        }, "Ajustes rápidos", {btnSz,btnSz}))
         ImGui::OpenPopup("##QuickAdjustPopup");
 }
 
@@ -468,7 +468,7 @@ void LayersStyleTab::RenderThemeGrid() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + w, p.y + 60}, LPU32(LP::Surface1), 12.0f);
         ImGui::Dummy({0, 18});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* h = "Crea tu primer estilo con el boton + de arriba";
+        const char* h = "Crea tu primer estilo con el botón + de arriba";
         float tw = ImGui::CalcTextSize(h).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w - tw) * 0.5f));
         ImGui::Text("%s", h);
@@ -555,7 +555,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- TAMAÑO ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "Tamanio");
+        ImGui::TextColored(LP::TextMuted, "Tamaño");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         changed |= ImGui::DragFloat("##qs", &m_CurrentStyle.textSize, 1.0f, 10.0f, 500.0f, "%.1f px");
@@ -563,7 +563,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- ALINEACIÓN HORIZONTAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "Alineacion H");
+        ImGui::TextColored(LP::TextMuted, "Alineación H");
         ImGui::TableNextColumn();
 
         const char* hA[] = {"Izq", "Cen", "Der"};
@@ -590,7 +590,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- ALINEACIÓN VERTICAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "Alineacion V");
+        ImGui::TextColored(LP::TextMuted, "Alineación V");
         ImGui::TableNextColumn();
 
         const char* vA[] = {"Arr", "Cen", "Aba"};
@@ -661,4 +661,4 @@ void LayersStyleTab::Render() {
     // disparado desde "Nuevo estilo" / "Editar" arriba.
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

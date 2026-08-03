@@ -83,7 +83,7 @@ public:
 
     // Dibuja el fondo "now playing" (disco + caratula + ondas) en el
     // drawlist de la ventana ACTUAL — pensado para llamarse desde dentro
-    // del Begin("ProjectorLive") de UIManager (ver ese archivo), asi el
+    // del Begin("ProjectorLive") de UIManager (ver ese archivo), así el
     // ImGui::GetWindowDrawList() que usa RenderSpinningDisc() cae en el
     // proyector real. (x,y,w,h) es el rectangulo completo del proyector.
     void RenderLiveBackground(float x, float y, float w, float h);

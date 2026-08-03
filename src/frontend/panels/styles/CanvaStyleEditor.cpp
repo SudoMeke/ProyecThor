@@ -212,7 +212,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
         ImGui::SetCursorScreenPos(ImVec2(winPos.x + kPadH, winPos.y + kHeaderH + kPadH));
         ImGui::BeginGroup();
         {
-            const char* tabLabels[] = { "Tipografia", "Alineacion", "Margenes", "Efectos" };
+            const char* tabLabels[] = { "Tipografia", "Alineación", "Margenes", "Efectos" };
 
             ImVec4 bgActive = ImVec4(
                 CanvaPalette::Accent.x * 0.20f,
@@ -277,7 +277,7 @@ bool CanvaStyleEditor::Render(OnSaveCallback onSave, bool embedded) {
 
             ImGui::Dummy(ImVec2(0.0f, 6.0f));
             ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-            ImGui::Text("Fuente: %s  |  Tamanio: %.0f px",
+            ImGui::Text("Fuente: %s  |  Tamaño: %.0f px",
                 m_Data.selectedFont.c_str(), m_Data.textSize);
             ImGui::PopStyleColor();
 

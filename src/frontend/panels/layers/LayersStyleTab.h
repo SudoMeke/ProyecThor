@@ -10,7 +10,7 @@ namespace ProyecThor::UI {
 class UIManager;
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  LayersStyleTab — toda la logica del tab "Estilos de Letra"
+//  LayersStyleTab — toda la lógica del tab "Estilos de Letra"
 // ─────────────────────────────────────────────────────────────────────────────
 class LayersStyleTab {
 public:
@@ -18,7 +18,7 @@ public:
     ~LayersStyleTab() = default;
 
     // El editor de estilos se abre a pantalla completa (ver
-    // UIManager::EnterFullscreenEditor) -- sin esto, el boton "Nuevo estilo"/
+    // UIManager::EnterFullscreenEditor) -- sin esto, el botón "Nuevo estilo"/
     // "Editar" simplemente no hace nada.
     void SetUIManager(UIManager* uiManager) { m_UIManager = uiManager; }
 

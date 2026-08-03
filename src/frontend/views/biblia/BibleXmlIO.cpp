@@ -115,7 +115,7 @@ bool SaveBible(const std::string& path, const BibleData& bible) {
     if (!bible.link.empty())        out << " link=\""        << bible.link        << "\"";
     out << ">\n";
 
-    // Envuelve los libros en <testament name="Old|New"> segun su numero
+    // Envuelve los libros en <testament name="Old|New"> segun su número
     // canonico (1-39 Antiguo, 40-66 Nuevo, canon de 66 libros) — no se
     // guarda por separado porque es 100% derivable del numero de libro.
     bool inTestament   = false;

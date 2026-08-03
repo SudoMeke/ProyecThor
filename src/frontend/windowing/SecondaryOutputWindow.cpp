@@ -47,7 +47,7 @@ namespace ProyecThor::Core {
             const char* desc = nullptr;
             int code = glfwGetError(&desc);
             std::cerr << "[SecondaryOutputWindow] glfwCreateWindow fallo ('" << title
-                      << "'). Codigo: " << code << " Desc: " << (desc ? desc : "N/A") << "\n";
+                      << "'). Código: " << code << " Desc: " << (desc ? desc : "N/A") << "\n";
             glfwDefaultWindowHints();
             return false;
         }

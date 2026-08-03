@@ -374,7 +374,7 @@ void MonitorView::RenderQueue(float w)
             ImGui::TextUnformatted(txt);
         };
         center("Sin videos en la cola");
-        center("Agrega con el boton  +  Agregar");
+        center("Agrega con el botón  +  Agregar");
         ImGui::PopStyleColor();
     }
 
@@ -429,7 +429,7 @@ void MonitorView::RenderQueue(float w)
                 : ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.46f);
             ImVec4 apAct = ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.27f);
             const char* apLabel = isActive
-                ? "        Detener reproduccion"
+                ? "        Detener reproducción"
                 : "        Reproducir cola";
 
             if (isEmpty) ImGui::BeginDisabled();

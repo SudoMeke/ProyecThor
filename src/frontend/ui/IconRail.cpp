@@ -25,7 +25,7 @@ float IconRailThickness(bool vertical)
     return *cur;
 }
 
-// Progreso animado (0..1) de "mostrar titulo" — compartido por Vertical/Horizontal
+// Progreso animado (0..1) de "mostrar título" — compartido por Vertical/Horizontal
 // para que el fade del texto y el recentrado del icono avancen sincronizados
 // con el cambio de grosor de arriba.
 static float RailLabelProgress()
