@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "frontend/ui/UIStrings.h"
 #include "frontend/ui/AppIcons.h"
 #include "frontend/ui/DesignSystem.h"
 #include "backend/settings/SettingsManager.h"
@@ -146,6 +147,7 @@ static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
 
 void RenderCategoryButtons(LibraryContext& ctx)
 {
+    const auto& str = ProyecThor::UI::GetUIStrings();
 
     // El color de identidad de cada categoria (accentBar) es configurable
     // desde Ajustes > Apariencia (SettingsManager: librarySidebar.categoryColor,
@@ -158,11 +160,15 @@ void RenderCategoryButtons(LibraryContext& ctx)
         const char* label;
     };
 
-    static const CatDef k_Cats[] = {
-        { kCat_Songs,      DrawIcon_Music,      "Letra"      },
-        { kCat_Multimedia, DrawIcon_Multimedia, "Multimedia" },
-        { kCat_Bibles,     DrawIcon_Cross,      "Biblia"     },
-        { kCat_Documents,  DrawIcon_Document,   "Doc"        },
+    // Sin "static": el label depende del idioma activo (ver GetUIStrings),
+    // que solo cambia con un reinicio de la app, pero recalcularlo por
+    // frame es gratis y evita que un CatDef "static" quede con el idioma
+    // del primer frame para siempre.
+    const CatDef k_Cats[] = {
+        { kCat_Songs,      DrawIcon_Music,      str.libRailSongs      },
+        { kCat_Multimedia, DrawIcon_Multimedia, str.libRailMultimedia },
+        { kCat_Bibles,     DrawIcon_Cross,      str.libCatBible       },
+        { kCat_Documents,  DrawIcon_Document,   str.libRailDocs       },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;

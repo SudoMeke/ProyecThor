@@ -8,15 +8,15 @@ namespace ProyecThor::UI::BibleBooks {
 namespace {
 
 const char* kBookNames[] = {
-    "Genesis","Exodo","Levitico","Números","Deuteronomio",
-    "Josue","Jueces","Rut","1 Samuel","2 Samuel","1 Reyes","2 Reyes",
-    "1 Cronicas","2 Cronicas","Esdras","Nehemias","Ester","Job","Salmos",
-    "Proverbios","Eclesiastes","Cantares","Isaias","Jeremias","Lamentaciones",
-    "Ezequiel","Daniel","Oseas","Joel","Amos","Abdias","Jonas","Miqueas",
-    "Nahum","Habacuc","Sofonias","Hageo","Zacarias","Malaquias",
+    "Génesis","Éxodo","Levítico","Números","Deuteronomio",
+    "Josué","Jueces","Rut","1 Samuel","2 Samuel","1 Reyes","2 Reyes",
+    "1 Crónicas","2 Crónicas","Esdras","Nehemías","Ester","Job","Salmos",
+    "Proverbios","Eclesiastés","Cantares","Isaías","Jeremías","Lamentaciones",
+    "Ezequiel","Daniel","Oseas","Joel","Amós","Abdías","Jonás","Miqueas",
+    "Nahúm","Habacuc","Sofonías","Hageo","Zacarías","Malaquías",
     "Mateo","Marcos","Lucas","Juan","Hechos","Romanos","1 Corintios",
-    "2 Corintios","Galatas","Efesios","Filipenses","Colosenses","1 Tesalonicenses",
-    "2 Tesalonicenses","1 Timoteo","2 Timoteo","Tito","Filemon","Hebreos",
+    "2 Corintios","Gálatas","Efesios","Filipenses","Colosenses","1 Tesalonicenses",
+    "2 Tesalonicenses","1 Timoteo","2 Timoteo","Tito","Filemón","Hebreos",
     "Santiago","1 Pedro","2 Pedro","1 Juan","2 Juan","3 Juan","Judas","Apocalipsis"
 };
 
@@ -31,7 +31,7 @@ const AbbrevEntry kAbbrevTable[] = {
     {"genesis",1},{"gen",1},{"gn",1},
     {"exodo",2},{"exo",2},{"ex",2},
     {"levitico",3},{"lev",3},{"lv",3},
-    {"números",4},{"num",4},{"nm",4},
+    {"numeros",4},{"num",4},{"nm",4},
     {"deuteronomio",5},{"deut",5},{"dt",5},
     {"josue",6},{"jos",6},
     {"jueces",7},{"jue",7},{"jc",7},

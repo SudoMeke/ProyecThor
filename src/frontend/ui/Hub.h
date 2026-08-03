@@ -94,7 +94,7 @@ private:
         bool  isCyan;
     };
 
-    static constexpr int   BG_PARTICLE_COUNT = 40;
+    static constexpr int   BG_PARTICLE_COUNT = 70;
     static constexpr float BG_CONNECT_DIST   = 130.0f;
     static constexpr float BG_GRID_SIZE      = 80.0f;
 

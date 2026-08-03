@@ -3,6 +3,7 @@
 #include "DesignSystem.h"
 #include "backend/core/PresentationCore.h"
 #include "frontend/ui/UIStrings.h"
+#include "frontend/ui/WikiHelp.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -523,6 +524,8 @@ void OClock::Render(GlassRenderer& glass) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.157f, 0.784f, 0.847f, 1.0f)); // acento cian
     ImGui::TextUnformatted(str.oclockTitle);
     ImGui::PopStyleColor();
+    ImGui::SameLine();
+    Wiki::InfoButton(Wiki::Topic::OClock);
     DS::GlassSeparator();
 
     float w = ImGui::GetContentRegionAvail().x;

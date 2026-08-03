@@ -1,5 +1,6 @@
 #include "ShadersPanel.h"
 #include "frontend/ui/DesignSystem.h"
+#include "frontend/ui/WikiHelp.h"
 #include "backend/settings/SettingsManager.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/core/SystemStats.h"
@@ -175,7 +176,11 @@ void IconTAA(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
 using IconFn = void (*)(ImDrawList*, ImVec2, float, ImU32);
 
 constexpr float kCardHeaderH = 64.0f;
-constexpr float kCardDescH   = 34.0f;
+// Antes 34px reservados para una descripcion siempre visible debajo del
+// titulo -- se reemplazo por el boton de ayuda (i) del panel (ver
+// Wiki::InfoButton en RenderContent), asi que ahora es solo un respiro
+// chico entre el encabezado y el slider/selector de modo.
+constexpr float kCardDescH   = 10.0f;
 constexpr float kCardSliderH = 40.0f;
 constexpr float kCardModeH   = 34.0f;
 constexpr float kCardPadding = 16.0f;
@@ -287,21 +292,6 @@ bool ShaderCard(ImVec2 origin, const char* id, IconFn icon, ImU32 accent,
         dl->AddLine(ImVec2(togC.x - 1.0f, togC.y + 4.0f), ImVec2(togC.x + 5.5f, togC.y - 4.5f), IM_COL32(20, 20, 24, 255), 1.8f);
     }
 
-    // Descripcion
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + 16.0f, p0.y + kCardHeaderH));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-    // PushTextWrapPos espera coordenadas LOCALES a la ventana (internamente
-    // le suma window->Pos.x), no coordenadas de pantalla absolutas -- pasarle
-    // p1.x directo (screen-space) duplicaba el offset de la ventana y
-    // empujaba el limite de wrap muy lejos a la derecha, asi que el texto
-    // nunca envolvia de verdad y quedaba cortado a la mitad de una palabra
-    // por el clip rect de afuera. Se convierte a local antes de pasarlo.
-    float wrapLocalX = (p1.x - 16.0f) - ImGui::GetWindowPos().x + ImGui::GetScrollX();
-    ImGui::PushTextWrapPos(wrapLocalX);
-    ImGui::TextWrapped("%s", desc);
-    ImGui::PopTextWrapPos();
-    ImGui::PopStyleColor();
-
     // Slider (solo si esta activo)
     if (hasSlider && *enabled) {
         ImGui::SetCursorScreenPos(ImVec2(p0.x + 16.0f, p0.y + kCardHeaderH + kCardDescH));
@@ -359,8 +349,10 @@ void ShadersPanel::RenderContent() {
     bool  changed     = false;
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.68f, 0.78f, 1.0f));
-    ImGui::TextWrapped("Efectos de post-proceso sobre la salida en vivo (Audiencia). Los cambios se aplican al instante.");
+    ImGui::TextUnformatted("Efectos de Render");
     ImGui::PopStyleColor();
+    ImGui::SameLine();
+    Wiki::InfoButton(Wiki::Topic::ShadersRender);
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
     const float gap    = 12.0f;
