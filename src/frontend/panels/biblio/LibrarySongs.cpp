@@ -1542,7 +1542,7 @@ void CreateNewSongFromText(const std::string& suggestedTitle, const std::string&
 
 void CreateNewSongFromClipboard(const std::string& clipboardText)
 {
-    CreateNewSongFromText("Cancion pegada", clipboardText);
+    CreateNewSongFromText("Canción pegada", clipboardText);
 }
 
 // =============================================================================
