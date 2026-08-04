@@ -56,14 +56,8 @@ static fs::path FontsDir()  { return GetAppDataDir() / "assets" / "fonts"; }
 //  Constructor
 // ─────────────────────────────────────────────────────────────────────────────
 LayersStyleTab::LayersStyleTab() {
-    m_CurrentStyle.vAlignment    = 1;
-    m_CurrentStyle.textAlignment = 1;
-    m_CurrentStyle.textSize      = 80.0f;
-    m_CurrentStyle.autoScale     = true;
-    m_CurrentStyle.selectedFont  = "Predeterminada";
-    for (int i=0;i<4;i++) m_CurrentStyle.textColor[i] = 1.0f;
-    for (int i=0;i<4;i++) m_CurrentStyle.margins[i]   = 60.0f;
-
+    // m_CurrentStyle.lyrics/index ya arrancan con defaults razonables (ver
+    // TextBoxStyle en PresentationCore.h).
     LoadThemeList();
     LoadFontsList();
 
@@ -113,7 +107,7 @@ void LayersStyleTab::OpenStyleEditorFullscreen(bool isNew, const std::string& na
                 m_SelectedTheme = n;
                 ApplyCurrentStyleToCore();
             }
-        }, /*embedded=*/true);
+        });
 
         ImGui::End();
 
@@ -156,6 +150,34 @@ void LayersStyleTab::ReloadFonts() { LoadFontsList(); }
 // ─────────────────────────────────────────────────────────────────────────────
 //  Serialización de temas
 // ─────────────────────────────────────────────────────────────────────────────
+// Mismo formato "key=value" y mismas claves ("lyrics*"/"index*") que el
+// parser independiente de PresentationCore.cpp (GetSavedStyle/SaveStyle,
+// ver comentario ahi) -- ambos leen/escriben los MISMOS archivos .theme.
+static void WriteBoxKeys(std::ofstream& f, const char* prefix, const Core::TextBoxStyle& box) {
+    f << prefix << "PosX="    << box.posX  << "\n";
+    f << prefix << "PosY="    << box.posY  << "\n";
+    f << prefix << "SizeW="   << box.sizeW << "\n";
+    f << prefix << "SizeH="   << box.sizeH << "\n";
+    f << prefix << "Font="    << box.fontName << "\n";
+    f << prefix << "Color="   << box.color[0] << "," << box.color[1] << ","
+                               << box.color[2] << "," << box.color[3] << "\n";
+    f << prefix << "Size="    << box.textSize << "\n";
+    f << prefix << "HAlign="  << box.hAlign << "\n";
+    f << prefix << "VAlign="  << box.vAlign << "\n";
+    f << prefix << "AutoScale=" << (box.autoScale ? 1 : 0) << "\n";
+    f << prefix << "BgMediaEnabled=" << (box.bgMediaEnabled ? 1 : 0) << "\n";
+    f << prefix << "BgMediaPath="    << box.bgMediaPath << "\n";
+    f << prefix << "BgMediaOpacity=" << box.bgMediaOpacity << "\n";
+    f << prefix << "Effects=" << Core::PackTextEffects(box.effects) << "\n";
+}
+
+static void BoxFromLegacyMargins(const float margins[4], Core::TextBoxStyle& box) {
+    box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
+    box.sizeH = std::max(0.02f, (1080.0f - margins[1] - margins[3]) / 1080.0f);
+    box.posX  = margins[0] / 1920.0f + box.sizeW * 0.5f;
+    box.posY  = margins[1] / 1080.0f + box.sizeH * 0.5f;
+}
+
 bool LayersStyleTab::SaveTheme(const std::string& name, const StyleData& data) {
     if (name.empty()) return false;
     std::error_code ec;
@@ -166,22 +188,29 @@ bool LayersStyleTab::SaveTheme(const std::string& name, const StyleData& data) {
     std::ofstream f(dir / (name + ".theme"));
     if (!f.is_open()) return false;
 
-    f << "textColor="   << data.textColor[0] << "," << data.textColor[1] << ","
-                        << data.textColor[2] << "," << data.textColor[3] << "\n";
-    f << "textSize="    << data.textSize      << "\n";
-    f << "textAlign="   << data.textAlignment << "\n";
-    f << "vAlign="      << data.vAlignment    << "\n";
-    f << "margins="     << data.margins[0] << "," << data.margins[1] << ","
-                        << data.margins[2] << "," << data.margins[3] << "\n";
-    f << "autoScale="   << (data.autoScale ? 1 : 0) << "\n";
-    f << "font="        << data.selectedFont  << "\n";
-    f << "refTextSize=" << data.refTextSize   << "\n";
-    f << "verseTextSize=" << data.verseTextSize << "\n";
-    f << "songTextAlign="  << data.songTextAlignment << "\n";
-    f << "songVAlign="     << data.songVAlignment    << "\n";
-    f << "bibleTextAlign=" << data.bibleTextAlignment << "\n";
-    f << "bibleVAlign="    << data.bibleVAlignment   << "\n";
-    f << "textEffects="    << Core::PackTextEffects(data.effects) << "\n";
+    // Claves legacy -- derivadas de la caja de Letras, solo para que un
+    // .theme guardado con el editor nuevo siga siendo legible por codigo
+    // viejo que solo conozca el formato plano (ver PresentationCore::SaveStyle).
+    f << "textColor=" << data.lyrics.color[0] << "," << data.lyrics.color[1] << ","
+                       << data.lyrics.color[2] << "," << data.lyrics.color[3] << "\n";
+    f << "textSize="  << data.lyrics.textSize << "\n";
+    f << "textAlign=" << data.lyrics.hAlign   << "\n";
+    f << "vAlign="    << data.lyrics.vAlign   << "\n";
+    float legacyMargins[4] = {
+        (data.lyrics.posX - data.lyrics.sizeW * 0.5f) * 1920.0f,
+        (data.lyrics.posY - data.lyrics.sizeH * 0.5f) * 1080.0f,
+        (1.0f - (data.lyrics.posX + data.lyrics.sizeW * 0.5f)) * 1920.0f,
+        (1.0f - (data.lyrics.posY + data.lyrics.sizeH * 0.5f)) * 1080.0f,
+    };
+    f << "margins="   << legacyMargins[0] << "," << legacyMargins[1] << ","
+                       << legacyMargins[2] << "," << legacyMargins[3] << "\n";
+    f << "autoScale=" << (data.lyrics.autoScale ? 1 : 0) << "\n";
+    f << "font="      << data.lyrics.fontName << "\n";
+    f << "textEffects=" << Core::PackTextEffects(data.lyrics.effects) << "\n";
+
+    WriteBoxKeys(f, "lyrics", data.lyrics);
+    WriteBoxKeys(f, "index",  data.index);
+    f << "indexEnabled=" << (data.indexEnabled ? 1 : 0) << "\n";
     return true;
 }
 
@@ -191,6 +220,11 @@ bool LayersStyleTab::LoadThemeData(const std::string& name, StyleData& out) {
 
     out = StyleData{};
 
+    // Legacy (fallback de migracion, ver abajo).
+    float legacyMargins[4] = { 60.0f, 60.0f, 60.0f, 60.0f };
+    Core::TextBoxStyle legacy;
+    bool hasLyricsBoxKeys = false, hasIndexBoxKeys = false;
+
     std::string line;
     while (std::getline(f, line)) {
         std::istringstream ss(line);
@@ -199,28 +233,64 @@ bool LayersStyleTab::LoadThemeData(const std::string& name, StyleData& out) {
         v.erase(std::remove(v.begin(), v.end(), '\r'), v.end());
         v.erase(std::remove(v.begin(), v.end(), '\n'), v.end());
 
-        if      (k == "textSize")       out.textSize          = std::stof(v);
-        else if (k == "textAlign")      out.textAlignment     = std::stoi(v);
-        else if (k == "vAlign")         out.vAlignment        = std::stoi(v);
-        else if (k == "autoScale")      out.autoScale         = (std::stoi(v) != 0);
-        else if (k == "font")           out.selectedFont      = v;
-        else if (k == "refTextSize")    out.refTextSize       = std::stof(v);
-        else if (k == "verseTextSize")  out.verseTextSize     = std::stof(v);
-        else if (k == "songTextAlign")  out.songTextAlignment = std::stoi(v);
-        else if (k == "songVAlign")     out.songVAlignment    = std::stoi(v);
-        else if (k == "bibleTextAlign") out.bibleTextAlignment = std::stoi(v);
-        else if (k == "bibleVAlign")    out.bibleVAlignment   = std::stoi(v);
+        if      (k == "textSize")  legacy.textSize  = std::stof(v);
+        else if (k == "textAlign") legacy.hAlign     = std::stoi(v);
+        else if (k == "vAlign")    legacy.vAlign     = std::stoi(v);
+        else if (k == "autoScale") legacy.autoScale  = (std::stoi(v) != 0);
+        else if (k == "font")      legacy.fontName   = v;
         else if (k == "textColor")
             sscanf(v.c_str(), "%f,%f,%f,%f",
-                &out.textColor[0], &out.textColor[1],
-                &out.textColor[2], &out.textColor[3]);
+                &legacy.color[0], &legacy.color[1], &legacy.color[2], &legacy.color[3]);
         else if (k == "margins")
             sscanf(v.c_str(), "%f,%f,%f,%f",
-                &out.margins[0], &out.margins[1],
-                &out.margins[2], &out.margins[3]);
-        else if (k == "textEffects")
-            Core::UnpackTextEffects(v, out.effects);
+                &legacyMargins[0], &legacyMargins[1], &legacyMargins[2], &legacyMargins[3]);
+
+        else if (k == "lyricsPosX")    { out.lyrics.posX  = std::stof(v); hasLyricsBoxKeys = true; }
+        else if (k == "lyricsPosY")    out.lyrics.posY    = std::stof(v);
+        else if (k == "lyricsSizeW")   out.lyrics.sizeW   = std::stof(v);
+        else if (k == "lyricsSizeH")   out.lyrics.sizeH   = std::stof(v);
+        else if (k == "lyricsFont")    out.lyrics.fontName = v;
+        else if (k == "lyricsColor")
+            sscanf(v.c_str(), "%f,%f,%f,%f", &out.lyrics.color[0], &out.lyrics.color[1],
+                   &out.lyrics.color[2], &out.lyrics.color[3]);
+        else if (k == "lyricsSize")    out.lyrics.textSize = std::stof(v);
+        else if (k == "lyricsHAlign")  out.lyrics.hAlign   = std::stoi(v);
+        else if (k == "lyricsVAlign")  out.lyrics.vAlign   = std::stoi(v);
+        else if (k == "lyricsAutoScale") out.lyrics.autoScale = (std::stoi(v) != 0);
+        else if (k == "lyricsBgMediaEnabled") out.lyrics.bgMediaEnabled = (std::stoi(v) != 0);
+        else if (k == "lyricsBgMediaPath")    out.lyrics.bgMediaPath = v;
+        else if (k == "lyricsBgMediaOpacity") out.lyrics.bgMediaOpacity = std::stof(v);
+        else if (k == "lyricsEffects") Core::UnpackTextEffects(v, out.lyrics.effects);
+
+        else if (k == "indexPosX")     { out.index.posX  = std::stof(v); hasIndexBoxKeys = true; }
+        else if (k == "indexPosY")     out.index.posY    = std::stof(v);
+        else if (k == "indexSizeW")    out.index.sizeW   = std::stof(v);
+        else if (k == "indexSizeH")    out.index.sizeH   = std::stof(v);
+        else if (k == "indexFont")     out.index.fontName = v;
+        else if (k == "indexColor")
+            sscanf(v.c_str(), "%f,%f,%f,%f", &out.index.color[0], &out.index.color[1],
+                   &out.index.color[2], &out.index.color[3]);
+        else if (k == "indexSize")     out.index.textSize = std::stof(v);
+        else if (k == "indexHAlign")   out.index.hAlign   = std::stoi(v);
+        else if (k == "indexVAlign")   out.index.vAlign   = std::stoi(v);
+        else if (k == "indexAutoScale") out.index.autoScale = (std::stoi(v) != 0);
+        else if (k == "indexBgMediaEnabled") out.index.bgMediaEnabled = (std::stoi(v) != 0);
+        else if (k == "indexBgMediaPath")    out.index.bgMediaPath = v;
+        else if (k == "indexBgMediaOpacity") out.index.bgMediaOpacity = std::stof(v);
+        else if (k == "indexEffects")  Core::UnpackTextEffects(v, out.index.effects);
+        else if (k == "indexEnabled")  out.indexEnabled = (std::stoi(v) != 0);
     }
+
+    // Fallback de migracion: un .theme guardado antes de la reforma a cajas
+    // no tiene las claves "lyrics*"/"index*" -- se deriva una caja inicial
+    // desde los campos legacy ya leidos arriba. El indice arranca
+    // deshabilitado (los estilos viejos no tenian este concepto).
+    if (!hasLyricsBoxKeys) {
+        BoxFromLegacyMargins(legacyMargins, legacy);
+        out.lyrics = legacy;
+    }
+    if (!hasIndexBoxKeys) out.index = out.lyrics;
+
     return true;
 }
 
@@ -245,26 +315,8 @@ void LayersStyleTab::DeleteTheme(const std::string& name) {
 void LayersStyleTab::ApplyCurrentStyleToCore() {
     auto& core = Core::PresentationCore::Get();
 
-    core.UpdateTextStyle(
-        m_CurrentStyle.textSize,
-        m_CurrentStyle.textColor,
-        m_CurrentStyle.textAlignment,
-        m_CurrentStyle.vAlignment,
-        m_CurrentStyle.margins,
-        m_CurrentStyle.autoScale,
-        m_CurrentStyle.selectedFont);
-
-    core.UpdateBibleStyle(
-        m_CurrentStyle.refTextSize,
-        m_CurrentStyle.verseTextSize,
-        m_CurrentStyle.bibleTextAlignment,
-        m_CurrentStyle.bibleVAlignment);
-
-    core.UpdateSongStyle(
-        m_CurrentStyle.songTextAlignment,
-        m_CurrentStyle.songVAlignment);
-
-    core.SetTextEffects(m_CurrentStyle.effects);
+    core.UpdateLyricsBoxStyle(m_CurrentStyle.lyrics);
+    core.UpdateIndexBoxStyle(m_CurrentStyle.index, m_CurrentStyle.indexEnabled);
 
     // FIXED: Notify projector that something changed so it re-draws.
     // Only do this if we're already projecting — don't start projection
@@ -530,11 +582,11 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::TextColored(LP::TextMuted, "Fuente");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::BeginCombo("##qf", m_CurrentStyle.selectedFont.c_str())) {
+        if (ImGui::BeginCombo("##qf", m_CurrentStyle.lyrics.fontName.c_str())) {
             for (const auto& f : m_AvailableFonts) {
-                bool sel = (m_CurrentStyle.selectedFont == f);
+                bool sel = (m_CurrentStyle.lyrics.fontName == f);
                 if (ImGui::Selectable(f.c_str(), sel)) {
-                    m_CurrentStyle.selectedFont = f;
+                    m_CurrentStyle.lyrics.fontName = f;
                     changed = true;
                 }
                 if (sel) ImGui::SetItemDefaultFocus();
@@ -548,7 +600,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::TextColored(LP::TextMuted, "Color Base");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        changed |= ImGui::ColorEdit4("##qc", m_CurrentStyle.textColor,
+        changed |= ImGui::ColorEdit4("##qc", m_CurrentStyle.lyrics.color,
             ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
             ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_AlphaPreviewHalf);
 
@@ -558,7 +610,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::TextColored(LP::TextMuted, "Tamaño");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        changed |= ImGui::DragFloat("##qs", &m_CurrentStyle.textSize, 1.0f, 10.0f, 500.0f, "%.1f px");
+        changed |= ImGui::DragFloat("##qs", &m_CurrentStyle.lyrics.textSize, 1.0f, 10.0f, 500.0f, "%.1f px");
 
         // --- ALINEACIÓN HORIZONTAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
@@ -571,7 +623,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         for (int a = 0; a < 3; a++) {
             if (a > 0) ImGui::SameLine();
-            bool act = (m_CurrentStyle.textAlignment == a);
+            bool act = (m_CurrentStyle.lyrics.hAlign == a);
             ImGui::PushStyleColor(ImGuiCol_Button,        act ? ImVec4(0.3f,0.3f,0.3f,1.0f) : LP::Surface0);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, act ? ImVec4(0.35f,0.35f,0.35f,1.0f) : LP::Surface2);
             ImGui::PushStyleColor(ImGuiCol_Text,          act ? ImVec4(1,1,1,1) : LP::TextSub);
@@ -579,7 +631,7 @@ void LayersStyleTab::RenderQuickAdjust() {
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
             std::string btnId = std::string(hA[a]) + "##qa" + std::to_string(a);
             if (ImGui::Button(btnId.c_str(), ImVec2(btnW, 26))) {
-                m_CurrentStyle.textAlignment = a;
+                m_CurrentStyle.lyrics.hAlign = a;
                 changed = true;
             }
             ImGui::PopStyleVar();
@@ -598,7 +650,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         for (int a = 0; a < 3; a++) {
             if (a > 0) ImGui::SameLine();
-            bool act = (m_CurrentStyle.vAlignment == a);
+            bool act = (m_CurrentStyle.lyrics.vAlign == a);
             ImGui::PushStyleColor(ImGuiCol_Button,        act ? ImVec4(0.3f,0.3f,0.3f,1.0f) : LP::Surface0);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, act ? ImVec4(0.35f,0.35f,0.35f,1.0f) : LP::Surface2);
             ImGui::PushStyleColor(ImGuiCol_Text,          act ? ImVec4(1,1,1,1) : LP::TextSub);
@@ -606,7 +658,7 @@ void LayersStyleTab::RenderQuickAdjust() {
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
             std::string btnId = std::string(vA[a]) + "##qv" + std::to_string(a);
             if (ImGui::Button(btnId.c_str(), ImVec2(btnW, 26))) {
-                m_CurrentStyle.vAlignment = a;
+                m_CurrentStyle.lyrics.vAlign = a;
                 changed = true;
             }
             ImGui::PopStyleVar();

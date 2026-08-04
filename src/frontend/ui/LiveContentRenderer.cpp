@@ -93,86 +93,88 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
          dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
     }
 
-    // ── Texto proyectado ───────────────────────────────────────────────────
-    if (state.showText && !state.currentText.empty())
+    // ── Texto proyectado (Letras, y opcionalmente el Indice) ────────────────
+    // Los margenes/tamano de texto estan definidos en unidades de
+    // referencia sobre un lienzo de 1920px (ver DrawTextBlock en
+    // UIManager.cpp, que es lo que realmente se dibuja en la pantalla al
+    // publico: usa screenScale = anchoRealDelMonitor / 1920). Como drawW ya
+    // representa el ancho COMPLETO del monitor real dentro del panel, la
+    // conversion correcta de "unidades de 1920" a "pixeles de preview" es
+    // simplemente drawW/1920.
+    float scale = drawW / 1920.0f;
+    bool  isSong = (core.PeekSelection().type == Core::ItemType::Song);
+
+    auto DrawBox = [&](const std::string& text, const Core::TextBoxStyle& box, bool isLyricsBox)
     {
-        // Los margenes/tamano de texto estan definidos en unidades de
-        // referencia sobre un lienzo de 1920px (ver DrawTextBlock en
-        // UIManager.cpp, que es lo que realmente se dibuja en la pantalla
-        // al publico: usa screenScale = anchoRealDelMonitor / 1920). Como
-        // drawW ya representa el ancho COMPLETO del monitor real dentro del
-        // panel, la conversion correcta de "unidades de 1920" a "pixeles de
-        // preview" es simplemente drawW/1920.
-        float scale = drawW / 1920.0f;
+        if (text.empty()) return;
 
-        float marginL = state.margins[0] * scale;
-        float marginT = state.margins[1] * scale;
-        float marginR = state.margins[2] * scale;
-        float marginB = state.margins[3] * scale;
+        float boxW = std::max(10.0f, box.sizeW * drawW);
+        float boxH = std::max(10.0f, box.sizeH * drawH);
+        float boxX = p0.x + box.posX * drawW - boxW * 0.5f;
+        float boxY = p0.y + box.posY * drawH - boxH * 0.5f;
 
-        float boxW = std::max(10.0f, drawW - marginL - marginR);
-        float boxH = std::max(10.0f, drawH - marginT - marginB);
+        if (box.bgMediaEnabled && !box.bgMediaPath.empty()) {
+            unsigned int bgTex = core.GetBoxBgTexture(isLyricsBox, box.bgMediaPath);
+            if (bgTex != 0) {
+                ImU32 tint = IM_COL32(255, 255, 255,
+                    (int)(std::clamp(box.bgMediaOpacity, 0.0f, 1.0f) * 255.0f));
+                dl->AddImage((ImTextureID)(intptr_t)bgTex,
+                    ImVec2(boxX, boxY), ImVec2(boxX + boxW, boxY + boxH),
+                    ImVec2(0, 0), ImVec2(1, 1), tint);
+            }
+        }
 
-        float boxX = p0.x + marginL;
-        float boxY = p0.y + marginT;
+        float fontSize = box.textSize * scale;
 
-        float fontSize = state.textSize * scale;
-
-        std::string fontName = core.GetActiveFontName();
-        ImFont* font = core.GetImGuiFont(fontName, fontSize);
+        ImFont* font = core.GetImGuiFont(box.fontName, fontSize);
         if (!font) font = ImGui::GetFont();
 
-        if (state.autoScale)
+        if (box.autoScale)
         {
             while (fontSize > 4.0f)
             {
-                ImVec2 ts = font->CalcTextSizeA(
-                    fontSize, FLT_MAX, boxW, state.currentText.c_str());
+                ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, boxW, text.c_str());
                 if (ts.y <= boxH) break;
                 fontSize -= 1.0f;
             }
         }
 
-        ImVec2 textBlock = font->CalcTextSizeA(
-            fontSize, FLT_MAX, boxW, state.currentText.c_str());
+        ImVec2 textBlock = font->CalcTextSizeA(fontSize, FLT_MAX, boxW, text.c_str());
 
         float textX = boxX;
-        if (state.textAlignment == 1)
+        if (box.hAlign == 1)
             textX += (boxW - textBlock.x) * 0.5f;
-        else if (state.textAlignment == 2)
+        else if (box.hAlign == 2)
             textX += (boxW - textBlock.x);
 
         float textY = boxY;
-        if (state.vAlignment == 1)
+        if (box.vAlign == 1)
             textY += (boxH - textBlock.y) * 0.5f;
-        else if (state.vAlignment == 2)
+        else if (box.vAlign == 2)
             textY += (boxH - textBlock.y);
 
         dl->PushClipRect(p0, p1, true);
 
         ImU32 textCol = ImGui::ColorConvertFloat4ToU32(
-            ImVec4(state.textColor[0], state.textColor[1],
-                   state.textColor[2], state.textColor[3]));
+            ImVec4(box.color[0], box.color[1], box.color[2], box.color[3]));
 
-        bool isSong = (core.PeekSelection().type == Core::ItemType::Song);
-        if (isSong && state.textAlignment == 1)
+        if (isSong && box.hAlign == 1)
         {
             float lineH = font->CalcTextSizeA(fontSize, FLT_MAX, boxW, "A").y;
 
             float startY = boxY;
-            if (state.vAlignment == 1)
+            if (box.vAlign == 1)
                 startY += (boxH - textBlock.y) * 0.5f;
-            else if (state.vAlignment == 2)
+            else if (box.vAlign == 2)
                 startY += (boxH - textBlock.y);
 
             float  curY     = startY;
             size_t startPos = 0;
-            size_t endPos   = state.currentText.find('\n');
+            size_t endPos   = text.find('\n');
 
             while (startPos != std::string::npos)
             {
-                std::string line =
-                    state.currentText.substr(startPos, endPos - startPos);
+                std::string line = text.substr(startPos, endPos - startPos);
                 if (!line.empty() && line.back() == '\r') line.pop_back();
 
                 if (!line.empty())
@@ -182,23 +184,29 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
                     float lx = boxX + (boxW - lSize.x) * 0.5f;
 
                     DrawStyledText(dl, font, fontSize, ImVec2(lx, curY), textCol,
-                                   line.c_str(), 0.0f, scale, state.effects);
+                                   line.c_str(), 0.0f, scale, box.effects);
                 }
 
                 curY += lineH;
                 if (endPos == std::string::npos) break;
                 startPos = endPos + 1;
-                endPos   = state.currentText.find('\n', startPos);
+                endPos   = text.find('\n', startPos);
             }
         }
         else
         {
             DrawStyledText(dl, font, fontSize, ImVec2(textX, textY), textCol,
-                           state.currentText.c_str(), boxW, scale, state.effects);
+                           text.c_str(), boxW, scale, box.effects);
         }
 
         dl->PopClipRect();
-    }
+    };
+
+    if (state.showText && !state.currentText.empty())
+        DrawBox(state.currentText, state.lyricsBox, true);
+
+    if (state.indexEnabled && !state.currentRef.empty())
+        DrawBox(state.currentRef, state.indexBox, false);
 
     // ── Overlay (PNG transparente) ──────────────────────────────────────────
     // Capa APARTE de fondo/texto (ver PresentationCore::SetOverlayMedia) --

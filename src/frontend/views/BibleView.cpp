@@ -28,18 +28,25 @@ static void DrawPlusBadge(ImDrawList* dl, ImVec2 corner) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helper: build the projected text string
-//  Format: "BookName Cap:Verse (BibleName)\nverse text"
+//  Helpers: referencia corta ("Genesis 1:1", para el Indice en pantalla) y
+//  texto concatenado legacy ("BookName Cap:Verse (BibleName)\nverse text",
+//  usado solo para el "siguiente" del Stage Display y el historial -- ver
+//  ProjectVerse, que ya NO proyecta el texto concatenado: el cuerpo va por
+//  SetLayer2_Text y la referencia por SetCurrentRef, cada uno con su propia
+//  caja/diseno (ver TextBoxStyle).
 // ─────────────────────────────────────────────────────────────────────────────
+
+static std::string BuildVerseRef(const BookData& book,
+                                  const ChapterData& chap,
+                                  const VerseData& verse) {
+    return book.name + " " + std::to_string(chap.number) + ":" + std::to_string(verse.number);
+}
 
 static std::string BuildProjectedText(const BookData& book,
                                        const ChapterData& chap,
                                        const VerseData& verse,
                                        const std::string& bibleName) {
-    std::string ref = book.name
-                    + " " + std::to_string(chap.number)
-                    + ":" + std::to_string(verse.number)
-                    + " (" + bibleName + ")";
+    std::string ref = BuildVerseRef(book, chap, verse) + " (" + bibleName + ")";
     return ref + "\n" + verse.text;
 }
 
@@ -86,7 +93,9 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
     if (verseIdx < 0 || verseIdx >= (int)chap.verses.size()) return;
     auto& verse = chap.verses[verseIdx];
 
-    std::string fullText = BuildProjectedText(book, chap, verse, m_CurrentBible.name);
+    std::string ref      = BuildVerseRef(book, chap, verse);
+    std::string body     = verse.text;
+    std::string fullText = BuildProjectedText(book, chap, verse, m_CurrentBible.name); // legacy, ver HistoryEntry::fullText
 
     m_ProjectedBookNum  = book.canonicalNumber;
     m_ProjectedChapNum  = chap.number;
@@ -103,9 +112,9 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
 
     if (!isDuplicate) {
         HistoryEntry entry;
-        entry.ref      = book.name + " " + std::to_string(chap.number)
-                       + ":" + std::to_string(verse.number);
+        entry.ref      = ref;
         entry.fullText = fullText;
+        entry.body     = body;
         entry.bookIdx  = bookIdx;
         entry.chapIdx  = chapIdx;
         entry.verseIdx = verseIdx;
@@ -114,10 +123,15 @@ void BibleView::ProjectVerse(int bookIdx, int chapIdx, int verseIdx) {
             m_History.erase(m_History.begin());
     } else {
         m_History.back().fullText = fullText;
+        m_History.back().body     = body;
     }
 
     auto& core = Core::PresentationCore::Get();
-    core.SetLayer2_Text(fullText);
+    // El cuerpo va a la caja de Letras (mismo diseno que las canciones) y la
+    // referencia a la caja del Indice, independiente y opcional -- ver
+    // TextBoxStyle/PresentationState::indexBox.
+    core.SetLayer2_Text(body);
+    core.SetCurrentRef(ref);
     core.SetNextText(PeekNextVerseText(bookIdx, chapIdx, verseIdx));
     core.SetProjecting(true);
 }
@@ -567,7 +581,8 @@ void BibleView::RenderHistoryPopup() {
                 m_ProjectedBookIdx  = entry.bookIdx;
                 m_ProjectedChapIdx  = entry.chapIdx;
                 m_ProjectedVerseIdx = entry.verseIdx;
-                Core::PresentationCore::Get().SetLayer2_Text(entry.fullText);
+                Core::PresentationCore::Get().SetLayer2_Text(entry.body);
+                Core::PresentationCore::Get().SetCurrentRef(entry.ref);
                 Core::PresentationCore::Get().SetProjecting(true);
                 m_ShowHistory = false;
                 earlyExit = true;

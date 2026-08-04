@@ -68,6 +68,58 @@ namespace ProyecThor::Core {
         bool  underlineEnabled = false;
         float underlineColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
         float underlineThickness = 0.3f; // 0..1
+
+        // Texto 3D -- copias escalonadas en diagonal detras del texto
+        // principal (extrusion "solida"), mismo truco que Sombra pero con
+        // muchos pasos en vez de uno solo. Ver DrawStyledText.
+        bool  text3dEnabled = false;
+        float text3dColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        float text3dDepth = 0.4f; // 0..1
+
+        // Degradado de color -- interpola entre dos colores a lo largo del
+        // angulo indicado (mismo esquema angulo->direccion->proyeccion que
+        // ya usa la herramienta "Degradado" del editor de Overlays, ver
+        // OverlayCanvasEditor::ApplyGradientPreview). Reemplaza el color
+        // solido del texto cuando esta activo.
+        bool  gradientEnabled = false;
+        float gradientColorA[4] = { 1.0f, 0.35f, 0.35f, 1.0f };
+        float gradientColorB[4] = { 0.35f, 0.45f, 1.0f, 1.0f };
+        float gradientAngle = 0.0f; // grados, -180..180
+
+        // Transparencia con angulo -- degradado de OPACIDAD (no de color)
+        // a lo largo del angulo indicado, mismo esquema que el degradado de
+        // color de arriba pero modulando solo el alpha.
+        bool  opacityGradientEnabled = false;
+        float opacityGradientAngle = 0.0f; // grados, -180..180
+        float opacityGradientStrength = 0.5f; // 0..1
+    };
+
+    // TextBoxStyle -- recuadro de texto independiente (Letras o Versiculo),
+    // editable a mano en el editor visual (ver CanvaStyleEditor). posX/posY
+    // son el CENTRO del recuadro, normalizados 0..1 (misma convencion que
+    // OverlayLayer::posX/posY); sizeW/sizeH tambien normalizados 0..1.
+    // hAlign/vAlign alinean el texto DENTRO del recuadro (0 izq/arriba,
+    // 1 centro, 2 der/abajo).
+    struct TextBoxStyle {
+        float       posX          = 0.5f;
+        float       posY          = 0.5f;
+        float       sizeW         = 0.92f;
+        float       sizeH         = 0.89f;
+        std::string fontName      = "Predeterminada";
+        float       color[4]      = { 1.0f, 1.0f, 1.0f, 1.0f };
+        float       textSize      = 60.0f;
+        int         hAlign        = 1;
+        int         vAlign        = 1;
+        bool        autoScale     = true;
+        TextEffectsData effects;
+
+        // Fondo de pantalla propio del recuadro -- OPCIONAL, imagen elegida
+        // de la misma biblioteca de fondos que ya usa el resto de la app
+        // (ver ListSongBackgrounds(), carpeta assets/backgrounds). Por
+        // defecto deshabilitado (fondo transparente).
+        bool        bgMediaEnabled = false;
+        std::string bgMediaPath;
+        float       bgMediaOpacity = 1.0f;
     };
 
     struct SavedStyle {
@@ -80,6 +132,21 @@ namespace ProyecThor::Core {
         bool        autoScale     = true;
         std::string fontName      = "Predeterminada";
         TextEffectsData effects;
+
+        // Caja de Letras (ver TextBoxStyle) -- fuente real que consume
+        // DrawTextBlock/DrawPublicContent para TODO el contenido proyectado
+        // (canciones Y el cuerpo de un versiculo biblico: ambos son "texto"
+        // con el mismo diseno). Los campos planos de arriba se conservan
+        // solo como espejo de compatibilidad (StreamSnapshot/cliente
+        // remoto, ver PresentationCore::UpdateLyricsBoxStyle).
+        TextBoxStyle lyrics;
+
+        // Caja del Indice -- OPCIONAL (ver indexEnabled), muestra solo la
+        // referencia biblica (ej. "Genesis 1:1"), nunca el cuerpo del
+        // versiculo. Independiente en posicion/tamano/estilo de la caja de
+        // Letras -- el usuario la activa y la mueve a donde quiera.
+        TextBoxStyle index;
+        bool         indexEnabled = false;
     };
 
     // Empaqueta/desempaqueta TextEffectsData como una sola linea CSV para el
@@ -109,6 +176,13 @@ namespace ProyecThor::Core {
 
         std::string currentText;
         bool  showText          = false;
+
+        // Referencia biblica del versiculo actual (ej. "Genesis 1:1"),
+        // SEPARADA del cuerpo (currentText) -- ver PresentationCore::
+        // SetCurrentRef. Solo se dibuja si indexEnabled es true (ver
+        // indexBox mas abajo). Vacio para cualquier contenido que no sea
+        // un versiculo biblico (SetLayer2_Text la limpia automaticamente).
+        std::string currentRef;
 
         // Texto que vendra despues del actual (siguiente estrofa/versiculo),
         // solo para el Stage Display — nunca se muestra al publico.
@@ -145,6 +219,23 @@ namespace ProyecThor::Core {
         int songVAlignment     = 1;
         int bibleTextAlignment = 1;
         int bibleVAlignment    = 1;
+
+        // Caja de Letras -- fuente real que consumen DrawTextBlock
+        // (UIManager.cpp) y DrawPublicContent (LiveContentRenderer.cpp) al
+        // proyectar currentText (canciones Y el cuerpo de un versiculo
+        // biblico, ambos con el mismo diseno). Los campos planos de arriba
+        // (textSize/textColor/textAlignment/vAlignment/margins/autoScale/
+        // selectedFont/effects) quedan como espejo de solo-lectura de
+        // lyricsBox, mantenido por PresentationCore::UpdateLyricsBoxStyle,
+        // para no romper a nada que ya los lea (Clock, QuickNotes,
+        // ViewPanel::Pad, SyncServer, StreamSnapshot/cliente remoto).
+        TextBoxStyle lyricsBox;
+
+        // Caja del Indice -- OPCIONAL, dibuja SOLO currentRef (la
+        // referencia biblica, ej. "Genesis 1:1"), nunca currentText. Se
+        // dibuja unicamente si indexEnabled es true.
+        TextBoxStyle indexBox;
+        bool         indexEnabled = false;
 
         float livePosition      = 0.0f;
         int   liveVolume        = 100;
@@ -412,16 +503,24 @@ void SetGlobalMute(bool mute);
         void RequestPreviewLoad(const std::string& path, bool loop, bool startMuted);
         void RequestPreviewStop();
 
-        void UpdateTextStyle(float size, const float color[4], int align,
-                             int vAlign, const float margins[4], bool autoScale,
-                             const std::string& font);
+        // Aplica la caja de Letras: guarda state.lyricsBox TAL CUAL y
+        // ademas espeja sus campos hacia los campos planos legacy de
+        // PresentationState (textSize/textColor/textAlignment/vAlignment/
+        // margins/autoScale/selectedFont/effects) para que todo lo que ya
+        // los lee (Clock, QuickNotes, ViewPanel::Pad, SyncServer,
+        // StreamSnapshot/cliente remoto) siga funcionando sin cambios.
+        void UpdateLyricsBoxStyle(const TextBoxStyle& box);
 
-        void UpdateBibleStyle(float refSize, float verseSize, int hAlign, int vAlign);
-        void UpdateSongStyle(int hAlign, int vAlign);
+        // Aplica la caja del Indice y si esta habilitado o no. Sin espejo --
+        // el indice nunca tuvo un camino de compatibilidad separado de Letras.
+        void UpdateIndexBoxStyle(const TextBoxStyle& box, bool enabled);
 
-        // Efectos visuales del texto proyectado (ver TextEffectsData arriba
-        // y TextEffectsRenderer.h para el dibujo).
-        void SetTextEffects(const TextEffectsData& effects);
+        // Referencia biblica (ej. "Genesis 1:1"), SEPARADA del cuerpo del
+        // texto (ver SetLayer2_Text, que limpia esto automaticamente para
+        // cualquier contenido que no sea un versiculo). Solo BibleView y
+        // SyncServer (proyeccion remota de versiculos) llaman esto.
+        void SetCurrentRef(const std::string& ref);
+
         TextEffectsData GetTextEffects() const;
 
         void        SetProjecting(bool projecting);
@@ -642,6 +741,12 @@ void SetGlobalMute(bool mute);
         int   GetLoadingLogoHeight() const { return m_LoadingLogoH; }
         bool  ShouldShowLoadingScreen() const;
 
+        // Textura GL del fondo de pantalla opcional de una caja (ver
+        // TextBoxStyle::bgMediaEnabled/bgMediaPath). isLyrics distingue el
+        // slot de cache a usar (Letras vs Indice). Devuelve 0 si path
+        // esta vacio o no se pudo cargar. Recarga solo si el path cambio.
+        unsigned int GetBoxBgTexture(bool isLyrics, const std::string& path);
+
     private:
         void RenderDefaultStyleCombo();
         void EnsureFBO(int w, int h);
@@ -715,6 +820,14 @@ bool m_GlobalMuted = false;
         unsigned int m_LoadingLogoTex = 0;
         int          m_LoadingLogoW = 0;
         int          m_LoadingLogoH = 0;
+
+        // ── Fondo de pantalla opcional por caja (Letras/Indice) ───────────
+        // Mismo patron que el logo de arriba: una sola textura por caja,
+        // recargada solo si el path cambia. Ver GetBoxBgTexture.
+        std::string  m_LyricsBgTexPath;
+        unsigned int m_LyricsBgTex = 0;
+        std::string  m_IndexBgTexPath;
+        unsigned int m_IndexBgTex = 0;
 
         int         m_ProjectorWidth  = 1920;
         int         m_ProjectorHeight = 1080;

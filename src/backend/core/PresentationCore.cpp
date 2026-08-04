@@ -829,6 +829,38 @@ void PresentationCore::SetBackgroundAudio() {
         return m_LoadingLogoTex != 0 ? reinterpret_cast<void*>(static_cast<uintptr_t>(m_LoadingLogoTex)) : nullptr;
     }
 
+    unsigned int PresentationCore::GetBoxBgTexture(bool isLyrics, const std::string& path) {
+        std::string& cachedPath = isLyrics ? m_LyricsBgTexPath : m_IndexBgTexPath;
+        GLuint&      cachedTex  = isLyrics ? m_LyricsBgTex     : m_IndexBgTex;
+
+        if (path == cachedPath) return cachedTex;
+
+        if (cachedTex != 0) {
+            GLuint old = cachedTex;
+            glDeleteTextures(1, &old);
+            cachedTex = 0;
+        }
+        cachedPath = path;
+        if (path.empty()) return 0;
+
+        int w = 0, h = 0, ch = 0;
+        unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
+        if (!data) return 0;
+
+        GLuint tex;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+
+        cachedTex = tex;
+        return tex;
+    }
+
     bool PresentationCore::ShouldShowLoadingScreen() const {
         // Se elimino el logo/pantalla de carga: sumado al preflight de la
         // cola, era una fuente constante de cortes y arranques lentos —
@@ -861,41 +893,29 @@ void PresentationCore::SetBackgroundTransitionProgress(float progress) {
     if (m_Impl) m_Impl->background.SetTransitionProgress(progress);
 }
 
-    void PresentationCore::UpdateTextStyle(float size, const float color[4], int align,
-                                           int vAlign, const float margins[4], bool autoScale,
-                                           const std::string& font) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.textSize      = size;
-        m_State.textAlignment = align;
-        m_State.vAlignment    = vAlign;
-        m_State.autoScale     = autoScale;
-        m_ActiveFontName      = font;
+    // Definida mas abajo en este archivo (junto a ApplySavedStyleToState);
+    // espeja una caja de Letras hacia los campos planos legacy de
+    // PresentationState. Forward-declarada aca porque UpdateLyricsBoxStyle
+    // la necesita antes en el archivo.
+    static void ApplyLyricsBoxToState(const TextBoxStyle& box, PresentationState& state,
+                                       std::string& activeFontName);
 
-        for (int i = 0; i < 4; i++) {
-            m_State.textColor[i] = color[i];
-            if (margins) m_State.margins[i] = margins[i];
-        }
+    void PresentationCore::UpdateLyricsBoxStyle(const TextBoxStyle& box) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        ApplyLyricsBoxToState(box, m_State, m_ActiveFontName);
         ++m_StreamVersion;
     }
 
-    void PresentationCore::UpdateBibleStyle(float refSize, float verseSize,
-                                             int hAlign, int vAlign) {
+    void PresentationCore::UpdateIndexBoxStyle(const TextBoxStyle& box, bool enabled) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.refTextSize        = refSize;
-        m_State.verseTextSize      = verseSize;
-        m_State.bibleTextAlignment = hAlign;
-        m_State.bibleVAlignment    = vAlign;
+        m_State.indexBox     = box;
+        m_State.indexEnabled = enabled;
+        ++m_StreamVersion;
     }
 
-    void PresentationCore::UpdateSongStyle(int hAlign, int vAlign) {
+    void PresentationCore::SetCurrentRef(const std::string& ref) {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.songTextAlignment = hAlign;
-        m_State.songVAlignment    = vAlign;
-    }
-
-    void PresentationCore::SetTextEffects(const TextEffectsData& effects) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.effects = effects;
+        m_State.currentRef = ref;
         ++m_StreamVersion;
     }
 
@@ -908,6 +928,11 @@ void PresentationCore::SetLayer2_Text(const std::string& text) {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
+    // Limpia la referencia biblica: solo BibleView/SyncServer la vuelven a
+    // poner (con SetCurrentRef) justo despues de llamar esto para un
+    // versiculo -- para cualquier otro contenido (canciones, media, notas)
+    // no debe quedar una referencia vieja pegada en pantalla.
+    m_State.currentRef.clear();
     ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
@@ -915,6 +940,7 @@ void PresentationCore::SetLayer2_Text(const std::string& text) {
 void PresentationCore::ClearLayer2() {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_State.currentText = "";
+    m_State.currentRef  = "";
     m_State.showText    = false;
     m_State.nextText    = "";
     ++m_State.textTransitionTrigger;
@@ -1179,6 +1205,10 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     // bg(enabled,r,g,b,a) border(enabled,r,g,b,a,width) shadow(enabled,r,g,b,a,intensity)
     // chromaticAberration(enabled,intensity) glow(enabled,r,g,b,a,intensity)
     // neon(enabled,r,g,b,a,intensity) underline(enabled,r,g,b,a,thickness)
+    // text3d(enabled,r,g,b,a,depth) gradient(enabled,Ar,Ag,Ab,Aa,Br,Bg,Bb,Ba,angle)
+    // opacityGradient(enabled,angle,strength) -- los ultimos 3 bloques se
+    // agregaron despues; UnpackTextEffects los trata como opcionales para
+    // que un .theme viejo (37 floats) siga cargando el resto sin resetear.
     std::string PackTextEffects(const TextEffectsData& e)
     {
         std::ostringstream ss;
@@ -1201,7 +1231,20 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         put(e.neonIntensity);
         put(e.underlineEnabled ? 1.0f : 0.0f);
         for (float c : e.underlineColor) put(c);
-        ss << e.underlineThickness;
+        put(e.underlineThickness);
+
+        put(e.text3dEnabled ? 1.0f : 0.0f);
+        for (float c : e.text3dColor) put(c);
+        put(e.text3dDepth);
+
+        put(e.gradientEnabled ? 1.0f : 0.0f);
+        for (float c : e.gradientColorA) put(c);
+        for (float c : e.gradientColorB) put(c);
+        put(e.gradientAngle);
+
+        put(e.opacityGradientEnabled ? 1.0f : 0.0f);
+        put(e.opacityGradientAngle);
+        ss << e.opacityGradientStrength;
         return ss.str();
     }
 
@@ -1235,6 +1278,55 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         e.underlineEnabled = f[i++] != 0.0f;
         for (float& c : e.underlineColor) c = f[i++];
         e.underlineThickness = f[i++];
+
+        // Campos nuevos (3D + degradados), opcionales -- ver comentario de
+        // PackTextEffects. Si el archivo es viejo (solo 37 floats) se dejan
+        // los defaults de TextEffectsData en vez de fallar.
+        if (f.size() >= i + 19) {
+            e.text3dEnabled = f[i++] != 0.0f;
+            for (float& c : e.text3dColor) c = f[i++];
+            e.text3dDepth = f[i++];
+
+            e.gradientEnabled = f[i++] != 0.0f;
+            for (float& c : e.gradientColorA) c = f[i++];
+            for (float& c : e.gradientColorB) c = f[i++];
+            e.gradientAngle = f[i++];
+
+            e.opacityGradientEnabled = f[i++] != 0.0f;
+            e.opacityGradientAngle = f[i++];
+            e.opacityGradientStrength = f[i++];
+        }
+    }
+
+    // Convierte margenes planos (L,T,R,B en px @1920x1080) al rect
+    // centro-relativo normalizado de TextBoxStyle -- inversa exacta de
+    // ApplyLyricsBoxToState. Usada solo como fallback de migracion al leer
+    // un .theme guardado antes de la reforma a cajas.
+    static void BoxFromLegacyMargins(const float margins[4], TextBoxStyle& box)
+    {
+        box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
+        box.sizeH = std::max(0.02f, (1080.0f - margins[1] - margins[3]) / 1080.0f);
+        box.posX  = margins[0] / 1920.0f + box.sizeW * 0.5f;
+        box.posY  = margins[1] / 1080.0f + box.sizeH * 0.5f;
+    }
+
+    static void WriteBoxKeys(std::ofstream& f, const char* prefix, const TextBoxStyle& box)
+    {
+        f << prefix << "PosX="    << box.posX  << "\n";
+        f << prefix << "PosY="    << box.posY  << "\n";
+        f << prefix << "SizeW="   << box.sizeW << "\n";
+        f << prefix << "SizeH="   << box.sizeH << "\n";
+        f << prefix << "Font="    << box.fontName << "\n";
+        f << prefix << "Color="   << box.color[0] << "," << box.color[1] << ","
+                                   << box.color[2] << "," << box.color[3] << "\n";
+        f << prefix << "Size="    << box.textSize << "\n";
+        f << prefix << "HAlign="  << box.hAlign << "\n";
+        f << prefix << "VAlign="  << box.vAlign << "\n";
+        f << prefix << "AutoScale=" << (box.autoScale ? 1 : 0) << "\n";
+        f << prefix << "BgMediaEnabled=" << (box.bgMediaEnabled ? 1 : 0) << "\n";
+        f << prefix << "BgMediaPath="    << box.bgMediaPath << "\n";
+        f << prefix << "BgMediaOpacity=" << box.bgMediaOpacity << "\n";
+        f << prefix << "Effects=" << PackTextEffects(box.effects) << "\n";
     }
 
     static bool LoadThemeFromDisk(const std::string& themesDir,
@@ -1249,6 +1341,9 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         out      = SavedStyle{};
         out.name = name;
 
+        bool hasLyricsBoxKeys = false;
+        bool hasIndexBoxKeys  = false;
+
         std::string line;
         while (std::getline(f, line)) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
@@ -1257,6 +1352,8 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             std::string k = line.substr(0, sep);
             std::string v = line.substr(sep + 1);
 
+            // Claves legacy (planas) -- se conservan solo por compatibilidad
+            // hacia atras / fallback de migracion, ver abajo.
             if      (k == "textSize")   out.size      = std::stof(v);
             else if (k == "textAlign")  out.hAlign    = std::stoi(v);
             else if (k == "vAlign")     out.vAlign    = std::stoi(v);
@@ -1270,9 +1367,64 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                 sscanf(v.c_str(), "%f,%f,%f,%f",
                        &out.margins[0], &out.margins[1],
                        &out.margins[2], &out.margins[3]);
+
+            // Claves nuevas (cajas independientes Letras/Indice).
+            else if (k == "lyricsPosX")    { out.lyrics.posX  = std::stof(v); hasLyricsBoxKeys = true; }
+            else if (k == "lyricsPosY")    out.lyrics.posY    = std::stof(v);
+            else if (k == "lyricsSizeW")   out.lyrics.sizeW   = std::stof(v);
+            else if (k == "lyricsSizeH")   out.lyrics.sizeH   = std::stof(v);
+            else if (k == "lyricsFont")    out.lyrics.fontName = v;
+            else if (k == "lyricsColor")
+                sscanf(v.c_str(), "%f,%f,%f,%f", &out.lyrics.color[0], &out.lyrics.color[1],
+                       &out.lyrics.color[2], &out.lyrics.color[3]);
+            else if (k == "lyricsSize")    out.lyrics.textSize = std::stof(v);
+            else if (k == "lyricsHAlign")  out.lyrics.hAlign   = std::stoi(v);
+            else if (k == "lyricsVAlign")  out.lyrics.vAlign   = std::stoi(v);
+            else if (k == "lyricsAutoScale") out.lyrics.autoScale = (std::stoi(v) != 0);
+            else if (k == "lyricsBgMediaEnabled") out.lyrics.bgMediaEnabled = (std::stoi(v) != 0);
+            else if (k == "lyricsBgMediaPath")    out.lyrics.bgMediaPath = v;
+            else if (k == "lyricsBgMediaOpacity") out.lyrics.bgMediaOpacity = std::stof(v);
+            else if (k == "lyricsEffects") UnpackTextEffects(v, out.lyrics.effects);
+
+            else if (k == "indexPosX")     { out.index.posX  = std::stof(v); hasIndexBoxKeys = true; }
+            else if (k == "indexPosY")     out.index.posY    = std::stof(v);
+            else if (k == "indexSizeW")    out.index.sizeW   = std::stof(v);
+            else if (k == "indexSizeH")    out.index.sizeH   = std::stof(v);
+            else if (k == "indexFont")     out.index.fontName = v;
+            else if (k == "indexColor")
+                sscanf(v.c_str(), "%f,%f,%f,%f", &out.index.color[0], &out.index.color[1],
+                       &out.index.color[2], &out.index.color[3]);
+            else if (k == "indexSize")     out.index.textSize = std::stof(v);
+            else if (k == "indexHAlign")   out.index.hAlign   = std::stoi(v);
+            else if (k == "indexVAlign")   out.index.vAlign   = std::stoi(v);
+            else if (k == "indexAutoScale") out.index.autoScale = (std::stoi(v) != 0);
+            else if (k == "indexBgMediaEnabled") out.index.bgMediaEnabled = (std::stoi(v) != 0);
+            else if (k == "indexBgMediaPath")    out.index.bgMediaPath = v;
+            else if (k == "indexBgMediaOpacity") out.index.bgMediaOpacity = std::stof(v);
+            else if (k == "indexEffects")  UnpackTextEffects(v, out.index.effects);
+            else if (k == "indexEnabled")  out.indexEnabled = (std::stoi(v) != 0);
+
             else if (k == "textEffects")
                 UnpackTextEffects(v, out.effects);
         }
+
+        // Fallback de migracion: un .theme guardado antes de la reforma a
+        // cajas no tiene las claves "lyrics*"/"index*" -- se deriva una caja
+        // inicial desde los campos legacy ya leidos arriba, para no
+        // resetear estilos guardados por el usuario. El indice arranca
+        // deshabilitado (los estilos viejos no tenian este concepto).
+        if (!hasLyricsBoxKeys) {
+            out.lyrics.fontName  = out.fontName;
+            out.lyrics.textSize  = out.size;
+            for (int i = 0; i < 4; i++) out.lyrics.color[i] = out.color[i];
+            out.lyrics.hAlign    = out.hAlign;
+            out.lyrics.vAlign    = out.vAlign;
+            out.lyrics.autoScale = out.autoScale;
+            out.lyrics.effects   = out.effects;
+            BoxFromLegacyMargins(out.margins, out.lyrics);
+        }
+        if (!hasIndexBoxKeys) out.index = out.lyrics;
+
         return true;
     }
 
@@ -1282,22 +1434,29 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::ofstream f(std::filesystem::path(dir) / (style.name + ".theme"));
         if (!f.is_open()) return;
 
-        f << "textColor="     << style.color[0]   << "," << style.color[1]   << ","
-                              << style.color[2]   << "," << style.color[3]   << "\n";
-        f << "textSize="      << style.size       << "\n";
-        f << "textAlign="     << style.hAlign     << "\n";
-        f << "vAlign="        << style.vAlign     << "\n";
-        f << "margins="       << style.margins[0] << "," << style.margins[1] << ","
-                              << style.margins[2] << "," << style.margins[3] << "\n";
-        f << "autoScale="     << (style.autoScale ? 1 : 0) << "\n";
-        f << "font="          << style.fontName   << "\n";
-        f << "refTextSize="    << style.size * 0.46f << "\n";
-        f << "verseTextSize="  << style.size         << "\n";
-        f << "songTextAlign="  << style.hAlign       << "\n";
-        f << "songVAlign="     << style.vAlign       << "\n";
-        f << "bibleTextAlign=" << style.hAlign       << "\n";
-        f << "bibleVAlign="    << style.vAlign       << "\n";
-        f << "textEffects="    << PackTextEffects(style.effects) << "\n";
+        // Claves legacy -- se derivan de la caja de Letras para que un
+        // .theme guardado con el editor nuevo siga siendo legible por
+        // codigo viejo/externo que solo conozca el formato plano.
+        f << "textColor="  << style.lyrics.color[0] << "," << style.lyrics.color[1] << ","
+                            << style.lyrics.color[2] << "," << style.lyrics.color[3] << "\n";
+        f << "textSize="   << style.lyrics.textSize << "\n";
+        f << "textAlign="  << style.lyrics.hAlign   << "\n";
+        f << "vAlign="     << style.lyrics.vAlign   << "\n";
+        float legacyMargins[4] = {
+            (style.lyrics.posX - style.lyrics.sizeW * 0.5f) * 1920.0f,
+            (style.lyrics.posY - style.lyrics.sizeH * 0.5f) * 1080.0f,
+            (1.0f - (style.lyrics.posX + style.lyrics.sizeW * 0.5f)) * 1920.0f,
+            (1.0f - (style.lyrics.posY + style.lyrics.sizeH * 0.5f)) * 1080.0f,
+        };
+        f << "margins="    << legacyMargins[0] << "," << legacyMargins[1] << ","
+                            << legacyMargins[2] << "," << legacyMargins[3] << "\n";
+        f << "autoScale="  << (style.lyrics.autoScale ? 1 : 0) << "\n";
+        f << "font="       << style.lyrics.fontName << "\n";
+        f << "textEffects=" << PackTextEffects(style.lyrics.effects) << "\n";
+
+        WriteBoxKeys(f, "lyrics", style.lyrics);
+        WriteBoxKeys(f, "index",  style.index);
+        f << "indexEnabled=" << (style.indexEnabled ? 1 : 0) << "\n";
 
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_SavedStyles[style.name] = style;
@@ -1344,24 +1503,35 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return ProyecThor::GetAssetsPath() + "/../category_styles.ini";
     }
 
+    // Compartido entre PresentationCore::UpdateLyricsBoxStyle (que llama a
+    // esto ya con el mutex tomado) y ApplySavedStyleToState -- centraliza el
+    // espejo hacia los campos planos legacy de PresentationState (ver
+    // comentario en PresentationState::lyricsBox, PresentationCore.h).
+    static void ApplyLyricsBoxToState(const TextBoxStyle& box, PresentationState& state,
+                                       std::string& activeFontName)
+    {
+        state.lyricsBox      = box;
+        state.textSize       = box.textSize;
+        state.textAlignment  = box.hAlign;
+        state.vAlignment     = box.vAlign;
+        state.autoScale      = box.autoScale;
+        state.selectedFont   = box.fontName;
+        state.effects        = box.effects;
+        activeFontName       = box.fontName;
+        for (int i = 0; i < 4; i++) state.textColor[i] = box.color[i];
+
+        state.margins[0] = (box.posX - box.sizeW * 0.5f) * 1920.0f;
+        state.margins[1] = (box.posY - box.sizeH * 0.5f) * 1080.0f;
+        state.margins[2] = (1.0f - (box.posX + box.sizeW * 0.5f)) * 1920.0f;
+        state.margins[3] = (1.0f - (box.posY + box.sizeH * 0.5f)) * 1080.0f;
+    }
+
     static void ApplySavedStyleToState(const SavedStyle& s, PresentationState& state,
                                         std::string& activeFontName)
     {
-        state.textSize      = s.size;
-        state.textAlignment = s.hAlign;
-        state.vAlignment    = s.vAlign;
-        state.autoScale     = s.autoScale;
-        activeFontName      = s.fontName;
-        state.selectedFont  = s.fontName;
-        for (int i = 0; i < 4; i++) {
-            state.textColor[i] = s.color[i];
-            state.margins[i]   = s.margins[i];
-        }
-        state.songTextAlignment  = s.hAlign;
-        state.songVAlignment     = s.vAlign;
-        state.bibleTextAlignment = s.hAlign;
-        state.bibleVAlignment    = s.vAlign;
-        state.effects            = s.effects;
+        ApplyLyricsBoxToState(s.lyrics, state, activeFontName);
+        state.indexBox     = s.index;
+        state.indexEnabled = s.indexEnabled;
     }
 
     void PresentationCore::SetCategoryDefaultStyle(ItemType category, const std::string& styleName)
@@ -1495,26 +1665,8 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             return;
 
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_State.textSize      = s.size;
-        m_State.textAlignment = s.hAlign;
-        m_State.vAlignment    = s.vAlign;
-        m_State.autoScale     = s.autoScale;
-        m_ActiveFontName      = s.fontName;
-        m_State.selectedFont  = s.fontName;
-        for (int i = 0; i < 4; i++) {
-            m_State.textColor[i] = s.color[i];
-            m_State.margins[i]   = s.margins[i];
-        }
-
-        if (selection.type == ItemType::Song) {
-            m_State.songTextAlignment = s.hAlign;
-            m_State.songVAlignment    = s.vAlign;
-        } else {
-            m_State.bibleTextAlignment = s.hAlign;
-            m_State.bibleVAlignment    = s.vAlign;
-            m_State.refTextSize        = s.size * 0.46f;
-            m_State.verseTextSize      = s.size;
-        }
+        ApplySavedStyleToState(s, m_State, m_ActiveFontName);
+        ++m_StreamVersion;
     }
 
     void PresentationCore::ApplyStyleByName(const std::string& styleName)

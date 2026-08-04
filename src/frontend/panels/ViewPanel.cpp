@@ -19,6 +19,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <iostream>
@@ -494,14 +495,26 @@ void ApplyPad(const PadSettings& pad)
     }
 
     if (pad.hasStyle) {
+        // Los Pads solo capturan la caja de Letras (SavePad arriba lee los
+        // campos planos de PresentationState, que son espejo de lyricsBox
+        // -- ver ApplyLyricsBoxToState). Se reconstruye una caja
+        // (TextBoxStyle) desde los margenes planos guardados. El Indice no
+        // es parte de un Pad -- queda deshabilitado, igual que el default
+        // de un SavedStyle nuevo.
+        Core::TextBoxStyle box;
+        box.sizeW    = std::max(0.02f, (1920.0f - pad.styleMargins[0] - pad.styleMargins[2]) / 1920.0f);
+        box.sizeH    = std::max(0.02f, (1080.0f - pad.styleMargins[1] - pad.styleMargins[3]) / 1080.0f);
+        box.posX     = pad.styleMargins[0] / 1920.0f + box.sizeW * 0.5f;
+        box.posY     = pad.styleMargins[1] / 1080.0f + box.sizeH * 0.5f;
+        box.textSize = pad.styleSize;
+        for (int c = 0; c < 4; c++) box.color[c] = pad.styleColor[c];
+        box.hAlign    = pad.styleHAlign;
+        box.vAlign    = pad.styleVAlign;
+        box.autoScale = pad.styleAutoScale;
+        box.fontName  = pad.styleFontName;
+
         Core::SavedStyle snap;
-        snap.size      = pad.styleSize;
-        for (int c = 0; c < 4; c++) snap.color[c] = pad.styleColor[c];
-        snap.hAlign    = pad.styleHAlign;
-        snap.vAlign    = pad.styleVAlign;
-        for (int c = 0; c < 4; c++) snap.margins[c] = pad.styleMargins[c];
-        snap.autoScale = pad.styleAutoScale;
-        snap.fontName  = pad.styleFontName;
+        snap.lyrics = box;
         core.ApplyStyleSnapshot(snap);
 
         switch ((BgType)pad.bgType) {

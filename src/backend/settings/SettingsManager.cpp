@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <cstdlib>
 #include <vector>
+#include <algorithm>
 #ifndef _WIN32
 #include <pwd.h>
 #include <unistd.h>
@@ -441,15 +442,28 @@ void SettingsManager::ApplyProjection() {
 
     core.SetTargetMonitor(p.targetMonitor);
 
-    float tc[4]      = { p.textColorR, p.textColorG, p.textColorB, p.textColorA };
-    float margins[4] = { p.marginTop,  p.marginBottom, p.marginLeft, p.marginRight };
-
-    core.UpdateTextStyle(p.textSize, tc, p.textAlignment, p.vAlignment,
-                          margins, p.autoScale, p.selectedFont);
     {
-        Core::TextEffectsData fx;
-        Core::UnpackTextEffects(p.textEffectsPacked, fx);
-        core.SetTextEffects(fx);
+        // Convierte el default plano de Ajustes > Proyeccion (margenes L,T,R,B
+        // en px @1920x1080) a la caja centro-relativa que espera
+        // UpdateLyricsBoxStyle -- de paso corrige un bug preexistente donde
+        // este armado pasaba los margenes en orden Top,Bottom,Left,Right en
+        // vez de L,T,R,B.
+        Core::TextBoxStyle box;
+        float margins[4] = { p.marginLeft, p.marginTop, p.marginRight, p.marginBottom };
+        box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
+        box.sizeH = std::max(0.02f, (1080.0f - margins[1] - margins[3]) / 1080.0f);
+        box.posX  = margins[0] / 1920.0f + box.sizeW * 0.5f;
+        box.posY  = margins[1] / 1080.0f + box.sizeH * 0.5f;
+        box.fontName  = p.selectedFont;
+        box.color[0]  = p.textColorR; box.color[1] = p.textColorG;
+        box.color[2]  = p.textColorB; box.color[3] = p.textColorA;
+        box.textSize  = p.textSize;
+        box.hAlign    = p.textAlignment;
+        box.vAlign    = p.vAlignment;
+        box.autoScale = p.autoScale;
+        Core::UnpackTextEffects(p.textEffectsPacked, box.effects);
+
+        core.UpdateLyricsBoxStyle(box);
     }
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
     core.SetLoadingLogoPath(p.loadingLogoPath);

@@ -390,35 +390,47 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
 
                 if (state.showText)
                 {
-                    auto DrawTextBlock = [&](const std::string& text,
+                    auto DrawTextBlock = [&](const std::string& text, const Core::TextBoxStyle& box,
+                                            bool isLyricsBox,
                                             float offsetX, float offsetY,
                                             float alphaMult = 1.0f, float scaleMult = 1.0f)
                     {
                         if (text.empty() || alphaMult <= 0.001f) return;
 
-                        float screenScale = (float)mode->width / 1920.0f;
-                        float marginL = state.margins[0] * screenScale;
-                        float marginT = state.margins[1] * screenScale;
-                        float marginR = state.margins[2] * screenScale;
-                        float marginB = state.margins[3] * screenScale;
+                        auto& core = Core::PresentationCore::Get();
+                        // El diseno de una caja (Letras) se dibuja siempre igual sin
+                        // importar el tipo de contenido; "isSong" acá solo decide la
+                        // FORMA del texto (canciones traen saltos de linea manuales,
+                        // el cuerpo de un versiculo es un parrafo sin cortar y necesita
+                        // wrap normal), no que caja/estilo usar.
+                        bool isSong = (core.PeekSelection().type == Core::ItemType::Song);
 
-                        float boxW = std::max(10.0f, (float)mode->width  - marginL - marginR);
-                        float boxH = std::max(10.0f, (float)mode->height - marginT - marginB);
+                        float screenScale = (float)mode->width / 1920.0f;
+                        float boxW = std::max(10.0f, box.sizeW * (float)mode->width);
+                        float boxH = std::max(10.0f, box.sizeH * (float)mode->height);
 
                         float shiftX = offsetX * (float)mode->width;
                         float shiftY = offsetY * (float)mode->height;
-                        float boxX   = (float)mx + marginL + shiftX;
-                        float boxY   = (float)my + marginT + shiftY;
+                        float boxX   = (float)mx + box.posX * (float)mode->width  - boxW * 0.5f + shiftX;
+                        float boxY   = (float)my + box.posY * (float)mode->height - boxH * 0.5f + shiftY;
 
-                        float targetFontSize = state.textSize * screenScale;
+                        if (box.bgMediaEnabled && !box.bgMediaPath.empty()) {
+                            unsigned int bgTex = core.GetBoxBgTexture(isLyricsBox, box.bgMediaPath);
+                            if (bgTex != 0) {
+                                ImU32 tint = IM_COL32(255, 255, 255,
+                                    (int)(std::clamp(box.bgMediaOpacity, 0.0f, 1.0f) * alphaMult * 255.0f));
+                                drawList->AddImage((ImTextureID)(intptr_t)bgTex,
+                                    ImVec2(boxX, boxY), ImVec2(boxX + boxW, boxY + boxH),
+                                    ImVec2(0, 0), ImVec2(1, 1), tint);
+                            }
+                        }
 
-                        std::string activeFontName =
-                            Core::PresentationCore::Get().GetActiveFontName();
-                        ImFont* activeFont =
-                            Core::PresentationCore::Get().GetImGuiFont(activeFontName, targetFontSize);
+                        float targetFontSize = box.textSize * screenScale;
+
+                        ImFont* activeFont = core.GetImGuiFont(box.fontName, targetFontSize);
                         if (!activeFont) activeFont = ImGui::GetFont();
 
-                        if (state.autoScale) {
+                        if (box.autoScale) {
                             while (targetFontSize > 10.0f) {
                                 ImVec2 tSize = activeFont->CalcTextSizeA(
                                     targetFontSize, FLT_MAX, boxW, text.c_str());
@@ -433,23 +445,20 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             targetFontSize, FLT_MAX, boxW, text.c_str());
 
                         ImU32 col = ImGui::ColorConvertFloat4ToU32(
-                            ImVec4(state.textColor[0], state.textColor[1],
-                                   state.textColor[2], state.textColor[3] * alphaMult));
-
-                        bool isSong = (Core::PresentationCore::Get().PeekSelection().type
-                                       == Core::ItemType::Song);
+                            ImVec4(box.color[0], box.color[1],
+                                   box.color[2], box.color[3] * alphaMult));
 
                         drawList->PushClipRect(
                             ImVec2((float)mx, (float)my),
                             ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                             true);
 
-                        if (isSong && state.textAlignment == 1)
+                        if (isSong && box.hAlign == 1)
                         {
                             float startY = boxY;
-                            if (state.vAlignment == 1)
+                            if (box.vAlign == 1)
                                 startY += (boxH - finalBlockSize.y) * 0.5f;
-                            else if (state.vAlignment == 2)
+                            else if (box.vAlign == 2)
                                 startY += (boxH - finalBlockSize.y);
 
                             float  currentY   = startY;
@@ -470,7 +479,7 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
 
                                     DrawStyledText(drawList, activeFont, targetFontSize,
                                         ImVec2(lineX, currentY), col, line.c_str(),
-                                        0.0f, screenScale, state.effects, alphaMult);
+                                        0.0f, screenScale, box.effects, alphaMult);
                                 }
 
                                 currentY += lineHeight;
@@ -482,20 +491,20 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         else
                         {
                             float textX = boxX;
-                            if (state.textAlignment == 1)
+                            if (box.hAlign == 1)
                                 textX += (boxW - finalBlockSize.x) * 0.5f;
-                            else if (state.textAlignment == 2)
+                            else if (box.hAlign == 2)
                                 textX += (boxW - finalBlockSize.x);
 
                             float textY = boxY;
-                            if (state.vAlignment == 1)
+                            if (box.vAlign == 1)
                                 textY += (boxH - finalBlockSize.y) * 0.5f;
-                            else if (state.vAlignment == 2)
+                            else if (box.vAlign == 2)
                                 textY += (boxH - finalBlockSize.y);
 
                             DrawStyledText(drawList, activeFont, targetFontSize,
                                 ImVec2(textX, textY), col, text.c_str(),
-                                boxW, screenScale, state.effects, alphaMult);
+                                boxW, screenScale, box.effects, alphaMult);
                         }
 
                         drawList->PopClipRect();
@@ -504,19 +513,26 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                     bool transActive = m_TransitionPanel && m_TransitionPanel->IsActive();
 
                     if (transActive) {
-                        DrawTextBlock(m_OutgoingText,
+                        DrawTextBlock(m_OutgoingText, state.lyricsBox, true,
                             m_TransitionPanel->GetOutgoingOffsetX(),
                             m_TransitionPanel->GetOutgoingOffsetY(),
                             m_TransitionPanel->GetOutgoingAlpha(),
                             m_TransitionPanel->GetOutgoingScale());
 
-                        DrawTextBlock(state.currentText,
+                        DrawTextBlock(state.currentText, state.lyricsBox, true,
                             m_TransitionPanel->GetIncomingOffsetX(),
                             m_TransitionPanel->GetIncomingOffsetY(),
                             m_TransitionPanel->GetIncomingAlpha(),
                             m_TransitionPanel->GetIncomingScale());
                     } else if (!state.currentText.empty()) {
-                        DrawTextBlock(state.currentText, 0.0f, 0.0f, 1.0f, 1.0f);
+                        DrawTextBlock(state.currentText, state.lyricsBox, true, 0.0f, 0.0f, 1.0f, 1.0f);
+                    }
+
+                    // Indice de referencia biblica -- OPCIONAL, caja aparte
+                    // e independiente de Letras (ver TextBoxStyle::indexBox
+                    // y BibleView::ProjectVerse/SetCurrentRef).
+                    if (state.indexEnabled && !state.currentRef.empty()) {
+                        DrawTextBlock(state.currentRef, state.indexBox, false, 0.0f, 0.0f, 1.0f, 1.0f);
                     }
                 }
 

@@ -65,8 +65,12 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
         "VP9/AV1, control de compresion, cancelar a mitad de camino, barra de "
         "progreso real, estimacion y comparacion de peso, elegir donde guardar), "
         "soporte real para Linux/CachyOS (paquete de Arch validado por CI, Wayland "
-        "via XWayland) y la app ahora respeta el escalado de pantalla de Windows "
-        "(150%, etc). Actualizacion grande todavia en curso: revisa el detalle "
+        "via XWayland), la app ahora respeta el escalado de pantalla de Windows "
+        "(150%, etc), Ajustes con una nueva categoria \"Conexiones\" propia y "
+        "Actualizaciones simplificado, el Editor de Estilos de Letra renovado "
+        "por completo con recuadros de Letras e Indice independientes a pantalla "
+        "completa, y efectos de texto nuevos (3D, degradado de color, transparencia "
+        "con angulo). Actualizacion grande todavia en curso: revisa el detalle "
         "completo antes de considerarla cerrada."
     },
     {
@@ -1411,6 +1415,27 @@ void Hub::RenderUpdateDetailModal() {
 
                 Cat("Windows: escalado de pantalla (DPI)");
                 Bul("La app ahora respeta el porcentaje de escalado de Windows (125%, 150%, etc.): en laptops con pantallas de alta densidad, la letra y los botones ya no se ven diminutos.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Ajustes reorganizados");
+                Bul("Nueva categoria propia \"Conexiones\", con Red (LAN), Mobile, Streaming y OSC como subcategorias separadas -- antes vivian sueltas o mezcladas dentro de Proyeccion.");
+                Bul("Actualizaciones sigue siendo su propia categoria, pero sus 3 subcategorias (Version instalada, Estado, Configuracion) se unificaron en una sola pagina.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Estilos de Letra, renovado por completo");
+                Bul("Ahora es un editor visual a pantalla completa: arrastras y redimensionas directamente sobre una vista previa 16:9, en vez de tocar numeros de margen a mano.");
+                Bul("El cuerpo de un versiculo biblico usa el mismo diseno que las canciones (recuadro de Letras) -- ya no hay un recuadro aparte para el texto del versiculo.");
+                Bul("Nuevo recuadro opcional \"Indice\": si lo activas, muestra solo la referencia (ej. \"Genesis 1:1\") en la posicion, tamano y estilo que quieras, totalmente independiente de las Letras.");
+                Bul("Menu de opciones arriba (Fuente/Alinear, Efectos, Fondo de pantalla), mismo lenguaje visual que el editor de Overlays pero pensado para texto.");
+                Bul("Cada recuadro puede tener su propio fondo de imagen opcional, elegido de tu biblioteca de fondos, con control de opacidad -- transparente por defecto.");
+                Bul("Los estilos guardados con la version anterior se migran solos al nuevo formato al abrirlos, sin perder la configuracion previa.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Efectos de texto nuevos");
+                Bul("Texto 3D: extrusion solida detras de la letra, con color y profundidad configurables.");
+                Bul("Degradado de color: interpola entre dos colores a lo largo de un angulo, para letras multicolor.");
+                Bul("Transparencia con angulo: desvanece el texto de un extremo al otro segun el angulo elegido, en vez de una opacidad pareja.");
+                Bul("Los tres se combinan con el resto de efectos (sombra, borde, glow, neon, etc.) y se editan desde la misma tarjeta de Efectos.");
                 ImGui::Dummy(ImVec2(0,12));
 
                 Cat("Aviso");

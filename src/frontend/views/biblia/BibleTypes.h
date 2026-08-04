@@ -40,8 +40,9 @@ enum class BibleSection {
 };
 
 struct HistoryEntry {
-    std::string ref;
-    std::string fullText;
+    std::string ref;      // solo la referencia, ej. "Genesis 1:1"
+    std::string fullText; // ref + "\n" + body -- legacy, ver comentario en BibleView::ProjectVerse
+    std::string body;     // solo el texto del versiculo, sin la referencia
     int         bookIdx  = -1;
     int         chapIdx  = -1;
     int         verseIdx = -1;
