@@ -453,10 +453,33 @@ if(WIN32)
     endif()
 endif()
 
+# ── 7a-bis. COPIA DE assets/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
+# A diferencia de extrabuild/ (gitignored, binarios vendorizados pesados:
+# libvlc.dll, plugins/ de VLC, ffmpeg.exe, yt-dlp.exe -- Linux ni los
+# necesita, usa las versiones del sistema), assets/ SI esta en git: son los
+# recursos minimos multiplataforma sin los que la app arranca "pelada" --
+# iconos, fuente, texturas de tarjetas del Hub y fondos de splash/Hub (estos
+# ultimos re-comprimidos a JPG, ver README de la carpeta). Quien clona desde
+# GitHub y compila ya los tiene, sin depender de extrabuild/.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    add_custom_command(TARGET ProyecThor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:ProyecThor>"
+        COMMENT "Copiando assets/ al directorio de salida"
+    )
+else()
+    message(WARNING "assets/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/assets -- "
+                     "la app va a arrancar sin iconos/fuente/splash")
+endif()
+
 # ── 7b. COPIA DE extrabuild/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
-# Contiene binarios/recursos que hoy pegás a mano (bin/, lua/, plugins/,
-# libvlc.dll, pdfium.dll, iconos, splash screens, yt-dlp.exe, etc). Se copia
-# entero al lado del ejecutable cada vez que se compila.
+# Contiene binarios/recursos pesados que se distribuyen aparte, no en git
+# (bin/, lua/, plugins/, libvlc.dll, pdfium.dll, yt-dlp.exe, etc -- ver
+# extrabuild/pasteinbuild.txt). Se copia entero al lado del ejecutable cada
+# vez que se compila, ENCIMA de assets/ (mismo directorio de salida) -- no
+# hay conflicto real porque ya no comparten archivos (fuente/iconos/splash
+# se movieron a assets/, ver arriba).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
     message(STATUS "extrabuild/ encontrado, se copiara al build")
     add_custom_command(TARGET ProyecThor POST_BUILD
@@ -466,7 +489,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
         COMMENT "Copiando extrabuild/ al directorio de salida"
     )
 else()
-    message(WARNING "extrabuild/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+    message(STATUS "extrabuild/ no encontrado -- se sigue con lo que trajo assets/ (icono/fuente/splash). "
+                    "Para audio/video real (VLC) todavia hace falta VLC instalado (Linux) o extrabuild/ (Windows).")
 endif()
 
 # ── 7c. COPIA DE libpdfium.so Y libvlc.so AL DIRECTORIO DE BUILD (Linux) ─────
@@ -552,8 +576,21 @@ exec ./ProyecThor \"\$@\"
     # Icono y entrada de menu (.desktop) — opcionales, solo si existen los
     # archivos en packaging/. Si todavia no tenes un icono, comenta estas
     # dos lineas de install() de abajo.
-    # Recursos de extrabuild/ (splash screens, iconos, config, lua/, bin/)
-    # excluyendo binarios exclusivos de Windows.
+
+    # assets/ (icono, fuente, splash/Hub, texturas de tarjetas) -- esta en
+    # git, SIEMPRE presente para quien compila el paquete desde el repo
+    # clonado. Es lo minimo para que el paquete no arranque "pelado".
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
+            DESTINATION ${PROYECTHOR_INSTALL_DIR}
+        )
+    else()
+        message(WARNING "assets/ NO encontrado, el paquete no tendra iconos/fuente/splash")
+    endif()
+
+    # Recursos de extrabuild/ (lua/, plugins/ de VLC, etc) -- gitignored,
+    # opcional en Linux: el paquete .deb/.rpm depende de la libvlc/plugins
+    # DEL SISTEMA (ver Depends en packaging/debian/control), no de esto.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
         message(STATUS "extrabuild/ encontrado, se incluira en el paquete")
         install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild/"
@@ -562,8 +599,6 @@ exec ./ProyecThor \"\$@\"
             PATTERN "*.exe" EXCLUDE
             PATTERN "pasteinbuild.txt" EXCLUDE
         )
-    else()
-        message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
     endif()
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)

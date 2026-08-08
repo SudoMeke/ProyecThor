@@ -110,7 +110,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         12, "0.5.1",
         "BETA", "BETA",
-        "splash_bg5.png",
+        "splash_bg5.jpg",
         "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro de reloj dentro del "
         "editor de Overlays: lo posicionas y le das estilo una sola vez, y se reemplaza en vivo "
         "por la hora/cronometro activo — la transmision a pantalla ahora depende de que overlay "
@@ -122,7 +122,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         11, "0.5.0",
         "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
-        "splash_bg5.png",
+        "splash_bg5.jpg",
         "Ajustes reorganizado por completo: cada configuracion ahora es su propia pagina, con "
         "buscador incluido, Proyeccion y Pantallas agrupadas juntas, y Red/Mobile/Streaming/OSC "
         "viviendo dentro de Proyeccion. Nueva opcion \"Bucle falso\" para Fondos, que reproduce "
@@ -137,7 +137,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         10, "0.4.3",
         "BETA", "BETA",
-        "bg_splash3.png",
+        "bg_splash3.jpg",
         "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
         "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
         "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
@@ -149,7 +149,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         9, "0.4.2",
         "BETA", "BETA",
-        "bg_splash3.png",
+        "bg_splash3.jpg",
         "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
         "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
         "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
@@ -160,7 +160,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         8, "0.4.1",
         "BETA", "BETA",
-        "bg_splash3.png",
+        "bg_splash3.jpg",
         "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
         "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
         "y vista en grilla/lista en Biblioteca > Videos, escenas rapidas "
@@ -173,7 +173,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         7, "0.4.0",
         "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
-        "bg_splash3.png",
+        "bg_splash3.jpg",
         "Cola de videos mucho mas estable, nueva seccion de Overlays, "
         "Vista en Vivo con acciones rapidas, panel de Rendimiento y un "
         "rediseño mas compacto de Fondos y Estilos."
@@ -181,7 +181,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         6, "0.3.5",
         "BETA", "BETA",
-        "splash_bg1.png",
+        "splash_bg1.jpg",
         "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
         "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "
         "teclado globales y mejoras de estabilidad en toda la aplicacion."
@@ -189,7 +189,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
         2, "0.3.0",
         "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
-        "splash_bg1.png",
+        "splash_bg1.jpg",
         "Nuevas herramientas de transmision, optimizaciones y estabilidad de red."
     },
 };
@@ -632,7 +632,7 @@ bool Hub::Render() {
     static bool   s_HubBgTexTried = false;
     if (!s_HubBgTexTried) {
         s_HubBgTexTried = true;
-        s_HubBgTex      = LoadTextureFromFile("splash_bg2.png");
+        s_HubBgTex      = LoadTextureFromFile("splash_bg2.jpg");
     }
     if (s_HubBgTex != 0)
         dl->AddImage((ImTextureID)(intptr_t)s_HubBgTex, wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y),

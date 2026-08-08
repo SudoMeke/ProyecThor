@@ -18,9 +18,9 @@ namespace ProyecThor::Splash {
 namespace {
 
 const std::vector<Art> kRegistry = {
-    {"splash_bg1.png", "Fabiola Fernandez"},
-    {"splash_bg5.png", "TheVixcho"},
-    {"splash_bg2.png", "TheVixcho"},
+    {"splash_bg1.jpg", "Fabiola Fernandez"},
+    {"splash_bg5.jpg", "TheVixcho"},
+    {"splash_bg2.jpg", "TheVixcho"},
 };
 
 float EaseOutQuad(float t) {
