@@ -1,6 +1,7 @@
 #include "ShadersPanel.h"
 #include "frontend/ui/DesignSystem.h"
 #include "frontend/ui/WikiHelp.h"
+#include "frontend/panels/layers/LayersTheme.h"
 #include "backend/settings/SettingsManager.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/core/SystemStats.h"
@@ -353,11 +354,27 @@ void ShadersPanel::RenderContent() {
     ImGui::PopStyleColor();
     ImGui::SameLine();
     Wiki::InfoButton(Wiki::Topic::ShadersRender);
+
+    // Zoom -- mismo control que Fondos/Estilos (ver UI::LPZoomSlider),
+    // alineado a la derecha. Ademas de agrandar/achicar las tarjetas,
+    // determina cuantas entran por fila (ver mas abajo): antes la grilla era
+    // SIEMPRE de 2 columnas fijas, que en una columna angosta (ej. Diseño en
+    // Ajustes > Apariencia > Entorno de trabajo > Simple) dejaba el texto de
+    // las tarjetas cortado en vez de acomodarse a 1 sola columna.
+    {
+        const float zoomW = 120.0f;
+        const float avail = ImGui::GetWindowContentRegionMax().x;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - zoomW));
+        UI::LPZoomSlider("##shaderzoom", &m_ThumbZoom, 0.7f, 1.5f, zoomW);
+    }
+
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
-    const float gap    = 12.0f;
-    const float availW = ImGui::GetContentRegionAvail().x;
-    const float cardW  = (availW - gap) * 0.5f;
+    const float gap       = 12.0f;
+    const float availW    = ImGui::GetContentRegionAvail().x;
+    const float baseCardW = 220.0f * m_ThumbZoom;
+    const int   cols      = std::max(1, (int)((availW + gap) / (baseCardW + gap)));
+    const float cardW     = (availW - gap * (float)(cols - 1)) / (float)cols;
 
     struct Effect {
         const char* id;
@@ -466,40 +483,31 @@ void ShadersPanel::RenderContent() {
           [&](bool v){ core.SetFillBlurEnabled(v); }, [&](float v){ core.SetFillBlurBrightness(v); },
           /*recommended=*/true });
 
-    // Grilla de 2 columnas con posicionamiento explícito por fila: cada
-    // tarjeta puede tener una altura distinta (el slider solo se muestra si
-    // el efecto esta activo), asi que la fila avanza segun la MAS ALTA de
-    // las dos, no segun el layout automático de ImGui (que fue justamente
-    // lo que rompia la grilla antes).
+    // Grilla de N columnas (ver "cols" arriba) con posicionamiento explícito
+    // por fila: cada tarjeta puede tener una altura distinta (el slider solo
+    // se muestra si el efecto esta activo), asi que la fila avanza segun la
+    // MAS ALTA del grupo, no segun el layout automático de ImGui (que fue
+    // justamente lo que rompia la grilla antes).
     const int   count    = (int)effects.size();
     const float originX  = ImGui::GetCursorScreenPos().x;
     float       cursorY  = ImGui::GetCursorScreenPos().y;
 
-    for (int i = 0; i < count; i += 2) {
-        Effect& left  = effects[i];
-        Effect* right = (i + 1 < count) ? &effects[i + 1] : nullptr;
-
-        float leftH  = ComputeCardHeight(left.sliderLabel != nullptr, *left.enabled, left.modeVal != nullptr);
-        float rightH = right ? ComputeCardHeight(right->sliderLabel != nullptr, *right->enabled, right->modeVal != nullptr) : 0.0f;
-        float rowH   = std::max(leftH, rightH);
-
-        if (ShaderCard(ImVec2(originX, cursorY), left.id, left.icon, left.accent, left.title, left.desc,
-                       left.enabled, left.sliderLabel, left.sliderVal, left.sliderMin, left.sliderMax, cardW,
-                       left.recommended, left.modeVal, left.modeLabels, left.modeCount)) {
-            left.onToggle(*left.enabled);
-            if (left.onSlide) left.onSlide(*left.sliderVal);
-            if (left.onModeChange && left.modeVal) left.onModeChange(*left.modeVal);
-            changed = true;
+    for (int i = 0; i < count; i += cols) {
+        float rowH = 0.0f;
+        for (int c = 0; c < cols && i + c < count; c++) {
+            Effect& e = effects[i + c];
+            rowH = std::max(rowH, ComputeCardHeight(e.sliderLabel != nullptr, *e.enabled, e.modeVal != nullptr));
         }
 
-        if (right) {
-            if (ShaderCard(ImVec2(originX + cardW + gap, cursorY), right->id, right->icon, right->accent,
-                           right->title, right->desc, right->enabled, right->sliderLabel, right->sliderVal,
-                           right->sliderMin, right->sliderMax, cardW, right->recommended,
-                           right->modeVal, right->modeLabels, right->modeCount)) {
-                right->onToggle(*right->enabled);
-                if (right->onSlide) right->onSlide(*right->sliderVal);
-                if (right->onModeChange && right->modeVal) right->onModeChange(*right->modeVal);
+        for (int c = 0; c < cols && i + c < count; c++) {
+            Effect& e = effects[i + c];
+            ImVec2  origin(originX + (float)c * (cardW + gap), cursorY);
+            if (ShaderCard(origin, e.id, e.icon, e.accent, e.title, e.desc,
+                           e.enabled, e.sliderLabel, e.sliderVal, e.sliderMin, e.sliderMax, cardW,
+                           e.recommended, e.modeVal, e.modeLabels, e.modeCount)) {
+                e.onToggle(*e.enabled);
+                if (e.onSlide) e.onSlide(*e.sliderVal);
+                if (e.onModeChange && e.modeVal) e.onModeChange(*e.modeVal);
                 changed = true;
             }
         }

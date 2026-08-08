@@ -308,9 +308,9 @@ void main() {
 
                     double blendElapsed = now - m_SwapSettledAt;
                     m_TransitionProgress = static_cast<float>(
-                        std::clamp(blendElapsed / kSwapBlendSeconds, 0.0, 1.0));
+                        std::clamp(blendElapsed / m_BlendSeconds, 0.0, 1.0));
 
-                    if (blendElapsed >= kSwapBlendSeconds)
+                    if (blendElapsed >= m_BlendSeconds)
                     {
                         PerformSwap();
                         m_SwapReadyAt   = 0.0;

@@ -70,8 +70,11 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 
     // Carga en un hilo aparte (ver PresentationCore::RequestPreviewLoad):
     // el video en vivo al publico nunca debe esperar a que el Preview
-    // termine de abrir un archivo.
-    Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/true);
+    // termine de abrir un archivo. startMuted refleja m_PreviewAudioEnabled
+    // (ver RenderPreviewAudioToggle) en vez de ir siempre mudo -- si el
+    // operador ya activo el audio de Preview, un clip nuevo debe seguir
+    // sonando en vez de volver a silenciarse solo.
+    Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/!m_PreviewAudioEnabled);
     m_ImageView.Clear();
     m_PreviewPlaying = true;
 }
@@ -79,9 +82,10 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
             {
                 std::string path = Audio::GetAudioPath() + "/" + currentSel.title;
                 // Reproduce igual que un video (el preview sigue mudo por
-                // forceSilent) para que el tiempo/seek funcionen; el disco
-                // animado se dibuja en vez de la textura de video.
-                Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/true);
+                // forceSilent salvo que el operador lo active, ver arriba)
+                // para que el tiempo/seek funcionen; el disco animado se
+                // dibuja en vez de la textura de video.
+                Core::PresentationCore::Get().RequestPreviewLoad(path, /*loop=*/false, /*startMuted=*/!m_PreviewAudioEnabled);
                 m_ImageView.Clear();
                 m_PreviewPlaying = true;
 

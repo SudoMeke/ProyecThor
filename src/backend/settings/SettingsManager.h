@@ -22,6 +22,12 @@ namespace ProyecThor::Settings {
     // ── Proyección ───────────────────────────────────────────────────────
     struct ProjectionSettings {
         int   targetMonitor   = -1;
+
+        // Monitores de salida publica ADICIONALES (opcional) -- todos
+        // muestran exactamente lo mismo que targetMonitor. Ver
+        // PresentationCore::SetTargetMonitor / UIManager::RenderProjectorOutput.
+        std::vector<int> extraMonitors;
+
         int   outputWidth     = 0;
         int   outputHeight    = 0;
         float contentScale    = 1.0f;
@@ -171,6 +177,12 @@ namespace ProyecThor::Settings {
         // el menu Vista para operadores que no lo necesitan y prefieren mas
         // ancho para el video.
         bool        showViewQuickActions = true;
+
+        // Texto de la ventana flotante de Notas (ver QuickNotes) -- se
+        // guarda con debounce mientras el operador escribe y se fuerza al
+        // cerrar la ventana, para que nunca se pierda lo que iba tipeando
+        // aunque cierre la app sin borrarlo a mano.
+        std::string quickNotesText = "";
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -224,6 +236,31 @@ namespace ProyecThor::Settings {
 
     ThemeSettings MakeThemePreset(ThemePreset preset);
 
+    // ── Entorno de trabajo (Apariencia > Entorno de trabajo) ────────────────
+    // Ordenamiento de los 4 paneles dockeados (Biblioteca/Home/Vista en Vivo/
+    // Diseño) -- ver UIManager::BeginDockspace, que construye un arbol de
+    // DockBuilder distinto segun este valor. Cambiar el preset dispara un
+    // reset de layout automatico (UIManager compara contra el ultimo valor
+    // visto, ver m_LastWorkspacePreset), no hace falta pedirlo a mano.
+    enum class WorkspaceLayoutPreset {
+        Classic = 0,   // el de siempre: Biblioteca | Home/Diseño (arriba/abajo) | Vista en Vivo
+        Simple,        // estilo Holyrics: Diseño se apila con Vista en Vivo a la derecha,
+                       // Home ocupa todo el alto disponible en el centro
+        Broadcast,     // Vista en Vivo como franja superior completa; Biblioteca/Home/Diseño
+                       // en tres columnas abajo
+        Library,       // Biblioteca (bloqueada en Medios) | Home (Preview) -- sin Vista en
+                       // Vivo/Diseño, para operar solo reproduciendo contenido de la
+                       // biblioteca. Tambien lo usa "Abrir con ProyecThor" para esa sesion
+                       // (ver UIManager::EnterLibraryWorkspaceMode), sin pisar este setting.
+    };
+
+    const char*            WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset);
+    WorkspaceLayoutPreset  WorkspaceLayoutPresetFromString(const std::string& s);
+
+    struct WorkspaceSettings {
+        WorkspaceLayoutPreset layoutPreset = WorkspaceLayoutPreset::Classic;
+    };
+
     // Valida que 'path' sea un archivo de fuente (.ttf/.otf) que ImGui pueda
     // parsear realmente, sin arriesgarse al IM_ASSERT fatal de
     // AddFontFromFileTTF ante un archivo inexistente/corrupto (ver
@@ -253,6 +290,10 @@ namespace ProyecThor::Settings {
         int  monitorIndex = -1;    // -1 = sin elegir aun -> default a la pantalla secundaria
         bool useLAN        = false;
         int  lanPort        = 8080;
+
+        // Monitores de Stage ADICIONALES (opcional) -- ver comentario
+        // equivalente en ProjectionSettings::extraMonitors.
+        std::vector<int> extraMonitors;
 
         // Si esta activo, Stage ignora la grilla de celdas y muestra
         // exactamente lo mismo que el operador ve en "Vista en Vivo"
@@ -392,6 +433,21 @@ namespace ProyecThor::Settings {
         PadSettings pads[kPadCount];
     };
 
+    // ── Catalogo de transiciones guardadas (Diseño > Transiciones) ─────────
+    // type: valor numerico de ProyecThor::UI::TransitionType -- no se usa
+    // ese enum aca directo, mismo criterio que CaptureSceneSettings arriba
+    // (backend/settings no depende de frontend/panels).
+    struct TransitionPresetSettings {
+        std::string name;
+        int         type              = 1;    // TransitionType::Fade
+        float       duration          = 1.0f;
+        bool        affectsBackground = false;
+        bool        affectsLyrics     = true;
+    };
+    struct TransitionSettings {
+        std::vector<TransitionPresetSettings> presets;
+    };
+
     // ── Yggdrasil: control de dispositivos externos (luces, etc.) por OSC ──
     // ProyecThor solo emite (no escucha) — ver OSCSender.h. Cada mensaje
     // guardado es una "cue" disparable a mano desde el panel: una direccion
@@ -459,6 +515,7 @@ namespace ProyecThor::Settings {
         AudioSettings          audio;
         GeneralSettings        general;
         ThemeSettings          theme;
+        WorkspaceSettings      workspace;
         UpdatesSettings        updates;
         StageDisplaySettings   stageDisplay;
         LibrarySidebarSettings librarySidebar;
@@ -471,6 +528,7 @@ namespace ProyecThor::Settings {
         YggdrasilSettings      yggdrasil;
         StreamingSettings      streaming;
         SyncSettings           sync;
+        TransitionSettings     transitions;
     };
 
     class SettingsManager {

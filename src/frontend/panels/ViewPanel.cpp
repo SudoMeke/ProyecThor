@@ -535,6 +535,13 @@ void ApplyPad(const PadSettings& pad)
 
 void ViewPanel::Render()
 {
+    // Alt Gr + 3: si Vista en Vivo esta colapsada (o pasando el punto medio
+    // de la animacion), no dibujar la ventana ni su rail de acciones -- la
+    // salida real al publico/Stage no depende de esto (ver
+    // RenderLiveOutputWindows, siempre corre aparte).
+    if (m_UIManager && m_UIManager->IsPanelCollapsedForRender(GetName()))
+        return;
+
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, MT::k_Bg3);
 
@@ -546,6 +553,28 @@ void ViewPanel::Render()
     if (visible)
     {
         ImVec2 avail = ImGui::GetContentRegionAvail();
+
+        // Children con padding cero — el estilo global usa WindowPadding
+        // (22,18), que aquí sólo recortaría el video y el riel angosto.
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+        // Modo compacto horizontal (ver RenderCompactWide) -- el panel quedo
+        // notablemente mas ancho que alto (ej. franja superior completa en
+        // Ajustes > Apariencia > Entorno de trabajo > Transmisión). Apilar
+        // video/transporte/config verticalmente como en el modo de siempre
+        // dejaria un video minusculo dentro de una franja baja.
+        const bool wideShort = avail.x > avail.y * 1.8f && avail.y > 8.0f;
+
+        if (wideShort)
+        {
+            const bool showQuickActionsCompact = ProyecThor::Settings::SettingsManager::Get()
+                                                        .GetSettings().general.showViewQuickActions;
+            RenderCompactWide(avail, showQuickActionsCompact);
+            ImGui::PopStyleVar();
+            ImGui::End();
+            return;
+        }
+
         // Riel/franja opcional desde Vista > "Botones de limpieza (Vista en
         // Vivo)" — apagado, el video se queda con todo el espacio. Solo el
         // riel de "Limpiar <tipo>" es vertical (a la derecha, junto al
@@ -553,7 +582,16 @@ void ViewPanel::Render()
         // asi no le resta ancho al video por los dos costados.
         const bool  showQuickActions = ProyecThor::Settings::SettingsManager::Get()
                                             .GetSettings().general.showViewQuickActions;
-        const float railW      = showQuickActions ? kQuickActionsRailW : 0.0f;
+        // En una columna angosta (ej. "Vista en Vivo" en Ajustes > Apariencia
+        // > Entorno de trabajo > Simple), el video es 16:9 y su alto se
+        // deriva de su ancho -- restarle 40px mas al riel de "Limpiar" lo
+        // encogia todavia mas sin necesidad real (esos 40px valen mucho mas
+        // ahi que en un panel ancho). Se oculta el riel en vez de encimarlo,
+        // igual criterio que RenderCompactWide sacrifica la herramienta
+        // inline cuando el panel es ancho-y-bajo.
+        const bool  narrowColumn = avail.x < 340.0f;
+        const bool  showClearRail = showQuickActions && !narrowColumn;
+        const float railW      = showClearRail ? kQuickActionsRailW : 0.0f;
         const float stripH     = showQuickActions ? kConfigStripH : 0.0f;
         // Ya no se le resta stripH aca -- la franja de config se movio DENTRO
         // de la columna de video (pegada debajo del transporte, ver mas
@@ -562,10 +600,6 @@ void ViewPanel::Render()
         // Overlays/Chat/Pads, no abajo).
         const float topAreaH   = avail.y;
         const float contentW   = std::max(0.0f, avail.x - railW);
-
-        // Children con padding cero — el estilo global usa WindowPadding
-        // (22,18), que aquí sólo recortaría el video y el riel angosto.
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
         if (contentW > 8.0f && topAreaH > 8.0f)
         {
@@ -676,7 +710,7 @@ void ViewPanel::Render()
             ImGui::EndChild();
         }
 
-        if (showQuickActions)
+        if (showClearRail)
         {
             ImGui::SameLine(0.0f, 0.0f);
 
@@ -876,6 +910,55 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
     }
 
     ImGui::PopStyleVar();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RenderCompactWide — ver comentario en Render() y en el header. Toda la
+//  toolbar (transporte + config + limpiar) se apila en UNA columna angosta a
+//  la izquierda con scroll propio, en vez de reservar altura debajo del
+//  video -- asi el video usa el 100% del alto de una franja baja y ancha.
+//  No soporta la herramienta inline (Overlays/Chat/Pads, ver
+//  RenderInlineTool): una franja de este tipo (top strip de "Transmisión")
+//  no tiene alto libre para abrirla igual, y es un caso de uso raro ahi.
+// ─────────────────────────────────────────────────────────────────────────────
+void ViewPanel::RenderCompactWide(ImVec2 avail, bool showQuickActions)
+{
+    const float leftW  = showQuickActions ? 220.0f : 0.0f;
+    const float videoW = std::max(0.0f, avail.x - leftW);
+
+    if (showQuickActions && leftW > 8.0f && avail.x > leftW + 40.0f)
+    {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
+        ImGui::BeginChild("##viewCompactToolbar", ImVec2(leftW, avail.y), false,
+                          ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+        const float transportH = std::min(kLiveTransportMinH, std::max(60.0f, avail.y));
+        RenderLiveTransport(leftW, transportH);
+
+        ImGui::SetCursorPosY(transportH);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
+        ImGui::BeginChild("##viewCompactConfig", ImVec2(leftW, kConfigStripH), false,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        RenderQuickActionsConfig(kConfigStripH);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::SetCursorPosY(transportH + kConfigStripH + 6.0f);
+        ImGui::SetCursorPosX(std::max(0.0f, (leftW - kQuickActionsRailW) * 0.5f));
+        ImGui::BeginGroup();
+        RenderQuickActionsClear(kQuickActionsRailW);
+        ImGui::EndGroup();
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0.0f, 0.0f);
+    }
+
+    ImGui::BeginChild("##viewCompactVideo", ImVec2(videoW, avail.y), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    RenderContent(videoW, avail.y);
+    ImGui::EndChild();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

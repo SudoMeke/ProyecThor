@@ -49,7 +49,13 @@ namespace ProyecThor::Core {
         // asi que cuando llega a esta parte el standby ya viene de un
         // frame confirmado estable, no solo del primero que aparecio.
         static constexpr double kSwapSettleSeconds = 0.3;
-        static constexpr double kSwapBlendSeconds  = 0.2;
+
+        // Duracion del crossfade real (ya no es fija): configurable desde
+        // Diseño > Transiciones cuando un preset tiene "Afecta a Fondos"
+        // activo (ver SetBlendSeconds / PresentationCore::
+        // SetBackgroundBlendDuration) -- 0.2s es el default de siempre,
+        // usado mientras ningun preset la toca.
+        double m_BlendSeconds = 0.2;
         // Mismo rol que m_SwapReadyAt pero para el prefetch (ver Update()):
         // momento en que el prefetch quedo Ready por primera vez, para
         // saber cuando ya paso kSwapSettleSeconds y es seguro pausarlo.
@@ -362,6 +368,9 @@ namespace ProyecThor::Core {
         VLCBasePlayer* GetPlayer();
 
         void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
+
+        // Duracion del crossfade de swap (ver m_BlendSeconds arriba).
+        void SetBlendSeconds(double s) { m_BlendSeconds = std::max(0.01, s); }
 
         // allowAudio=false para fondos decorativos (BackgroundsPanel):
         // estructuralmente no podran sonar aunque se este "al aire". Default

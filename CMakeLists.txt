@@ -40,6 +40,19 @@ if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
     file(WRITE "${_build_count_file}" "${PROYECTHOR_BUILD_NUMBER}")
 endif()
 
+# ── SUFIJO DE VERSION (pre-release) ──────────────────────────────────────────
+# Vacio = release estable ("0.6.0"). Para una beta/rc que todavia no es la
+# version final, pasar -DPROYECTHOR_VERSION_SUFFIX=-beta.1 al configurar (o
+# cambiar el default de aca a mano). IMPORTANTE: volver a "" ANTES de compilar
+# la 0.6.0 estable de verdad, sino queda marcada como beta para siempre.
+# project(VERSION ...) arriba no puede llevar el sufijo (CMake solo acepta
+# numeros en esa directiva), por eso se maneja aparte y se concatena a mano en
+# Version.h.in. El comparador de versiones del updater (IsNewer, ver
+# CategoryUpdates.cpp) ya entiende sufijos -beta.N / -rc.N.
+if(NOT DEFINED PROYECTHOR_VERSION_SUFFIX)
+    set(PROYECTHOR_VERSION_SUFFIX "")
+endif()
+
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"

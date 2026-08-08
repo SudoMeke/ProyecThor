@@ -169,10 +169,19 @@ namespace ProyecThor::Core {
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
 
+        // Monitores de salida publica ADICIONALES (opcional) -- espejo
+        // runtime de Settings::ProjectionSettings::extraMonitors, poblado en
+        // PresentationCore::SetTargetMonitor. Todos muestran exactamente lo
+        // mismo que targetMonitorIndex -- ver UIManager::RenderProjectorOutput.
+        std::vector<int> extraTargetMonitors;
+
         // Monitor de Control (Stage Display). Independiente de isProjecting:
         // el Stage puede estar activo con o sin proyeccion publica.
         bool isStaging          = false;
         int  stageMonitorIndex  = 0;
+
+        // Idem extraTargetMonitors, para Stage -- poblado en SetStaging.
+        std::vector<int> extraStageMonitors;
 
         std::string currentText;
         bool  showText          = false;
@@ -293,6 +302,11 @@ void SetGlobalMute(bool mute);
 
         void SetTransitionConfig(int type, float durationSeconds);
         void SetBackgroundTransitionProgress(float progress);
+
+        // Duracion del crossfade de fondo (BackgroundLayer::m_BlendSeconds)
+        // -- sincronizada cada frame desde UIManager segun el preset de
+        // transicion activo (ver TransitionPanel::AffectsBackground).
+        void SetBackgroundBlendDuration(float seconds);
 
         void SetLiveQuickNote(const std::string& text, const float* colorOverride = nullptr);
         void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr);
@@ -441,6 +455,23 @@ void SetGlobalMute(bool mute);
         bool   IsProjectorPostFXViewport(ImGuiID id) const;
         void   RenderProjectorViewportPostFX(ImGuiViewport* viewport,
                                               void (*defaultRenderFn)(ImGuiViewport*, void*));
+
+        // ── Post-proceso para monitores de salida EXTRA (multi-monitor) ────
+        // Misma cadena de efectos que el primario (ver los 14 setters de
+        // arriba, que ahora tambien aplican a cada instancia de este mapa),
+        // pero con su PROPIA instancia de CompositePostChain por viewport
+        // extra -- reusar una sola instancia entre varios viewports en el
+        // mismo frame thrashearia su FBO interno (ver CompositePostChain::
+        // EnsureSized, detecta cambio de platformHandle y recrea el buffer).
+        void RegisterExtraProjectorViewport(ImGuiID id);
+        bool IsExtraProjectorViewport(ImGuiID id) const;
+        void RenderExtraProjectorViewportPostFX(ImGuiID id, ImGuiViewport* viewport,
+                                                 void (*defaultRenderFn)(ImGuiViewport*, void*));
+        // Borra del mapa cualquier instancia cuyo id no este en la lista
+        // (limpia memoria GPU cuando el usuario destildo un monitor extra o
+        // dejo de proyectar) -- llamar una vez por frame tras dibujar todos
+        // los extras del frame actual.
+        void PruneExtraProjectorViewports(const std::vector<ImGuiID>& stillActiveThisFrame);
 
         // fromQueue=true: la seleccion viene de MonitorQueueEngine::PlayIndex
         // (solo para mostrar el titulo del item actual de la cola), NO de un

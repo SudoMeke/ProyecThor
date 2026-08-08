@@ -37,6 +37,15 @@ private:
     void RenderQuickActionsClear(float railW);
     void RenderQuickActionsConfig(float stripH);
 
+    // Modo compacto horizontal -- cuando el panel queda mas ancho que alto
+    // de lo normal (ej. franja superior completa en Ajustes > Apariencia >
+    // Entorno de trabajo > Transmisión), apilar video/transporte/config
+    // verticalmente como en el modo de siempre dejaria un video minusculo.
+    // En vez de eso, toda la toolbar (transporte + config + limpiar) pasa a
+    // una columna a la IZQUIERDA con su propio scroll, y el video se queda
+    // con TODA la altura disponible de la franja. Ver Render().
+    void RenderCompactWide(ImVec2 avail, bool showQuickActions);
+
     // Herramienta inline activa (ver RenderInlineTool) -- en vez de abrir un
     // popup flotante separado, Overlays/Chat/Pads se muestran EN EL MISMO
     // panel, ocupando el espacio libre entre el transporte y la franja de

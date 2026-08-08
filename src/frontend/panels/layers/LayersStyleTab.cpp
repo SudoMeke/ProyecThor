@@ -328,28 +328,13 @@ void LayersStyleTab::ApplyCurrentStyleToCore() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Toolbar superior — compacta, solo iconos (estilo ProPresenter/Holyrics)
+//  Riel izquierdo — compacto, solo iconos, apilado vertical (antes era una
+//  barra horizontal arriba de la galeria; asi el alto disponible es todo
+//  para las tarjetas de tema, ver Render()).
 // ─────────────────────────────────────────────────────────────────────────────
-void LayersStyleTab::RenderTopBar() {
-    ImGui::AlignTextToFramePadding();
-    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-    ImGui::TextUnformatted("Estilos");
-    ImGui::PopStyleColor();
-
+void LayersStyleTab::RenderLeftRail() {
     const float btnSz = 26.0f;
-    const float zoomW = 76.0f;
-    const float gap   = 4.0f;
-    const float rowW  = zoomW + gap + btnSz*5 + gap*5; // +1 botón: "Ajustes rápidos"
-    const float avail = ImGui::GetWindowContentRegionMax().x;
-    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
-
-    if (m_GridMode) {
-        LPZoomSlider("##stzoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
-        ImGui::SameLine(0, gap);
-    } else {
-        ImGui::Dummy(ImVec2(zoomW, btnSz));
-        ImGui::SameLine(0, gap);
-    }
+    const float gap   = 6.0f;
 
     ImGui::PushID("styleview");
     if (LPCornerIconBtn("##sgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
@@ -360,7 +345,7 @@ void LayersStyleTab::RenderTopBar() {
             }
         }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
         m_GridMode = true;
-    ImGui::SameLine(0, gap);
+    ImGui::Dummy(ImVec2(0.0f, gap));
     if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
             for (int i=0;i<3;i++) {
                 float y = c.y - r*0.5f + i*r*0.5f;
@@ -370,13 +355,28 @@ void LayersStyleTab::RenderTopBar() {
         m_GridMode = false;
     ImGui::PopID();
 
-    ImGui::SameLine(0, gap*2);
+    if (m_GridMode) {
+        // Zoom de miniaturas -- botones +/- en vez del slider horizontal de
+        // antes, que no entraba comodo en un riel angosto.
+        ImGui::Dummy(ImVec2(0.0f, gap * 2.0f));
+        if (LPCornerIconBtn("##zoomOut", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+                float s = r * 0.7f, th = std::max(1.4f, r * 0.22f);
+                dl->AddLine({c.x - s, c.y}, {c.x + s, c.y}, col, th);
+            }, "Miniaturas mas chicas", {btnSz,btnSz}))
+            m_ThumbZoom = std::max(0.65f, m_ThumbZoom - 0.15f);
+        ImGui::Dummy(ImVec2(0.0f, gap));
+        if (LPCornerIconBtn("##zoomIn", LPDrawPlus, "Miniaturas mas grandes", {btnSz,btnSz}))
+            m_ThumbZoom = std::min(1.8f, m_ThumbZoom + 0.15f);
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, gap * 2.0f));
+
     if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", {btnSz,btnSz}))
         LoadFontsList();
-    ImGui::SameLine(0, gap);
+    ImGui::Dummy(ImVec2(0.0f, gap));
     if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", {btnSz,btnSz}, true))
         OpenStyleEditorFullscreen(true, "", m_CurrentStyle);
-    ImGui::SameLine(0, gap);
+    ImGui::Dummy(ImVec2(0.0f, gap));
     if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
             // Tres sliders verticales — mismo lenguaje visual que
             // ControlIcons::DrawQuality, para "ajustes rápidos".
@@ -509,11 +509,6 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
 //  RenderThemeGrid (Ajustado para evitar márgenes negativos)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderThemeGrid() {
-    RenderTopBar();
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    LPSeparatorLine();
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
     if (m_AvailableThemes.empty()) {
         ImVec2 p = ImGui::GetCursorScreenPos();
         float w  = ImGui::GetContentRegionAvail().x;
@@ -698,10 +693,33 @@ void LayersStyleTab::RenderQuickAdjustPopup() {
 //  Render principal del tab (AHORA CON LAYOUT DE 2 COLUMNAS)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::Render() {
-    // ── GALERÍA DE TEMAS — ahora ocupa todo el alto disponible. Ajustes
-    //    Rapidos se movio a un popup (icono de sliders en la toolbar) en
-    //    vez de robarle ~45% del espacio de forma fija (ver RenderTopBar /
-    //    RenderQuickAdjustPopup).
+    // ── Riel angosto a la izquierda (grid/lista, zoom, recargar fuentes,
+    //    nuevo estilo, ajustes rapidos) + galeria de temas a la derecha,
+    //    usando todo el alto disponible -- antes el mismo riel era una
+    //    barra horizontal arriba de la galeria, robandole alto util a las
+    //    tarjetas de tema (ver RenderLeftRail).
+    constexpr float kRailW = 30.0f;
+    const float     availH = ImGui::GetContentRegionAvail().y;
+
+    ImGui::BeginChild("##stylesLeftRail", ImVec2(kRailW, availH), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    RenderLeftRail();
+    ImGui::EndChild();
+
+    ImGui::SameLine(0.0f, 10.0f);
+
+    // Divisor vertical -- mismo criterio que el divisor horizontal de
+    // StylesHubPanel entre su rail de arriba y el contenido.
+    {
+        ImVec2      p0 = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddLine(p0, { p0.x, p0.y + availH },
+            LPU32({ LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.30f }), 1.0f);
+        ImGui::Dummy(ImVec2(1.0f, availH));
+    }
+    ImGui::SameLine(0.0f, 10.0f);
+
     ImGui::BeginChild("##ThemesListChild", ImGui::GetContentRegionAvail(), false);
     RenderThemeGrid();
     ImGui::EndChild();

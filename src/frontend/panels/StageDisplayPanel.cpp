@@ -175,6 +175,32 @@ void StageDisplayPanel::RenderActivationCard() {
                 }
             });
 
+        // Monitores de Stage ADICIONALES (opcional) -- todos muestran
+        // exactamente lo mismo que el monitor de control elegido arriba.
+        // Pensado para quien maneja varias pantallas de confianza a la vez
+        // (ver PresentationState::extraStageMonitors).
+        if (!sd.useLAN) {
+            ImGui::Spacing();
+            ImGui::TextDisabled("Enviar tambien a estas pantallas (opcional):");
+            for (int i = 0; i < monitorCount; i++) {
+                if (i == stageMonitorIndex) continue;
+
+                bool isExtra = std::find(sd.extraMonitors.begin(), sd.extraMonitors.end(), i)
+                               != sd.extraMonitors.end();
+                std::string label = "Pantalla " + std::to_string(i + 1) + "##stagemon" + std::to_string(i);
+                if (ImGui::Checkbox(label.c_str(), &isExtra)) {
+                    if (isExtra) {
+                        sd.extraMonitors.push_back(i);
+                    } else {
+                        sd.extraMonitors.erase(
+                            std::remove(sd.extraMonitors.begin(), sd.extraMonitors.end(), i),
+                            sd.extraMonitors.end());
+                    }
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
+            }
+        }
+
         ImGui::Spacing();
         ImGui::TextDisabled("Muestra el contenido en vivo a un segundo público (músicos, camarógrafos, etc).");
     }

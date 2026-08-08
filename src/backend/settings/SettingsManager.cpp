@@ -194,6 +194,31 @@ static std::string ThemePresetToKey(ThemePreset preset) {
     }
 }
 
+const char* WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset) {
+    switch (preset) {
+        case WorkspaceLayoutPreset::Simple:    return "Simple";
+        case WorkspaceLayoutPreset::Broadcast: return "Transmisión";
+        case WorkspaceLayoutPreset::Library:   return "Biblioteca";
+        default:                               return "Clásico";
+    }
+}
+
+WorkspaceLayoutPreset WorkspaceLayoutPresetFromString(const std::string& s) {
+    if (s == "simple")    return WorkspaceLayoutPreset::Simple;
+    if (s == "broadcast") return WorkspaceLayoutPreset::Broadcast;
+    if (s == "library")   return WorkspaceLayoutPreset::Library;
+    return WorkspaceLayoutPreset::Classic;
+}
+
+static std::string WorkspaceLayoutPresetToKey(WorkspaceLayoutPreset preset) {
+    switch (preset) {
+        case WorkspaceLayoutPreset::Simple:    return "simple";
+        case WorkspaceLayoutPreset::Broadcast: return "broadcast";
+        case WorkspaceLayoutPreset::Library:   return "library";
+        default:                               return "classic";
+    }
+}
+
 // ── Presets ──────────────────────────────────────────────────────────────
 // Nota: de momento todos los presets usan colores mas apagados/oscuros
 // que lo habitual (menos saturacion, menos brillo) para evitar problemas
@@ -625,6 +650,7 @@ void SettingsManager::SaveSettings() {
     const auto& t = m_Settings.theme;
 
     j["projection"]["targetMonitor"] = p.targetMonitor;
+    j["projection"]["extraMonitors"] = p.extraMonitors;
     j["projection"]["textSize"]      = p.textSize;
     j["projection"]["textColorR"]    = p.textColorR;
     j["projection"]["textColorG"]    = p.textColorG;
@@ -688,6 +714,7 @@ void SettingsManager::SaveSettings() {
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
     for (int i = 0; i < kStageMaxCells; i++)
         j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
+    j["stageDisplay"]["extraMonitors"] = sd.extraMonitors;
 
     const auto& lsb = m_Settings.librarySidebar;
     for (int i = 0; i < 10; i++)
@@ -756,6 +783,16 @@ void SettingsManager::SaveSettings() {
         for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
     }
 
+    for (size_t i = 0; i < m_Settings.transitions.presets.size(); i++) {
+        const auto& tp = m_Settings.transitions.presets[i];
+        auto& jt = j["transitions"]["presets"][i];
+        jt["name"]              = tp.name;
+        jt["type"]              = tp.type;
+        jt["duration"]          = tp.duration;
+        jt["affectsBackground"] = tp.affectsBackground;
+        jt["affectsLyrics"]     = tp.affectsLyrics;
+    }
+
     j["yggdrasil"]["targetIp"]   = m_Settings.yggdrasil.targetIp;
     j["yggdrasil"]["targetPort"] = m_Settings.yggdrasil.targetPort;
     j["yggdrasil"]["listenPort"] = m_Settings.yggdrasil.listenPort;
@@ -802,6 +839,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
+    j["general"]["quickNotesText"]      = m_Settings.general.quickNotesText;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -812,6 +850,8 @@ void SettingsManager::SaveSettings() {
     j["updates"]["autoDownload"]   = m_Settings.updates.autoDownload;
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
+
+    j["workspace"]["layoutPreset"] = WorkspaceLayoutPresetToKey(m_Settings.workspace.layoutPreset);
 
     j["theme"]["preset"]         = ThemePresetToKey(t.preset);
     j["theme"]["windowRounding"] = t.windowRounding;
@@ -856,6 +896,7 @@ void SettingsManager::LoadSettings() {
             auto& p = m_Settings.projection;
             const auto& jp = j["projection"];
             p.targetMonitor = jp.value("targetMonitor", -1);
+            p.extraMonitors = jp.value("extraMonitors", std::vector<int>{});
             p.textSize      = jp.value("textSize",      48.0f);
             p.textColorR    = jp.value("textColorR",    1.0f);
             p.textColorG    = jp.value("textColorG",    1.0f);
@@ -925,6 +966,7 @@ void SettingsManager::LoadSettings() {
                 for (int i = 0; i < kStageMaxCells && i < (int)arr.size(); i++)
                     sd.cellWidget[i] = arr[i].get<int>();
             }
+            sd.extraMonitors = jsd.value("extraMonitors", std::vector<int>{});
         }
 
         if (j.contains("librarySidebar")) {
@@ -1043,6 +1085,21 @@ void SettingsManager::LoadSettings() {
             }
         }
 
+        m_Settings.transitions.presets.clear();
+        if (j.contains("transitions") && j["transitions"].contains("presets") &&
+            j["transitions"]["presets"].is_array()) {
+            for (const auto& jt : j["transitions"]["presets"]) {
+                TransitionPresetSettings tp;
+                tp.name              = jt.value("name", "");
+                tp.type              = jt.value("type", 1);
+                tp.duration          = jt.value("duration", 1.0f);
+                tp.affectsBackground = jt.value("affectsBackground", false);
+                tp.affectsLyrics     = jt.value("affectsLyrics", true);
+                if (!tp.name.empty())
+                    m_Settings.transitions.presets.push_back(tp);
+            }
+        }
+
         if (j.contains("pads") && j["pads"].contains("pads") && j["pads"]["pads"].is_array()) {
             const auto& arr = j["pads"]["pads"];
             for (int i = 0; i < kPadCount && i < (int)arr.size(); i++) {
@@ -1108,6 +1165,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
+            m_Settings.general.quickNotesText       = jg.value("quickNotesText",       "");
         }
 
         if (j.contains("audio")) {
@@ -1124,6 +1182,11 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
+        }
+
+        if (j.contains("workspace")) {
+            const auto& jw = j["workspace"];
+            m_Settings.workspace.layoutPreset = WorkspaceLayoutPresetFromString(jw.value("layoutPreset", "classic"));
         }
 
         if (j.contains("theme")) {

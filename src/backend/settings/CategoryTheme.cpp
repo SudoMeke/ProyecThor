@@ -128,6 +128,104 @@ static bool PresetSwatch(const char* label, ThemePreset preset, ThemePreset acti
     return clicked;
 }
 
+// Diagramas a mano de cada Entorno de trabajo (ver UIManager::
+// BuildWorkspaceLayout*, que arma el DockBuilder real con las mismas
+// proporciones) -- se dibujan adentro de la tarjeta de WorkspacePresetCard
+// para que el usuario vea la disposicion antes de elegirla, en vez de un
+// nombre suelto. "a"/"b" son la esquina superior-izquierda/inferior-derecha
+// del area disponible dentro de la tarjeta; accentCol resalta el panel
+// "Vista en Vivo" (el que mas cambia de lugar entre presets).
+static void DrawWorkspaceDiagramClassic(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 panelCol, ImU32 accentCol) {
+    float w = b.x - a.x, h = b.y - a.y, g = 3.0f;
+    float leftW = w * 0.22f, rightW = w * 0.28f;
+    float midW  = w - leftW - rightW - g * 2.0f;
+    float homeH = h * 0.62f;
+
+    dl->AddRectFilled({a.x, a.y}, {a.x + leftW, b.y}, panelCol, 2.0f); // Biblioteca
+    dl->AddRectFilled({a.x + leftW + g, a.y}, {a.x + leftW + g + midW, a.y + homeH}, panelCol, 2.0f); // Home
+    dl->AddRectFilled({a.x + leftW + g, a.y + homeH + g}, {a.x + leftW + g + midW, b.y}, panelCol, 2.0f); // Diseño
+    dl->AddRectFilled({b.x - rightW, a.y}, {b.x, b.y}, accentCol, 2.0f); // Vista en Vivo
+}
+
+static void DrawWorkspaceDiagramSimple(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 panelCol, ImU32 accentCol) {
+    // Cuatro columnas de alto completo, nada apilado: Biblioteca | Home |
+    // Vista en Vivo | Diseño (Diseño se corre TODO a la derecha).
+    float w = b.x - a.x, g = 3.0f;
+    float leftW = w * 0.22f, vivW = w * 0.32f, rightW = w * 0.16f;
+    float midW  = w - leftW - vivW - rightW - g * 3.0f;
+
+    float x = a.x;
+    dl->AddRectFilled({x, a.y}, {x + leftW, b.y}, panelCol, 2.0f); x += leftW + g; // Biblioteca
+    dl->AddRectFilled({x, a.y}, {x + midW, b.y}, panelCol, 2.0f); x += midW + g; // Home
+    dl->AddRectFilled({x, a.y}, {x + vivW, b.y}, accentCol, 2.0f); x += vivW + g; // Vista en Vivo
+    dl->AddRectFilled({x, a.y}, {b.x, b.y}, panelCol, 2.0f); // Diseño
+}
+
+static void DrawWorkspaceDiagramBroadcast(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 panelCol, ImU32 accentCol) {
+    float w = b.x - a.x, h = b.y - a.y, g = 3.0f;
+    float topH  = h * 0.42f;
+    float botY  = a.y + topH + g;
+    float leftW = w * 0.24f, rightW = w * 0.32f;
+    float midW  = w - leftW - rightW - g * 2.0f;
+
+    dl->AddRectFilled({a.x, a.y}, {b.x, a.y + topH}, accentCol, 2.0f); // Vista en Vivo (franja superior)
+    dl->AddRectFilled({a.x, botY}, {a.x + leftW, b.y}, panelCol, 2.0f); // Biblioteca
+    dl->AddRectFilled({a.x + leftW + g, botY}, {a.x + leftW + g + midW, b.y}, panelCol, 2.0f); // Home
+    dl->AddRectFilled({b.x - rightW, botY}, {b.x, b.y}, panelCol, 2.0f); // Diseño
+}
+
+static void DrawWorkspaceDiagramLibrary(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 panelCol, ImU32 accentCol) {
+    // Biblioteca | Home -- sin Vista en Vivo/Diseño (ver
+    // UIManager::BuildWorkspaceLayoutLibrary).
+    float w = b.x - a.x, g = 3.0f;
+    float leftW = w * 0.30f;
+    float mainW = w - leftW - g;
+
+    dl->AddRectFilled({a.x, a.y}, {a.x + leftW, b.y}, panelCol, 2.0f); // Biblioteca
+    dl->AddRectFilled({a.x + leftW + g, a.y}, {a.x + leftW + g + mainW, b.y}, accentCol, 2.0f); // Home
+}
+
+using WorkspaceDiagramFn = void (*)(ImDrawList*, ImVec2, ImVec2, ImU32, ImU32);
+
+// Tarjeta con el diagrama de arriba en vez de un swatch de color -- lo que
+// cambia entre presets de Entorno de trabajo es la DISPOSICION de los
+// paneles, no una paleta (ver PresetSwatch, mismo patron de seleccion).
+static bool WorkspacePresetCard(const char* label, WorkspaceLayoutPreset preset,
+                                WorkspaceLayoutPreset active, WorkspaceDiagramFn drawDiagram)
+{
+    const ImVec4 accent = ImVec4(0.45f, 0.60f, 1.00f, 1.0f);
+    const ImVec4 base   = ImVec4(0.10f, 0.10f, 0.13f, 1.0f);
+    bool selected = (preset == active);
+
+    ImGui::PushID(label);
+    ImGui::BeginGroup();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, base);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(base.x + 0.04f, base.y + 0.04f, base.z + 0.05f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, base);
+    ImGui::PushStyleColor(ImGuiCol_Border, selected ? accent : ImVec4(1, 1, 1, 0.14f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, selected ? 2.0f : 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+
+    bool clicked = ImGui::Button("##wscard", ImVec2(150.0f, 96.0f));
+
+    ImVec2      p0 = ImGui::GetItemRectMin();
+    ImVec2      p1 = ImGui::GetItemRectMax();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImU32 panelCol  = ImGui::ColorConvertFloat4ToU32(ImVec4(1, 1, 1, 0.10f));
+    ImU32 accentU32 = ImGui::ColorConvertFloat4ToU32(selected ? accent : ImVec4(1, 1, 1, 0.30f));
+    drawDiagram(dl, { p0.x + 10.0f, p0.y + 10.0f }, { p1.x - 10.0f, p1.y - 10.0f }, panelCol, accentU32);
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(4);
+
+    ImGui::TextUnformatted(label);
+    ImGui::EndGroup();
+    ImGui::PopID();
+
+    return clicked;
+}
+
 void SettingsPanel::RenderCategoryTheme() {
     auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
 
@@ -158,6 +256,39 @@ void SettingsPanel::RenderCategoryTheme() {
         ImGui::Dummy(ImVec2(0.0f, 10.0f));
         ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Preset activo: %s",
             ProyecThor::Settings::ThemePresetName(theme.preset));
+    }
+
+    // ── Entorno de trabajo ───────────────────────────────────────────────────
+    // Ordenamiento de los 4 paneles dockeados (Biblioteca/Home/Vista en Vivo/
+    // Diseño) -- ver UIManager::BuildWorkspaceLayout* para el DockBuilder
+    // real de cada uno. Cambiar la seleccion reconstruye el layout solo
+    // (UIManager lo detecta comparando contra el ultimo valor aplicado, ver
+    // m_LastWorkspacePreset), no hace falta reiniciar ni pedirlo aparte.
+    if (SectionTitle("Entorno de trabajo", "Entorno de trabajo")) {
+        ImGui::TextDisabled("Elige como se acomodan Biblioteca, Home, Vista en Vivo y Diseño en pantalla.");
+        ImGui::Spacing();
+
+        auto& workspace = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace;
+
+        struct WsEntry { const char* label; WorkspaceLayoutPreset preset; WorkspaceDiagramFn diagram; };
+        static const WsEntry entries[] = {
+            { "Clásico",     WorkspaceLayoutPreset::Classic,   DrawWorkspaceDiagramClassic   },
+            { "Simple",      WorkspaceLayoutPreset::Simple,    DrawWorkspaceDiagramSimple    },
+            { "Transmisión", WorkspaceLayoutPreset::Broadcast, DrawWorkspaceDiagramBroadcast },
+            { "Biblioteca",  WorkspaceLayoutPreset::Library,   DrawWorkspaceDiagramLibrary   },
+        };
+
+        for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); i++) {
+            if (WorkspacePresetCard(entries[i].label, entries[i].preset, workspace.layoutPreset, entries[i].diagram)) {
+                workspace.layoutPreset = entries[i].preset;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+            if (i < (int)(sizeof(entries) / sizeof(entries[0])) - 1) ImGui::SameLine();
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Entorno activo: %s",
+            ProyecThor::Settings::WorkspaceLayoutPresetName(workspace.layoutPreset));
     }
 
     // Compartidas por todos los bloques de "Colores"/"Diseño" de abajo --

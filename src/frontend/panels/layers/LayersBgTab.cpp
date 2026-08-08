@@ -641,6 +641,67 @@ void LayersBgTab::RenderSidebarItem(const std::string& label, const std::string&
     ImGui::PopID();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Selector de carpetas compacto (fila de chips que envuelve) -- usado en
+//  vez de RenderFolderSidebar cuando el panel queda angosto (ver Render).
+//  Mismos datos y acciones (SelectFolder, mover por drag&drop, menu
+//  contextual de carpeta) que la sidebar de 116px, solo que en fila en vez
+//  de columna para no robarle ancho al contenido.
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersBgTab::RenderFolderChips() {
+    int rootCount = 0;
+    for (const auto& bg : m_AllBackgrounds) if (bg.folder.empty()) rootCount++;
+
+    bool first = true;
+    auto chip = [&](const std::string& label, const std::string& folderKey, int count, bool selected) {
+        std::string text = count > 0 ? (label + " (" + std::to_string(count) + ")") : label;
+        float w = ImGui::CalcTextSize(text.c_str()).x + 20.0f;
+
+        if (!first) {
+            if (ImGui::GetContentRegionAvail().x < w) ImGui::NewLine();
+            else                                       ImGui::SameLine(0.0f, 6.0f);
+        }
+        first = false;
+
+        bool sel = selected;
+        ImGui::PushStyleColor(ImGuiCol_Button,
+            sel ? ImVec4(LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.28f) : ImVec4(1,1,1,0.05f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.20f));
+        ImGui::PushStyleColor(ImGuiCol_Text, sel ? LP::Text : LP::TextSub);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
+
+        std::string btnId = text + "##fc_" + (folderKey.empty() ? "root" : folderKey);
+        bool clicked = ImGui::Button(btnId.c_str(), ImVec2(w, 26.0f));
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        if (!folderKey.empty() && ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("BG_FILE")) {
+                std::string src(static_cast<const char*>(p->Data), p->DataSize - 1);
+                if (MoveBgToFolder(src, folderKey)) ReloadList();
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (clicked) SelectFolder(folderKey);
+
+        if (!folderKey.empty() && ImGui::BeginPopupContextItem(("SbCtxChip_" + folderKey).c_str())) {
+            FolderContextMenu(folderKey);
+            ImGui::EndPopup();
+        }
+    };
+
+    chip("Todos", "", rootCount, m_CurrentBgFolder.empty());
+    for (const auto& fn : m_BgFolders) {
+        int cnt = 0;
+        for (const auto& bg : m_AllBackgrounds) if (bg.folder == fn) cnt++;
+        chip(fn, fn, cnt, m_CurrentBgFolder == fn);
+    }
+
+    ImGui::NewLine();
+}
+
 void LayersBgTab::RenderFolderSidebar(float w, float h) {
     (void)h;
     int rootCount = 0;
@@ -960,29 +1021,51 @@ void LayersBgTab::Render() {
     ImGui::Spacing();
     LPSeparatorLine();
 
-    const float sidebarW = 116.0f;
-    const float totalH   = ImGui::GetContentRegionAvail().y;
+    const float totalW = ImGui::GetContentRegionAvail().x;
+    const float totalH = ImGui::GetContentRegionAvail().y;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0,0,0,0));
-    ImGui::BeginChild("##bgSidebar", ImVec2(sidebarW, totalH), false,
-                      ImGuiWindowFlags_NoScrollbar);
-    RenderFolderSidebar(sidebarW, totalH);
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
+    // Columna angosta (ej. "Diseño" en Ajustes > Apariencia > Entorno de
+    // trabajo > Simple): la sidebar fija de 116px le restaba demasiado ancho
+    // al contenido -- se reemplaza por una fila de chips que envuelve arriba
+    // del contenido (ver RenderFolderChips), que ocupa solo lo que necesita.
+    const bool narrow = totalW < 300.0f;
 
-    ImGui::SameLine();
+    if (narrow)
     {
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddLine({p.x, p.y}, {p.x, p.y+totalH}, LPU32(LP::Border), 1.0f);
-        ImGui::Dummy(ImVec2(1.0f, totalH));
-    }
-    ImGui::SameLine();
+        RenderFolderChips();
+        ImGui::Spacing();
 
-    ImGui::BeginChild("##bgContent", ImVec2(0, totalH), false);
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);
-    RenderContentArea(ImGui::GetContentRegionAvail().x, totalH);
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
+        ImGui::BeginChild("##bgContent", ImVec2(0, 0), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);
+        RenderContentArea(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
+        ImGui::PopStyleVar();
+        ImGui::EndChild();
+    }
+    else
+    {
+        const float sidebarW = 116.0f;
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0,0,0,0));
+        ImGui::BeginChild("##bgSidebar", ImVec2(sidebarW, totalH), false,
+                          ImGuiWindowFlags_NoScrollbar);
+        RenderFolderSidebar(sidebarW, totalH);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+        {
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddLine({p.x, p.y}, {p.x, p.y+totalH}, LPU32(LP::Border), 1.0f);
+            ImGui::Dummy(ImVec2(1.0f, totalH));
+        }
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##bgContent", ImVec2(0, totalH), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);
+        RenderContentArea(ImGui::GetContentRegionAvail().x, totalH);
+        ImGui::PopStyleVar();
+        ImGui::EndChild();
+    }
 
     RenderHoldPreview();
 

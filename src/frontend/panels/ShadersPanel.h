@@ -11,6 +11,12 @@ class ShadersPanel {
 public:
     void RenderContent();
     std::string GetName() const { return "Shaders"; }
+
+private:
+    // Zoom de tarjetas -- mismo control que Fondos/Estilos (ver
+    // UI::LPZoomSlider), tambien determina cuantas columnas entran por fila
+    // segun el ancho disponible (ver RenderContent).
+    float m_ThumbZoom = 1.0f;
 };
 
 } // namespace ProyecThor::UI

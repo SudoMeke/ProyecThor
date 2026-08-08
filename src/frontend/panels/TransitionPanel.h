@@ -86,7 +86,18 @@ public:
     // Estado publico leido por UIManager para saber que transicion aplicar.
     TransitionType GetCurrentType() const { return m_SelectedType; }
 
+    // A que capa afecta la transicion actual -- ver comentario en
+    // RenderContent(). Letras=true/Fondos=false por defecto preserva el
+    // comportamiento de siempre (texto animado, fondo con su crossfade fijo).
+    bool AffectsBackground() const { return m_AffectsBackground; }
+    void SetAffectsBackground(bool v) { m_AffectsBackground = v; }
+    bool AffectsLyrics() const { return m_AffectsLyrics; }
+    void SetAffectsLyrics(bool v) { m_AffectsLyrics = v; }
+
 private:
+    bool m_AffectsBackground = false;
+    bool m_AffectsLyrics     = true;
+
     // ── Progreso local por mitad (solo para tipos secuenciales: Fade/Zoom) ──
     // El progreso total (m_Progress, 0..1, ya suavizado por EaseInOut) se
     // divide en dos mitades iguales: [0, kSequentialSplit] para la salida

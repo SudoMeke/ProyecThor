@@ -176,7 +176,7 @@ namespace ProyecThor::UI {
 
             // LibrarySidebar
             "Letra",
-            "Multimedia",
+            "Medios",
             "Doc"
         },
 
@@ -526,7 +526,7 @@ namespace ProyecThor::UI {
 
             // LibrarySidebar
             "Letra",
-            "Multimédia",
+            "Mídia",
             "Doc"
         }
     };

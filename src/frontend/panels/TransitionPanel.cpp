@@ -500,6 +500,31 @@ void TransitionPanel::RenderContent()
         }
     }
 
+    // ── Alcance: a que capa afecta esta transicion ───────────────────────
+    // El fondo (imagen/video) tiene su propio crossfade de alpha automatico
+    // (ver BackgroundLayer) -- si "Afecta a Fondos" esta activo, ese
+    // crossfade pasa a usar la duracion de arriba en vez de su default fijo
+    // (0.2s). "Afecta a Letras" controla si el texto anima con el tipo/
+    // duracion de arriba o cambia al instante (igual que elegir "Sin
+    // transición").
+    {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.06f));
+        ImGui::Separator();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(kTextDim));
+        ImGui::TextUnformatted("Afecta a");
+        ImGui::PopStyleColor();
+
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, ImGui::ColorConvertU32ToFloat4(kAccent));
+        ImGui::Checkbox("Fondos", &m_AffectsBackground);
+        ImGui::SameLine(0.0f, 20.0f);
+        ImGui::Checkbox("Letras", &m_AffectsLyrics);
+        ImGui::PopStyleColor();
+    }
+
     // ── Pie de página / Ayuda ────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.06f));

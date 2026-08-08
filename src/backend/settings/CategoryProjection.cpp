@@ -15,9 +15,6 @@ namespace ProyecThor::UI::Settings {
 
 using namespace ProyecThor::Settings;
 
-// Boton simple de modo/preset (texto only, sin color de acento) usado en la
-// seccion "Calidad de Salida". Mas liviano que el PresetSwatch de temas, que
-// esta pensado para mostrar un color; aca solo elegimos entre etiquetas.
 static bool QualityModeButton(const char* id, const char* label, bool active, float width) {
     ImVec4 base   = active ? ImVec4(0.25f, 0.45f, 0.85f, 0.35f) : ImVec4(1,1,1,0.05f);
     ImVec4 hover  = active ? ImVec4(0.25f, 0.45f, 0.85f, 0.45f) : ImVec4(1,1,1,0.10f);
@@ -39,11 +36,6 @@ static bool QualityModeButton(const char* id, const char* label, bool active, fl
     return clicked;
 }
 
-// Switch deslizante estilo celular (track pildora + circulo que se desliza)
-// -- pedido explicito para el toggle de "bucle falso" de Fondos, en vez del
-// checkbox cuadrado de siempre. *value se invierte in-place si se clickea;
-// devuelve true ese frame. El progreso de deslizamiento se anima via
-// ImGuiStorage, mismo patron que RailLabelProgress (LibrarySidebar.cpp).
 static bool ModernToggle(const char* id, bool* value, const float accent[4], const float track[4]) {
     ImGui::PushID(id);
 
@@ -112,6 +104,41 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                 }
                 HelpTooltip("Elige en que pantalla se mostrara la proyeccion.\n"
                             "Se recomienda usar la pantalla secundaria (indice 1 o superior).");
+
+                // Monitores ADICIONALES (opcional) -- todos muestran
+                // exactamente lo mismo que el monitor principal de arriba.
+                // Pensado para quien maneja varias pantallas de salida al
+                // publico a la vez (ver PresentationState::extraTargetMonitors).
+                if (monitorCount > 1) {
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Enviar tambien a estas pantallas (opcional):");
+                    static const float accent[4] = { 0.35f, 0.55f, 0.95f, 1.0f };
+                    static const float track[4]  = { 1.0f, 1.0f, 1.0f, 0.10f };
+
+                    for (int i = 0; i < monitorCount; i++) {
+                        if (i == sel) continue;
+
+                        bool isExtra = std::find(p.extraMonitors.begin(), p.extraMonitors.end(), i)
+                                       != p.extraMonitors.end();
+                        bool wasExtra = isExtra;
+
+                        ModernToggle(("##extramon" + std::to_string(i)).c_str(), &isExtra, accent, track);
+                        if (isExtra != wasExtra) {
+                            if (isExtra) {
+                                p.extraMonitors.push_back(i);
+                            } else {
+                                p.extraMonitors.erase(
+                                    std::remove(p.extraMonitors.begin(), p.extraMonitors.end(), i),
+                                    p.extraMonitors.end());
+                            }
+                            changed = true;
+                        }
+
+                        ImGui::SameLine();
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Text("%s", names[i]);
+                    }
+                }
             } else {
                 ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
                                    "No se detectaron monitores adicionales.");

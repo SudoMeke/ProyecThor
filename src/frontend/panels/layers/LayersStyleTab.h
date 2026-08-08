@@ -48,7 +48,11 @@ private:
     void OpenStyleEditorFullscreen(bool isNew, const std::string& name, const StyleData& data);
 
     // ── Render helpers ────────────────────────────────────────────────────────
-    void RenderTopBar();     // toolbar compacta (icon-only): nuevo / recargar fuentes / zoom / grid-lista
+    // Riel angosto a la izquierda (icon-only, apilado vertical): grid/lista,
+    // zoom +/-, recargar fuentes, nuevo estilo, ajustes rapidos -- antes era
+    // una barra horizontal arriba de la galeria, le robaba alto util a las
+    // tarjetas de tema. Ver Render().
+    void RenderLeftRail();
     void RenderThemeGrid();
     void RenderQuickAdjust();
     // Ajustes rapidos ya no vive fijo debajo de la galeria: ahora es un

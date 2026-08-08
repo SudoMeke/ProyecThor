@@ -65,6 +65,15 @@ public:
     void SetUIManager(UIManager* manager);
     void SetMonitorView(MonitorView* monitor) { m_MonitorRef = monitor; }
 
+    // Preset de workspace "Biblioteca" (ver Settings::WorkspaceLayoutPreset::
+    // Library / UIManager::BuildWorkspaceLayoutLibrary): bloquea Biblioteca
+    // en la categoria Medios y oculta el selector de categorias del sidebar
+    // (Canciones/Video/Biblia/Documentos/Reloj/Render/Overlay), asi el
+    // operador solo ve la grilla de Medios -- nada mas para navegar a otro
+    // lado por accidente en ese workspace reducido. UIManager la llama cada
+    // frame segun el preset activo, no hace falta llamarla a mano.
+    void SetMediaOnlyMode(bool v);
+
 private:
     Library::LibraryContext BuildContext();
 
@@ -89,6 +98,7 @@ private:
 
     LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
     LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
+    bool                     m_MediaOnlyMode       = false;
     Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;
     // Flag: evita llamar SetSelection cada frame cuando estamos en Audio.
     // Solo se llama una vez al entrar a la categoria.

@@ -56,9 +56,43 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
-        13, "0.6.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
-        "splash_bg5.png",
+        14, "0.6.0",
+        "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
+        "splash_bg6.jpg",
+        "Notas Rapidas renovado: ahora guarda el texto solo mientras escribis y lo recupera "
+        "al reabrir la ventana (nunca mas perder lo que ibas tipeando), respeta el tema "
+        "activo elegido en Apariencia, y queda disponible tanto desde el Hub como "
+        "proyectando sin cortarse -- atajo nuevo Shift+Z para abrirlo/cerrarlo. Atajos "
+        "Alt Gr+1/2/3/4 para colapsar y expandir Biblioteca/Diseño/Vista en Vivo/Home con "
+        "una animacion prolija (Alt Gr+0 restablece el entorno completo). Seccion "
+        "Multimedia de Biblioteca renombrada a \"Medios\", con vista en cuadricula de "
+        "miniaturas grandes ademas de la lista de siempre, e iconos reales por tipo "
+        "(video/audio/imagen) en vez de letras sueltas. Nueva categoria Ajustes > "
+        "Apariencia > Entorno de trabajo, con 3 disposiciones de paneles para elegir "
+        "(Clasico de siempre, Simple al estilo Holyrics con cuatro columnas, y Transmision "
+        "con Vista en Vivo como franja superior completa) -- los paneles detectan solos si "
+        "quedaron en vertical u horizontal y se acomodan. El reproductor de Audio ahora "
+        "puede traer la letra de una cancion pegando la URL de un video (yt-dlp por "
+        "debajo) y proyectarla en vivo con un boton de mostrar/ocultar, guardada para esa "
+        "pista. ProyecThor ahora se puede abrir con doble click o \"Abrir con\" sobre un "
+        "archivo de audio o video (Windows y Linux): lo importa a tu biblioteca y lo deja "
+        "listo en Preview, saltando el splash. Nuevo entorno de trabajo \"Biblioteca\" "
+        "(junto a Clasico/Simple/Transmision) con solo Biblioteca y Home a la vista, "
+        "elegible desde Ajustes o el menu Espacio de trabajo, y recordado entre sesiones. "
+        "El Preview ahora tiene un boton de pantalla completa de verdad -- oculta hasta la "
+        "barra superior y activa el fullscreen del sistema como F11 -- con controles que "
+        "se ocultan solos, volumen propio (mudo por default para no duplicar audio con lo "
+        "que ya suena en vivo) y una opcion de FSR para que el video se vea nitido al "
+        "agrandarse. Ajustes > Actualizaciones suma \"Desinstalar versiones anteriores\" "
+        "(limpia instalaciones viejas sueltas del sistema) y \"Carpeta de datos\" (mover "
+        "donde vive tu biblioteca a otro disco, sin perder nada de lo que ya tenias). "
+        "Abrir otro archivo con \"Abrir con ProyecThor\" mientras la app ya esta corriendo "
+        "ahora lo manda a esa misma ventana en vez de abrir una segunda instancia."
+    },
+    {
+        13, "0.6.0-beta.1",
+        "BETA", "BETA",
+        "splash_bg6.jpg",
         "Editor de overlays completo en la app movil (mover, redimensionar, rotar, "
         "seleccion multiple con guias de iman, Borrador y Degradado, exportar y "
         "enviar a la PC), panel Render renovado en Biblioteca (codecs H.264/H.265/"
@@ -75,7 +109,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         12, "0.5.1",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "BETA", "BETA",
         "splash_bg5.png",
         "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro de reloj dentro del "
         "editor de Overlays: lo posicionas y le das estilo una sola vez, y se reemplaza en vivo "
@@ -87,7 +121,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         11, "0.5.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
         "splash_bg5.png",
         "Ajustes reorganizado por completo: cada configuracion ahora es su propia pagina, con "
         "buscador incluido, Proyeccion y Pantallas agrupadas juntas, y Red/Mobile/Streaming/OSC "
@@ -102,7 +136,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         10, "0.4.3",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
+        "BETA", "BETA",
         "bg_splash3.png",
         "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
         "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
@@ -114,7 +148,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         9, "0.4.2",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
+        "BETA", "BETA",
         "bg_splash3.png",
         "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
         "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
@@ -125,7 +159,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         8, "0.4.1",
-        "ACTUALIZACION", "ACTUALIZACION",
+        "BETA", "BETA",
         "bg_splash3.png",
         "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
         "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
@@ -138,7 +172,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         7, "0.4.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
         "bg_splash3.png",
         "Cola de videos mucho mas estable, nueva seccion de Overlays, "
         "Vista en Vivo con acciones rapidas, panel de Rendimiento y un "
@@ -146,7 +180,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         6, "0.3.5",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
+        "BETA", "BETA",
         "splash_bg1.png",
         "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
         "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "
@@ -154,7 +188,7 @@ static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     },
     {
         2, "0.3.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+        "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
         "splash_bg1.png",
         "Nuevas herramientas de transmision, optimizaciones y estabilidad de red."
     },
@@ -260,7 +294,7 @@ static float EaseOut(float t) {
     return 1.0f - (1.0f - t) * (1.0f - t);
 }
 
-static const char* kHeroCardTextureFile   = "bin/assets/ui/textures/iniciarpro.png";
+static const char* kHeroCardTextureFile   = "bin/assets/ui/textures/iniciarpro.jpg";
 static const char* kConfigCardTextureFile = "bin/assets/ui/textures/20260524_104505.jpg";
 
 Hub::Hub() : m_LastFrameTime(std::chrono::steady_clock::now()) {
@@ -614,7 +648,7 @@ bool Hub::Render() {
     RenderUpdateDetailModal();
     RenderDownloadSubtitlesPanel();
 
-    if (m_LaunchRequested || m_LibraryOnlyRequested) {
+    if (m_LaunchRequested) {
         m_LaunchRequested = false;
         m_Open            = false;
         return true;
@@ -834,25 +868,25 @@ void Hub::RenderContent(float w, float h) {
     };
 
     {
+        // "Biblioteca" se retiro de aca (pedido explicito) -- el acceso
+        // rapido de siempre ahora vive en el menu Espacio de trabajo de la
+        // toolbar superior (ver UIManager::EnterLibraryOnlyMode). Quedan
+        // dos tarjetas, asi que la fila pasa de tercios a mitades.
         const float rowGap = 16.0f;
-        const float thirdW = (contentW - rowGap * 2.0f) / 3.0f;
+        const float halfW  = (contentW - rowGap) / 2.0f;
         const float rowH   = 62.0f;
 
         ImGui::SetCursorPosX(contentX);
         const ImVec2 rowStart = ImGui::GetCursorScreenPos();
 
-        if (PanelButtonCard(thirdW, rowH, "Biblioteca", "Toda tu librería a un click"))
-            m_LibraryOnlyRequested = true;
-
-        ImGui::SetCursorScreenPos(ImVec2(rowStart.x + thirdW + rowGap, rowStart.y));
         const UpdateVersionInfo* latestForRow = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
         const std::string novSub = std::string("v") +
             (latestForRow ? latestForRow->version : PROYECTHOR_VERSION_STRING) + " disponible  -  tecla N";
-        if (PanelButtonCard(thirdW, rowH, "Novedades", novSub))
+        if (PanelButtonCard(halfW, rowH, "Novedades", novSub))
             m_NovedadesOpen = true;
 
-        ImGui::SetCursorScreenPos(ImVec2(rowStart.x + (thirdW + rowGap) * 2.0f, rowStart.y));
-        if (PanelButtonCard(thirdW, rowH, "Descargar subtitulos", "Bajalos como .txt desde una URL"))
+        ImGui::SetCursorScreenPos(ImVec2(rowStart.x + halfW + rowGap, rowStart.y));
+        if (PanelButtonCard(halfW, rowH, "Descargar subtitulos", "Bajalos como .txt desde una URL"))
             m_DownloadSubsOpen = true;
 
         ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + rowH));
@@ -1355,7 +1389,7 @@ void Hub::RenderUpdateDetailModal() {
                 ImGui::PopStyleColor();
                 ImGui::SameLine(0.0f, pad.x);
             };
-            DrawPillBadge(selInfo ? selInfo->modalBadge : "ACTUALIZACION");
+            DrawPillBadge(selInfo ? selInfo->modalBadge : "BETA");
             ImGui::SameLine(0, 40);
 
             ImGui::SetWindowFontScale(0.8f);

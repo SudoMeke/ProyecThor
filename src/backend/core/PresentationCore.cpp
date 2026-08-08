@@ -52,6 +52,12 @@ namespace ProyecThor::Core {
         // el ImDrawData ya compuesto, no sobre una textura de fondo).
         Shaders::CompositePostChain compositeFX;
 
+        // Una instancia INDEPENDIENTE de post-FX por cada viewport de
+        // monitor extra activo (ver PresentationCore::RegisterExtra
+        // ProjectorViewport) -- compositeFX de arriba sigue siendo la unica
+        // instancia del monitor PRIMARIO, sin cambios.
+        std::unordered_map<ImGuiID, std::unique_ptr<Shaders::CompositePostChain>> extraCompositeFX;
+
         // Overlay (ver SetOverlayMedia/ClearOverlay) -- un PNG estatico con
         // transparencia, no necesita nada del aparato de BackgroundLayer
         // (VLC/crossfade/audio): se carga una vez con stb_image, se sube a
@@ -255,183 +261,245 @@ bool PresentationCore::GetGlobalMute() const {
         return (m_Impl && m_Impl->background.GetUseNativeEngine()) ? 1 : 0;
     }
 
+    // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
+    // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
+    // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un
+    // cambio en Ajustes > Proyeccion se refleja igual en todos los
+    // monitores (ver RegisterExtraProjectorViewport, que siembra cada
+    // instancia nueva con los valores actuales).
     void PresentationCore::SetCRTEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetCRTEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetCRTEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetCRTEnabled(enabled);
     }
     bool PresentationCore::GetCRTEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetCRTEnabled() : false;
     }
     void PresentationCore::SetCRTScanlineIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetCRTScanlineIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetCRTScanlineIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetCRTScanlineIntensity(intensity);
     }
     float PresentationCore::GetCRTScanlineIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetCRTScanlineIntensity() : 0.5f;
     }
 
     void PresentationCore::SetGrainEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetGrainEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetGrainEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetGrainEnabled(enabled);
     }
     bool PresentationCore::GetGrainEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetGrainEnabled() : false;
     }
     void PresentationCore::SetGrainIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetGrainIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetGrainIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetGrainIntensity(intensity);
     }
     float PresentationCore::GetGrainIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetGrainIntensity() : 0.15f;
     }
 
     void PresentationCore::SetFXAAEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetFXAAEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetFXAAEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetFXAAEnabled(enabled);
     }
     bool PresentationCore::GetFXAAEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetFXAAEnabled() : false;
     }
 
     void PresentationCore::SetSaturationEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetSaturationEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetSaturationEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetSaturationEnabled(enabled);
     }
     bool PresentationCore::GetSaturationEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetSaturationEnabled() : false;
     }
     void PresentationCore::SetSaturationAmount(float amount) {
-        if (m_Impl) m_Impl->compositeFX.SetSaturationAmount(amount);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetSaturationAmount(amount);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetSaturationAmount(amount);
     }
     float PresentationCore::GetSaturationAmount() const {
         return m_Impl ? m_Impl->compositeFX.GetSaturationAmount() : 1.3f;
     }
 
     void PresentationCore::SetVignetteEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetVignetteEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVignetteEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVignetteEnabled(enabled);
     }
     bool PresentationCore::GetVignetteEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetVignetteEnabled() : false;
     }
     void PresentationCore::SetVignetteIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetVignetteIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVignetteIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVignetteIntensity(intensity);
     }
     float PresentationCore::GetVignetteIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetVignetteIntensity() : 0.45f;
     }
 
     void PresentationCore::SetBlurEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetBlurEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetBlurEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetBlurEnabled(enabled);
     }
     bool PresentationCore::GetBlurEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetBlurEnabled() : false;
     }
     void PresentationCore::SetBlurIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetBlurIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetBlurIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetBlurIntensity(intensity);
     }
     float PresentationCore::GetBlurIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetBlurIntensity() : 0.35f;
     }
 
     void PresentationCore::SetSharpenEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetSharpenEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetSharpenEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetSharpenEnabled(enabled);
     }
     bool PresentationCore::GetSharpenEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetSharpenEnabled() : false;
     }
     void PresentationCore::SetSharpenIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetSharpenIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetSharpenIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetSharpenIntensity(intensity);
     }
     float PresentationCore::GetSharpenIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetSharpenIntensity() : 0.35f;
     }
 
     void PresentationCore::SetBloomEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetBloomEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetBloomEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetBloomEnabled(enabled);
     }
     bool PresentationCore::GetBloomEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetBloomEnabled() : false;
     }
     void PresentationCore::SetBloomIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetBloomIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetBloomIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetBloomIntensity(intensity);
     }
     float PresentationCore::GetBloomIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetBloomIntensity() : 0.35f;
     }
 
     void PresentationCore::SetChromaticAberrationEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetChromaticAberrationEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetChromaticAberrationEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetChromaticAberrationEnabled(enabled);
     }
     bool PresentationCore::GetChromaticAberrationEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetChromaticAberrationEnabled() : false;
     }
     void PresentationCore::SetChromaticAberrationIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetChromaticAberrationIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetChromaticAberrationIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetChromaticAberrationIntensity(intensity);
     }
     float PresentationCore::GetChromaticAberrationIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetChromaticAberrationIntensity() : 0.35f;
     }
 
     void PresentationCore::SetVHSEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetVHSEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVHSEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVHSEnabled(enabled);
     }
     bool PresentationCore::GetVHSEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetVHSEnabled() : false;
     }
     void PresentationCore::SetVHSIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetVHSIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVHSIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVHSIntensity(intensity);
     }
     float PresentationCore::GetVHSIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetVHSIntensity() : 0.5f;
     }
 
     void PresentationCore::SetCineEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetCineEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetCineEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetCineEnabled(enabled);
     }
     bool PresentationCore::GetCineEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetCineEnabled() : false;
     }
     void PresentationCore::SetCineIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetCineIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetCineIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetCineIntensity(intensity);
     }
     float PresentationCore::GetCineIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetCineIntensity() : 0.5f;
     }
     void PresentationCore::SetCineTint(int tint) {
-        if (m_Impl) m_Impl->compositeFX.SetCineTint(tint);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetCineTint(tint);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetCineTint(tint);
     }
     int PresentationCore::GetCineTint() const {
         return m_Impl ? m_Impl->compositeFX.GetCineTint() : 0;
     }
 
     void PresentationCore::SetContrastEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetContrastEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetContrastEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetContrastEnabled(enabled);
     }
     bool PresentationCore::GetContrastEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetContrastEnabled() : false;
     }
     void PresentationCore::SetContrastAmount(float amount) {
-        if (m_Impl) m_Impl->compositeFX.SetContrastAmount(amount);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetContrastAmount(amount);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetContrastAmount(amount);
     }
     float PresentationCore::GetContrastAmount() const {
         return m_Impl ? m_Impl->compositeFX.GetContrastAmount() : 1.3f;
     }
 
     void PresentationCore::SetLuminosityEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetLuminosityEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetLuminosityEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetLuminosityEnabled(enabled);
     }
     bool PresentationCore::GetLuminosityEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetLuminosityEnabled() : false;
     }
     void PresentationCore::SetLuminosityAmount(float amount) {
-        if (m_Impl) m_Impl->compositeFX.SetLuminosityAmount(amount);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetLuminosityAmount(amount);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetLuminosityAmount(amount);
     }
     float PresentationCore::GetLuminosityAmount() const {
         return m_Impl ? m_Impl->compositeFX.GetLuminosityAmount() : 1.2f;
     }
 
     void PresentationCore::SetTAAEnabled(bool enabled) {
-        if (m_Impl) m_Impl->compositeFX.SetTAAEnabled(enabled);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetTAAEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetTAAEnabled(enabled);
     }
     bool PresentationCore::GetTAAEnabled() const {
         return m_Impl ? m_Impl->compositeFX.GetTAAEnabled() : false;
     }
     void PresentationCore::SetTAAIntensity(float intensity) {
-        if (m_Impl) m_Impl->compositeFX.SetTAAIntensity(intensity);
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetTAAIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetTAAIntensity(intensity);
     }
     float PresentationCore::GetTAAIntensity() const {
         return m_Impl ? m_Impl->compositeFX.GetTAAIntensity() : 0.5f;
@@ -448,6 +516,74 @@ bool PresentationCore::GetGlobalMute() const {
     {
         if (m_Impl) m_Impl->compositeFX.RenderViewport(viewport, defaultRenderFn);
         else if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
+    }
+
+    void PresentationCore::RegisterExtraProjectorViewport(ImGuiID id) {
+        if (!m_Impl || id == 0) return;
+        auto& map = m_Impl->extraCompositeFX;
+        if (map.find(id) != map.end()) return;
+
+        auto chain = std::make_unique<Shaders::CompositePostChain>();
+        const auto& src = m_Impl->compositeFX;
+        // Copia los 14 ajustes actuales del primario para que el monitor
+        // extra arranque con la MISMA configuracion (paridad total, ver
+        // los 14 setters de arriba, que a partir de ahora tambien escriben
+        // en este mapa para que se mantenga sincronizado).
+        chain->SetCRTEnabled(src.GetCRTEnabled());
+        chain->SetCRTScanlineIntensity(src.GetCRTScanlineIntensity());
+        chain->SetGrainEnabled(src.GetGrainEnabled());
+        chain->SetGrainIntensity(src.GetGrainIntensity());
+        chain->SetFXAAEnabled(src.GetFXAAEnabled());
+        chain->SetSaturationEnabled(src.GetSaturationEnabled());
+        chain->SetSaturationAmount(src.GetSaturationAmount());
+        chain->SetVignetteEnabled(src.GetVignetteEnabled());
+        chain->SetVignetteIntensity(src.GetVignetteIntensity());
+        chain->SetBlurEnabled(src.GetBlurEnabled());
+        chain->SetBlurIntensity(src.GetBlurIntensity());
+        chain->SetSharpenEnabled(src.GetSharpenEnabled());
+        chain->SetSharpenIntensity(src.GetSharpenIntensity());
+        chain->SetBloomEnabled(src.GetBloomEnabled());
+        chain->SetBloomIntensity(src.GetBloomIntensity());
+        chain->SetChromaticAberrationEnabled(src.GetChromaticAberrationEnabled());
+        chain->SetChromaticAberrationIntensity(src.GetChromaticAberrationIntensity());
+        chain->SetVHSEnabled(src.GetVHSEnabled());
+        chain->SetVHSIntensity(src.GetVHSIntensity());
+        chain->SetCineEnabled(src.GetCineEnabled());
+        chain->SetCineIntensity(src.GetCineIntensity());
+        chain->SetCineTint(src.GetCineTint());
+        chain->SetContrastEnabled(src.GetContrastEnabled());
+        chain->SetContrastAmount(src.GetContrastAmount());
+        chain->SetLuminosityEnabled(src.GetLuminosityEnabled());
+        chain->SetLuminosityAmount(src.GetLuminosityAmount());
+        chain->SetTAAEnabled(src.GetTAAEnabled());
+        chain->SetTAAIntensity(src.GetTAAIntensity());
+
+        map[id] = std::move(chain);
+    }
+
+    bool PresentationCore::IsExtraProjectorViewport(ImGuiID id) const {
+        return m_Impl && id != 0 && m_Impl->extraCompositeFX.find(id) != m_Impl->extraCompositeFX.end();
+    }
+
+    void PresentationCore::RenderExtraProjectorViewportPostFX(ImGuiID id, ImGuiViewport* viewport,
+                                                                void (*defaultRenderFn)(ImGuiViewport*, void*))
+    {
+        if (!m_Impl) { if (defaultRenderFn) defaultRenderFn(viewport, nullptr); return; }
+        auto it = m_Impl->extraCompositeFX.find(id);
+        if (it != m_Impl->extraCompositeFX.end())
+            it->second->RenderViewport(viewport, defaultRenderFn);
+        else if (defaultRenderFn)
+            defaultRenderFn(viewport, nullptr);
+    }
+
+    void PresentationCore::PruneExtraProjectorViewports(const std::vector<ImGuiID>& stillActiveThisFrame) {
+        if (!m_Impl) return;
+        auto& map = m_Impl->extraCompositeFX;
+        for (auto it = map.begin(); it != map.end(); ) {
+            bool stillActive = std::find(stillActiveThisFrame.begin(), stillActiveThisFrame.end(), it->first)
+                                != stillActiveThisFrame.end();
+            it = stillActive ? std::next(it) : map.erase(it);
+        }
     }
 
     void PresentationCore::SetStretchToFill(bool s) {
@@ -892,6 +1028,9 @@ void PresentationCore::SetLayer0_Color(float r, float g, float b) {
 void PresentationCore::SetBackgroundTransitionProgress(float progress) {
     if (m_Impl) m_Impl->background.SetTransitionProgress(progress);
 }
+void PresentationCore::SetBackgroundBlendDuration(float seconds) {
+    if (m_Impl) m_Impl->background.SetBlendSeconds(seconds);
+}
 
     // Definida mas abajo en este archivo (junto a ApplySavedStyleToState);
     // espeja una caja de Letras hacia los campos planos legacy de
@@ -1023,6 +1162,12 @@ void PresentationCore::SetNextText(const std::string& text) {
     void PresentationCore::SetTargetMonitor(int index) {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.targetMonitorIndex = index;
+        // Refresca los monitores adicionales desde Settings en el mismo
+        // golpe -- este es el unico punto donde arranca la proyeccion
+        // publica, asi que no hace falta que cada llamador (ToggleAudience,
+        // MonitorQueueEngine) se acuerde de hacerlo por su cuenta.
+        m_State.extraTargetMonitors =
+            ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
     }
 
     void PresentationCore::SetStaging(bool active, int monitorIndex) {
@@ -1030,6 +1175,9 @@ void PresentationCore::SetNextText(const std::string& text) {
         m_State.isStaging = active;
         if (monitorIndex >= 0)
             m_State.stageMonitorIndex = monitorIndex;
+        if (active)
+            m_State.extraStageMonitors =
+                ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay.extraMonitors;
         ++m_StreamVersion;
     }
 

@@ -25,6 +25,8 @@
     #include <commdlg.h>
 #endif
 
+#include "backend/core/AppPaths.h"
+
 namespace ProyecThor::Audio {
 
 // ─── UTF-8 / UTF-16 ──────────────────────────────────────────────────────────
@@ -103,23 +105,15 @@ inline ImTextureID LoadTextureFromMemory(const unsigned char* data, int size) {
 }
 
 // ─── Ruta de la carpeta de audio ─────────────────────────────────────────────
+// Delega en ProyecThor::GetAssetsPath() (AppPaths.h) en vez de recalcular
+// %APPDATA%/etc. por su cuenta -- asi respeta la carpeta de datos elegida en
+// Ajustes > Actualizaciones > "Carpeta de datos" (ver AppPaths.h) igual que
+// el resto de la app, en vez de quedarse pegada al default de fabrica.
 
 inline const std::string& GetAudioPath() {
     static std::string s_Path;
-    if (!s_Path.empty()) return s_Path;
-
-#ifdef _WIN32
-    char buf[MAX_PATH] = {};
-    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr,
-                                   SHGFP_TYPE_CURRENT, buf)))
-        s_Path = std::string(buf) + "\\ProyecThor\\assets\\audio";
-    else
-        s_Path = "assets/audio";
-#else
-    const char* home = std::getenv("HOME");
-    s_Path = home ? std::string(home) + "/.ProyecThor/assets/audio"
-                  : "assets/audio";
-#endif
+    if (s_Path.empty())
+        s_Path = ProyecThor::GetAssetsPath() + "/audio";
     return s_Path;
 }
 

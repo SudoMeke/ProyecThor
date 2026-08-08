@@ -249,6 +249,17 @@ void LibraryPanel::SetUIManager(UIManager* manager)
         m_OverlayTab = std::make_unique<OverlayLibraryTab>(m_UIManagerRef);
 }
 
+void LibraryPanel::SetMediaOnlyMode(bool v)
+{
+    m_MediaOnlyMode = v;
+    if (v)
+    {
+        m_CurrentCategory = LibraryCategory::Multimedia;
+        m_PrevCategory    = LibraryCategory::Multimedia;
+        m_SideMode        = LibrarySideMode::Categories;
+    }
+}
+
 // =============================================================================
 //  IO — URLs de streaming
 // =============================================================================
@@ -487,6 +498,13 @@ void LibraryPanel::Render()
     // ahora.
     m_OClock.Update();
 
+    // Alt Gr + 1: si Biblioteca esta colapsada (o pasando el punto medio de
+    // la animacion), no dibujar la ventana ni su toolbar/sidebar -- el pump
+    // de arriba ya corrio, asi que el Reloj sigue alimentando LAN/pantalla
+    // igual que si el panel estuviera visible.
+    if (m_UIManagerRef && m_UIManagerRef->IsPanelCollapsedForRender(GetName()))
+        return;
+
     // Un archivo pudo haber cambiado de nombre en disco desde un lugar sin
     // acceso directo a este ctx (ver SongEditView::FlushIfDirty /
     // RenameNewSongToTitleIfApplicable) -- reescanea de verdad (RefreshList)
@@ -513,7 +531,10 @@ void LibraryPanel::Render()
     }
     
     ImGuiIO& io = ImGui::GetIO();
-    if (io.KeyShift) // Solo si Shift está presionado
+    // "Media y Preview" bloquea la categoria -- sin este guard, Shift+1..6
+    // seguiria dejando saltar a Canciones/Video/etc. en ese workspace
+    // reducido (ver SetMediaOnlyMode).
+    if (io.KeyShift && !m_MediaOnlyMode) // Solo si Shift está presionado
     {
         // Revisamos teclas del 1 al 6 (código ASCII '1' a '6')
         for (int i = 0; i < 6; ++i)
@@ -561,6 +582,13 @@ void LibraryPanel::Render()
     const float k_SidebarW = IconRailThickness(true);
     const float     totalH     = ImGui::GetContentRegionAvail().y;
 
+    // "Media y Preview" (ver SetMediaOnlyMode): sin sidebar de categorias --
+    // solo hay una, no tiene sentido un selector para elegir entre "solo
+    // Medios" y nada mas. El contenido de abajo (ancho 0 = todo lo
+    // disponible) ocupa automaticamente el espacio que el sidebar+divisor
+    // hubieran usado.
+    if (!m_MediaOnlyMode)
+    {
     // ── Sidebar izquierdo ──────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
@@ -593,6 +621,7 @@ void LibraryPanel::Render()
             colMid, colMid, colBot, colBot);
     }
     ImGui::SameLine(0.f, 1.0f);
+    }
 
     // ── Panel de contenido derecho ─────────────────────────────────────────
     // Margen unificado para TODAS las categorias (Canciones, Video, Documentos,
